@@ -1,0 +1,3 @@
+adafruit-circuitpython-ble-broadcastnet==0.12.8
+influxdb-client==1.36.1
+scd30-i2c==0.0.6
