@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>LED Light</title>
+</head>
+
+<body>
+    <h1>LED Light</h1>
+    <h2>info</h2>
+    <div>
+        <p>IP Address is {ip}</p>
+        <p>LED 1: {led1_c} {led1_b} %</p>
+        <p>LED 2: {led2_c} {led2_b} %</p>
+        <p>Temperature: {temperature}</p>
+        <p>Humidity: {humidity}</p>
+        <p>Co2: {co2}</p>
+
+    </div>
+    <hr>
+    <h2>Control</h2>
+    <dev>
+        <form action="./lighton">
+            <input type="submit" value="ALL Light on" />
+        </form>
+    </dev>
+    <hr>
+    <div>
+        <form action="./lightoff">
+            <input type="submit" value="ALL Light off" />
+        </form>
+    </div>
+    <hr>
+    <div>
+        <form action="./change_light">
+            <div>
+
+                <input type="radio" id="led1" name="led" value="1" checked />
+                <label for="led1">LED 1</label>
+
+                <input type="radio" id="led2" name="led" value="2" />
+                <label for="led2">LED 2</label>
+            </div>
+            <div>
+                <label for="color">Color</label>
+                <input id="color" type="number" min="0" max="100" step="10" name="color" value="50">
+                0 - 100 (Cool daylight <-> Warm white)
+            </div>
+            <div>
+                <label for="brightness">brightness</label>
+                <input id="brightness" type="number" min="0" max="100" step="10" name="brightness" value="100">
+                0 - 100 (%)
+            </div>
+            <input type="submit" value="Light off" />
+        </form>
+    </div>
+    <hr>
+    <div>
+        <form action="./set_wifi" method="POST">
+            <div>SSID<input type="text" name="ssid"></div>
+            <div>PASSWORD<input type="password" name="password"></div>
+            <input type="submit" value="send">
+        </form>
+    </div>
+</body>
+
+</html>
