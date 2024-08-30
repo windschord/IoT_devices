@@ -1,6 +1,6 @@
 import network, socket, machine, ujson, ure
 from time import sleep
- 
+
 AP_SSID = 'RPW_WIFI'
 AP_PASSWORD = '123456789'
 AP_RETRY_COUNT = 30
@@ -72,7 +72,7 @@ class WebserverWithWifi(object):
             wlan = self._connect_ap(json_data['ssid'], json_data['password'])
         else:
             wlan = self._start_ap()
-        
+
         ip = wlan.ifconfig()[0]
         print(f'Connected on {ip}')
         return ip
@@ -86,11 +86,11 @@ class WebserverWithWifi(object):
                 html = f.read().format(
                     ip=shared_variables['ip'],
                     led1_c=shared_variables['led_1']['color_level'],
-                    led1_b=shared_variables['led_1']['brightness'], 
+                    led1_b=shared_variables['led_1']['brightness'],
                     led2_c=shared_variables['led_2']['color_level'],
                     led2_b=shared_variables['led_2']['brightness'],
                     temperature=shared_variables['scd30']['temperature'],
-                    humidity=shared_variables['scd30']['humidity'], 
+                    humidity=shared_variables['scd30']['humidity'],
                     co2=shared_variables['scd30']['co2'],
                 )
                 return str(html)
@@ -105,7 +105,7 @@ class WebserverWithWifi(object):
         '''
         lines = request.split(b"\r\n")
         method, path, _ = lines[0].decode().split(" ")
-        
+
         headers = {}
         body_pos = 0
 
@@ -113,7 +113,7 @@ class WebserverWithWifi(object):
         for i, line in enumerate(lines[1:]):
             if len(line) < 1:
                 body_pos = i + 1
-                break 
+                break
             key, value = regex.split(line.decode(), 1)
             headers[key] = value
         request_body = b''.join(lines[body_pos:])
@@ -145,13 +145,13 @@ class WebserverWithWifi(object):
             for item in request_body.decode().split('&'):
                 k,v = item.split('=', 1)
                 body[k] = v
-                
+
             save_data({'ssid': body['ssid'], 'password': body['password']})
 
         client.send(self._index_page(shared_variables))
         client.close()
-    
- 
+
+
     def _open_socket(self, ip: str):
         '''
         Open a socket on the given IP address
@@ -171,6 +171,9 @@ class WebserverWithWifi(object):
 
         connection = self._open_socket(ip)
         while True:
+            if shared_variables['stop']:
+                break
+
             try:
                 self._route(connection, shared_variables)
             except Exception as e:
