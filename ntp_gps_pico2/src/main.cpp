@@ -1,7 +1,9 @@
 #include <Ethernet.h>
 #include <Wire.h>
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h> //http://librarymanager/All#SparkFun_u-blox_GNSS
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SH1106.h>
+#include <uRTCLib.h>
 #include <WebServer.h>
 #include <Gps_Client.h>
 
@@ -22,7 +24,9 @@ SFE_UBLOX_GNSS myGNSS;
 EthernetServer server(80);
 WebServer webServer;
 GpsClient gpsClient(Serial);
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SH1106 display(OLED_RESET);
+uRTCLib rtc;
+byte rtcModel = URTCLIB_MODEL_DS3231;
 
 // Enter a MAC address for your controller below.
 // https://www.hellion.org.uk/cgi-bin/randmac.pl?scope=local&type=unicast
@@ -97,7 +101,7 @@ void displayInfo(GpsSummaryData gpsSummaryData)
   display.clearDisplay();
 
   display.setTextSize(1); // Draw 2X-scale text
-  display.setTextColor(SSD1306_WHITE);
+  display.setTextColor(WHITE);
   display.setCursor(0, 0);
   display.println("DateTime:");
   display.setCursor(0, 10);
@@ -109,6 +113,33 @@ void displayInfo(GpsSummaryData gpsSummaryData)
   display.display(); // Show initial text
 
   delay(1000);
+}
+
+// QZSSのL1S信号を受信するよう設定する
+bool enableQZSSL1S(void)
+{
+  uint8_t customPayload[MAX_PAYLOAD_SIZE];
+  ubxPacket customCfg = {0, 0, 0, 0, 0, customPayload, 0, 0, SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED, SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED};
+
+  customCfg.cls = UBX_CLASS_CFG;
+  customCfg.id = UBX_CFG_GNSS;
+  customCfg.len = 0;
+  customCfg.startingSpot = 0;
+
+  if (myGNSS.sendCommand(&customCfg) != SFE_UBLOX_STATUS_DATA_RECEIVED)
+    return (false);
+
+  int numConfigBlocks = customPayload[3];
+  for (int block = 0; block < numConfigBlocks; block++)
+  {
+    if (customPayload[(block * 8) + 4] == (uint8_t)SFE_UBLOX_GNSS_ID_QZSS)
+    {
+      customPayload[(block * 8) + 8] |= 0x01;     // set enable bit
+      customPayload[(block * 8) + 8 + 2] |= 0x05; // set 0x01 QZSS L1C/A 0x04 = QZSS L1S
+    }
+  }
+
+  return (myGNSS.sendCommand(&customCfg) == SFE_UBLOX_STATUS_DATA_SENT);
 }
 
 void setupGps()
@@ -131,11 +162,56 @@ void setupGps()
 
   myGNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output both NMEA and UBX messages
   myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); // Save (only) the communications port settings to flash and BBR
+  enableQZSSL1S();                                   // QZSS L1S信号の受信を有効にする
 
-  myGNSS.setAutoNAVSATcallbackPtr([](UBX_NAV_SAT_data_t *ubxDataStruct)
-                                  { gpsClient.newNAVSAT(ubxDataStruct); });
-  myGNSS.setAutoPVTcallbackPtr([](UBX_NAV_PVT_data_t *ubxDataStruct)
-                               { gpsClient.getPVTdata(ubxDataStruct); });
+  myGNSS.setAutoPVTcallbackPtr([](UBX_NAV_PVT_data_t *data)
+                               { gpsClient.getPVTdata(data); });
+
+  myGNSS.setAutoRXMSFRBXcallbackPtr([](UBX_RXM_SFRBX_data_t *data)
+                                    { gpsClient.newSFRBX(data); }); // UBX-RXM-SFRBXメッセージ受信コールバック関数を登録
+  myGNSS.setAutoNAVSATcallbackPtr([](UBX_NAV_SAT_data_t *data)
+                                  { gpsClient.newNAVSAT(data); }); // UBX-NAV-SATメッセージ受信コールバック関数を登録
+}
+
+void setupRtc()
+{
+  URTCLIB_WIRE.begin();
+  rtc.set_rtc_address(0x68);
+  rtc.set_model(rtcModel);
+  // refresh data from RTC HW in RTC class object so flags like rtc.lostPower(), rtc.getEOSCFlag(), etc, can get populated
+  rtc.refresh();
+  // Only use once, then disable
+  // rtc.set(0, 45, 10, 1, 29, 12, 24);
+  //  RTCLib::set(byte second, byte minute, byte hour (0-23:24-hr mode only), byte dayOfWeek (Sun = 1, Sat = 7), byte dayOfMonth (1-12), byte month, byte year)
+
+  // use the following if you want to set main clock in 24 hour mode
+  rtc.set_12hour_mode(false);
+
+  if (rtc.enableBattery())
+  {
+    Serial.println("Battery activated correctly.");
+  }
+  else
+  {
+    Serial.println("ERROR activating battery.");
+  }
+  // Check whether OSC is set to use VBAT or not
+  if (rtc.getEOSCFlag())
+    Serial.println(F("Oscillator will not use VBAT when VCC cuts off. Time will not increment without VCC!"));
+  else
+    Serial.println(F("Oscillator will use VBAT when VCC cuts off."));
+
+  Serial.print("Lost power status: ");
+  if (rtc.lostPower())
+  {
+    Serial.print("POWER FAILED. Clearing flag...");
+    rtc.lostPowerClear();
+    Serial.println(" done.");
+  }
+  else
+  {
+    Serial.println("POWER OK");
+  }
 }
 
 void setup()
@@ -162,15 +238,12 @@ void setup()
   Wire.begin();
 
   // OLED setup
-  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
-  {
-    Serial.println(F("SSD1306 allocation failed"));
-    analogWrite(LED_ERROR_PIN, 255);
-    for (;;)
-      ; // Don't proceed, loop forever
-  }
+  display.begin(SH1106_SWITCHCAPVCC, SCREEN_ADDRESS, false);
   display.clearDisplay();
   display.display();
+
+  // RTC setup
+  setupRtc();
 
   // You can use Ethernet.init(pin) to configure the CS pin
   Ethernet.init(17);
@@ -239,5 +312,48 @@ void loop()
 
 #if defined(DEBUG_CONSOLE_GPS)
   printEtherStatus();
+
+  rtc.refresh();
+  Serial.print("RTC DateTime: ");
+
+  char dateTimechr[20];
+  sprintf(dateTimechr, "20%02d/%02d/%02d %02d:%02d:%02d",
+          rtc.year(), rtc.month(), rtc.day(),
+          rtc.hour(), rtc.minute(), rtc.second());
+  Serial.print(dateTimechr);
+
+  switch (rtc.dayOfWeek())
+  {
+  case 1:
+    Serial.print(" Sun");
+    break;
+  case 2:
+    Serial.print(" Mon");
+    break;
+  case 3:
+    Serial.print(" Tue");
+    break;
+  case 4:
+    Serial.print(" Wed");
+    break;
+  case 5:
+    Serial.print(" Thu");
+    break;
+  case 6:
+    Serial.print(" Fri");
+    break;
+  case 7:
+    Serial.print(" Sat");
+    break;
+  default:
+    // Nothing
+    break;
+  }
+
+  Serial.print(" - Temp: ");
+  Serial.print((float)rtc.temp() / 100);
+
+  Serial.println();
+  delay(1000);
 #endif
 }

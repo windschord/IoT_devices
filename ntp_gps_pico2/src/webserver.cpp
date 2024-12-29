@@ -58,17 +58,17 @@ void WebServer::server(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_
   }
 }
 
-void WebServer::printHeader(EthernetClient &client)
+void WebServer::printHeader(EthernetClient &client, String contentType)
 {
   client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
+  client.println("Content-Type: " + contentType);
   client.println("Connnection: close");
   client.println();
 }
 
 void WebServer::rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData)
 {
-  printHeader(client);
+  printHeader(client, "text/html");
 
   char dateTimechr[20];
   sprintf(dateTimechr, "%04d/%02d/%02d %02d:%02d:%02d",
@@ -77,7 +77,7 @@ void WebServer::rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData)
 
   char poschr[100];
   sprintf(poschr, "Lat: %7.4f Long:  %7.4f Height above MSL:  %6.2f m",
-   gpsSummaryData.latitude/ 10000000.0, gpsSummaryData.longitude/ 10000000.0, gpsSummaryData.altitude/1000.0);
+          gpsSummaryData.latitude / 10000000.0, gpsSummaryData.longitude / 10000000.0, gpsSummaryData.altitude / 1000.0);
 
   client.println("<!DOCTYPE HTML>");
   client.println("<html><body>");
@@ -88,7 +88,7 @@ void WebServer::rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData)
   client.println("<div>Date/Time: ");
   client.println(dateTimechr);
   client.println("</div>");
-  
+
   if (gpsSummaryData.timeValid)
   {
     client.println("<div>Time is valid</div>");
@@ -106,7 +106,7 @@ void WebServer::rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData)
   {
     client.println("<div>Date is invalid</div>");
   }
-  
+
   client.println("<div>Position: ");
   client.println(poschr);
   client.println("</div>");
@@ -117,21 +117,13 @@ void WebServer::rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData)
 
 void WebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSatData_t)
 {
-  printHeader(client);
+  printHeader(client, "text/html");
 
   client.println("<!DOCTYPE HTML>");
   client.println("<html>");
-  client.print("New NAV SAT data received. It contains data for ");
+  client.print("New NAV SAT data received. It contains data for SVs: ");
   client.print(ubxNavSatData_t->header.numSvs);
-
-  if (ubxNavSatData_t->header.numSvs == 1)
-  {
-    client.print(F(" SV."));
-  }
-  else
-  {
-    client.print(F(" SVs."));
-  }
+  client.println("<br>");
 
   // Just for giggles, print the signal strength for each SV as a barchart
   for (uint16_t block = 0; block < ubxNavSatData_t->header.numSvs; block++) // For each SV
@@ -180,10 +172,13 @@ void WebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSatDat
     }
 
     client.print(ubxNavSatData_t->blocks[block].cno);
+    client.print("<br>");
   }
   client.println("</body></html>");
 }
 
 void WebServer::metricsPage(EthernetClient &client)
 {
+  printHeader(client, "text/plain");
+  
 }
