@@ -2,3 +2,5 @@
 CMakeListsPrivate.txt
 cmake-build-*/ 
 .idea/sonarlint/
+.coverage
+venv/

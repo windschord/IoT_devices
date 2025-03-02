@@ -1,4 +1,6 @@
 .idea/
+.pio/
+.vscode/
 
 __pycache__/
 .pyc
