@@ -94,22 +94,30 @@ bool enableQZSSL1S(void)
 
 void setupGps()
 {
+  Serial.println("=== GPS Setup Starting ===");
+  Serial.print("GPS SDA Pin: "); Serial.println(GPS_SDA_PIN);
+  Serial.print("GPS SCL Pin: "); Serial.println(GPS_SCL_PIN);
+  
   Wire1.setSDA(GPS_SDA_PIN);
   Wire1.setSCL(GPS_SCL_PIN);
   Wire1.begin();
-  Serial.println("Wire1 begin");
+  Serial.println("Wire1 initialized");
 
+  Serial.println("Attempting to connect to u-blox GNSS module...");
   if (myGNSS.begin(Wire1) == false) // Connect to the u-blox module using Wire port
   {
-    Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring."));
-    Serial.println(F("Continuing without GPS for debugging..."));
+    Serial.println(F("❌ FAILED: u-blox GNSS not detected at default I2C address (0x42)"));
+    Serial.println(F("   Check I2C wiring: SDA=GPIO6, SCL=GPIO7"));
+    Serial.println(F("   Check power supply to GPS module"));
+    Serial.println(F("❌ GPS initialization FAILED - continuing without GPS"));
     analogWrite(LED_ERROR_PIN, 255);
     displayManager.displayError("GPS Module not detected. Check wiring.");
     gpsConnected = false;
     return; // エラーで停止せず、続行する
   }
   
-  Serial.println("GPS module connected successfully!");
+  Serial.println("✅ GPS module connected successfully!");
+  Serial.println("✅ GPS initialization completed");
   gpsConnected = true;
   
   myGNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output both NMEA and UBX messages

@@ -32,7 +32,31 @@ void TimeManager::onPpsInterrupt() {
 unsigned long TimeManager::getHighPrecisionTime() {
     extern bool gpsConnected;
     
-    if (timeSync->synchronized && gpsConnected && !gpsMonitor->inFallbackMode) {
+    // Debug time source selection
+    static unsigned long lastTimeDebug = 0;
+    if (millis() - lastTimeDebug > 10000) { // Every 10 seconds
+        Serial.print("TimeManager::getHighPrecisionTime() - Using ");
+        if (timeSync->synchronized && gpsConnected && gpsMonitor && !gpsMonitor->inFallbackMode) {
+            Serial.print("GPS time. GPS time: ");
+            Serial.print(timeSync->gpsTime);
+            Serial.print(", PPS time: ");
+            Serial.println(timeSync->ppsTime);
+        } else {
+            Serial.print("RTC fallback time. Reasons: ");
+            Serial.print("synchronized="); Serial.print(timeSync->synchronized);
+            Serial.print(", gpsConnected="); Serial.print(gpsConnected);
+            Serial.print(", gpsMonitor="); Serial.print(gpsMonitor ? "OK" : "NULL");
+            Serial.print(", inFallbackMode="); 
+            if (gpsMonitor) {
+                Serial.println(gpsMonitor->inFallbackMode);
+            } else {
+                Serial.println("N/A");
+            }
+        }
+        lastTimeDebug = millis();
+    }
+    
+    if (timeSync->synchronized && gpsConnected && gpsMonitor && !gpsMonitor->inFallbackMode) {
         // Return high-precision PPS-synchronized time
         unsigned long elapsed = micros() - timeSync->ppsTime;
         return timeSync->gpsTime * 1000 + elapsed / 1000; // milliseconds
