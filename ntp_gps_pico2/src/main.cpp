@@ -6,6 +6,7 @@
 #include <uRTCLib.h>
 #include <WebServer.h>
 #include <Gps_Client.h>
+#include <time.h>
 
 #define GPS_PPS_PIN 8
 #define GPS_SDA_PIN 6
@@ -34,20 +35,54 @@ byte mac[] = {
     0x6e, 0xc9, 0x4c, 0x32, 0x3a, 0xf6};
 
 volatile unsigned long lastPps = 0;
+volatile unsigned long ppsTimestamp = 0;
+volatile bool ppsReceived = false;
+volatile unsigned long ppsCount = 0;
 bool gpsConnected = false;
+
+// 高精度時刻同期用の構造体
+struct TimeSync {
+  unsigned long gpsTime;      // GPS時刻 (Unix timestamp)
+  unsigned long ppsTime;      // PPS受信時のマイクロ秒
+  unsigned long rtcTime;      // RTC時刻
+  bool synchronized;          // 同期状態
+  float accuracy;            // 精度 (秒)
+} timeSync = {0, 0, 0, false, 1.0};
+
+// 高精度時刻取得関数
+unsigned long getHighPrecisionTime() {
+  if (timeSync.synchronized && gpsConnected) {
+    // PPS同期された時刻を返す
+    unsigned long elapsed = micros() - timeSync.ppsTime;
+    return timeSync.gpsTime * 1000 + elapsed / 1000; // ミリ秒単位
+  } else {
+    // RTCフォールバック
+    rtc.refresh();
+    struct tm timeinfo = {0};
+    timeinfo.tm_year = rtc.year() + 100; // RTCは2桁年
+    timeinfo.tm_mon = rtc.month() - 1;
+    timeinfo.tm_mday = rtc.day();
+    timeinfo.tm_hour = rtc.hour();
+    timeinfo.tm_min = rtc.minute();
+    timeinfo.tm_sec = rtc.second();
+    return mktime(&timeinfo) * 1000 + millis() % 1000;
+  }
+}
 
 void trigerPps()
 {
+  unsigned long now = micros();
+  ppsTimestamp = now;
+  ppsReceived = true;
+  ppsCount++;
+  
+  // LED点滅（非ブロッキング）
+  analogWrite(LED_PPS_PIN, 255);
+  
 #if defined(DEBUG_CONSOLE_PPS)
-  Serial.println("PPS");
-  Serial.println(micros() - lastPps);
+  // 割り込み内では最小限の処理のみ
+  lastPps = now;
 #endif
-  lastPps = micros();
-  analogWrite(LED_ONBOARD_PIN, 255);
-  analogWrite(LED_PPS_PIN, 100);
-  delay(50);
-  analogWrite(LED_ONBOARD_PIN, 0);
-  analogWrite(LED_PPS_PIN, 0);
 }
 
 void printEtherStatus()
@@ -284,12 +319,71 @@ void setup()
 }
 
 int displayCount = 0;
+unsigned long ledOffTime = 0;
+
+// PPS信号とGPS時刻同期処理
+void processPpsSync() {
+  if (ppsReceived && gpsConnected) {
+    ppsReceived = false; // フラグをリセット
+    
+    // GPS時刻データを取得
+    GpsSummaryData gpsData = gpsClient.getGpsSummaryData();
+    
+    if (gpsData.timeValid && gpsData.dateValid) {
+      // Unix timestampに変換
+      struct tm timeinfo = {0};
+      timeinfo.tm_year = gpsData.year - 1900;
+      timeinfo.tm_mon = gpsData.month - 1;
+      timeinfo.tm_mday = gpsData.day;
+      timeinfo.tm_hour = gpsData.hour;
+      timeinfo.tm_min = gpsData.min;
+      timeinfo.tm_sec = gpsData.sec;
+      
+      timeSync.gpsTime = mktime(&timeinfo);
+      timeSync.ppsTime = ppsTimestamp;
+      timeSync.synchronized = true;
+      
+      // RTCと同期
+      rtc.set(gpsData.sec, gpsData.min, gpsData.hour, 1, 
+              gpsData.day, gpsData.month, gpsData.year % 100);
+      timeSync.rtcTime = timeSync.gpsTime;
+      
+      // 精度計算（PPS信号による高精度化）
+      timeSync.accuracy = 0.001; // 1ms精度
+      
+#if defined(DEBUG_CONSOLE_PPS)
+      Serial.print("PPS-GPS sync: ");
+      Serial.print(gpsData.hour);
+      Serial.print(":");
+      Serial.print(gpsData.min);
+      Serial.print(":");
+      Serial.print(gpsData.sec);
+      Serial.print(".");
+      Serial.print(gpsData.msec);
+      Serial.print(" PPS count: ");
+      Serial.println(ppsCount);
+#endif
+    }
+  }
+}
 
 void loop()
 {
   if (gpsConnected) {
     myGNSS.checkUblox();     // Check for the arrival of new data and process it.
     myGNSS.checkCallbacks(); // Check if any callbacks are waiting to be processed.
+    
+    // PPS信号処理
+    processPpsSync();
+  }
+  
+  // LED管理（非ブロッキング）
+  if (ledOffTime == 0 && digitalRead(LED_PPS_PIN)) {
+    ledOffTime = millis() + 50; // 50ms後にLEDを消灯
+  }
+  if (ledOffTime > 0 && millis() > ledOffTime) {
+    analogWrite(LED_PPS_PIN, 0);
+    ledOffTime = 0;
   }
 
   webServer.server(Serial, server, gpsClient.getUbxNavSatData_t(), gpsClient.getGpsSummaryData());
