@@ -6,12 +6,17 @@
 #include <Gps_model.h>
 
 
+class NtpServer; // Forward declaration
+
 class WebServer
 {
 public:
     void handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData);
+    void setNtpServer(NtpServer* ntpServerInstance) { ntpServer = ntpServerInstance; }
 
 private:
+    NtpServer* ntpServer = nullptr;
+    
     void rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData);
     void gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSatData_t);
     void metricsPage(EthernetClient &client);

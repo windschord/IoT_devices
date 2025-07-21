@@ -14,6 +14,7 @@
 #include "NetworkManager.h"
 #include "SystemMonitor.h"
 #include "NtpServer.h"
+#include "NtpTypes.h"
 #include "DisplayManager.h"
 
 // Hardware configuration moved to HardwareConfig.h
@@ -101,6 +102,7 @@ void setupGps()
     Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring."));
     Serial.println(F("Continuing without GPS for debugging..."));
     analogWrite(LED_ERROR_PIN, 255);
+    displayManager.displayError("GPS Module not detected. Check wiring.");
     gpsConnected = false;
     return; // エラーで停止せず、続行する
   }
@@ -196,6 +198,8 @@ void setup()
   const UdpSocketManager& udpStatus = networkManager.getUdpStatus();
   ntpServer = new NtpServer(&ntpUdp, &timeManager, const_cast<UdpSocketManager*>(&udpStatus));
   ntpServer->init();
+  
+  // NTP server is now accessible via global ntpServer pointer for metrics
 
   // Webサーバーを起動（ネットワーク接続状態に関わらず起動）
   server.begin();
@@ -250,7 +254,37 @@ void loop()
   displayManager.update();
   
   if (displayManager.shouldDisplay() && micros() - lastPps > 1000) {
-    displayManager.displayInfo(gpsClient.getGpsSummaryData());
+    GpsSummaryData gpsData = gpsClient.getGpsSummaryData();
+    
+    // Display content based on current mode
+    switch (displayManager.getCurrentMode()) {
+      case DISPLAY_GPS_TIME:
+      case DISPLAY_GPS_SATS:
+        displayManager.displayInfo(gpsData);
+        break;
+        
+      case DISPLAY_NTP_STATS:
+        if (ntpServer) {
+          displayManager.displayNtpStats(ntpServer->getStatistics());
+        }
+        break;
+        
+      case DISPLAY_SYSTEM_STATUS:
+        displayManager.displaySystemStatus(
+          gpsConnected, 
+          networkManager.isConnected(), 
+          millis() / 1000
+        );
+        break;
+        
+      case DISPLAY_ERROR:
+        // Error display is handled automatically by DisplayManager
+        break;
+        
+      default:
+        displayManager.displayInfo(gpsData);
+        break;
+    }
   }
 
   // Network connection monitoring and automatic recovery
