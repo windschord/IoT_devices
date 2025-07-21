@@ -22,6 +22,7 @@ public:
     void init();
     void processPpsSync(const GpsSummaryData& gpsData);
     void onPpsInterrupt();
+    void setGpsMonitor(const GpsMonitor* gpsMonitorInstance) { gpsMonitor = gpsMonitorInstance; }
     
     unsigned long getHighPrecisionTime();
     int getNtpStratum();

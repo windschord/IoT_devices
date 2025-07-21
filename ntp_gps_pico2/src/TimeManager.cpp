@@ -78,6 +78,25 @@ int TimeManager::getNtpStratum() {
 void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
     extern bool gpsConnected;
     
+    // Debug output for GPS sync status
+    static unsigned long lastDebugTime = 0;
+    unsigned long now = millis();
+    if (now - lastDebugTime > 5000) { // Every 5 seconds
+        Serial.print("GPS Sync Debug - PPS: ");
+        Serial.print(ppsReceived ? "YES" : "NO");
+        Serial.print(", GPS Connected: ");
+        Serial.print(gpsConnected ? "YES" : "NO");
+        Serial.print(", Time Valid: ");
+        Serial.print(gpsData.timeValid ? "YES" : "NO");
+        Serial.print(", Date Valid: ");
+        Serial.print(gpsData.dateValid ? "YES" : "NO");
+        Serial.print(", Synchronized: ");
+        Serial.print(timeSync->synchronized ? "YES" : "NO");
+        Serial.print(", Fallback: ");
+        Serial.println(gpsMonitor && gpsMonitor->inFallbackMode ? "YES" : "NO");
+        lastDebugTime = now;
+    }
+    
     if (ppsReceived && gpsConnected) {
         ppsReceived = false; // Reset flag
         

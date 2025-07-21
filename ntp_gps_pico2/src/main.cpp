@@ -199,14 +199,17 @@ void setup()
   // RTC setup
   setupRtc();
 
-  // Initialize system modules
-  timeManager.init();
+  // Initialize system modules  
   networkManager.init();
   displayManager.init();
 
-  // Initialize system monitor with references
+  // Initialize system monitor with references FIRST
   systemMonitor = new SystemMonitor(&gpsClient, &gpsConnected, &ppsReceived);
   systemMonitor->init();
+  
+  // Initialize TimeManager and set GpsMonitor reference
+  timeManager.init();
+  timeManager.setGpsMonitor(&systemMonitor->getGpsMonitor());
 
   // Initialize NTP server
   const UdpSocketManager& udpStatus = networkManager.getUdpStatus();
