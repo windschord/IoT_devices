@@ -1,5 +1,6 @@
 #include <webserver.h>
 #include "NtpServer.h"
+#include "ConfigManager.h"
 
 void WebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData)
 {
@@ -45,6 +46,24 @@ void WebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT
       stream.println("METRICS");
       metricsPage(client);
     }
+    else if (s.indexOf("GET /config ") >= 0)
+    {
+      stream.println("CONFIG");
+      configPage(client);
+    }
+    else if (s.indexOf("GET /api/config ") >= 0)
+    {
+      stream.println("CONFIG_API_GET");
+      configApiGet(client);
+    }
+    else if (s.indexOf("POST /api/config ") >= 0)
+    {
+      stream.println("CONFIG_API_POST");
+      // Extract POST data from request
+      String postData = "";
+      // POST data parsing would be implemented here
+      configApiPost(client, postData);
+    }
     else
     {
       stream.println("ROOT");
@@ -84,8 +103,9 @@ void WebServer::rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData)
   client.println("<!DOCTYPE HTML>");
   client.println("<html><body>");
 
-  client.println("<h1>GPS Data</h1>");
-  client.println("<a href=\"/gps\">GPS</a>");
+  client.println("<h1>GPS NTP Server</h1>");
+  client.println("<a href=\"/gps\">GPS Details</a> | ");
+  client.println("<a href=\"/config\">Configuration</a> | ");
 
   client.println("<div>Date/Time: ");
   client.println(dateTimechr);
@@ -245,4 +265,108 @@ void WebServer::metricsPage(EthernetClient &client)
     client.println("ntp_processing_time_avg_ms 0");
     client.println("ntp_last_request_time_seconds 0");
   }
+}
+
+void WebServer::configPage(EthernetClient &client) {
+  printHeader(client, "text/html");
+  
+  client.println("<!DOCTYPE HTML>");
+  client.println("<html><head>");
+  client.println("<title>GPS NTP Server Configuration</title>");
+  client.println("<style>");
+  client.println("body { font-family: Arial, sans-serif; margin: 20px; }");
+  client.println("table { border-collapse: collapse; width: 100%; }");
+  client.println("th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }");
+  client.println("th { background-color: #f2f2f2; }");
+  client.println(".nav { margin-bottom: 20px; }");
+  client.println(".nav a { margin-right: 10px; }");
+  client.println("</style>");
+  client.println("</head><body>");
+  
+  // Navigation
+  client.println("<div class=\"nav\">");
+  client.println("<a href=\"/\">Home</a>");
+  client.println("<a href=\"/gps\">GPS</a>");
+  client.println("<a href=\"/metrics\">Metrics</a>");
+  client.println("<a href=\"/config\">Configuration</a>");
+  client.println("</div>");
+  
+  client.println("<h1>System Configuration</h1>");
+  
+  if (configManager) {
+    const auto& config = configManager->getConfig();
+    
+    client.println("<h2>Network Settings</h2>");
+    client.println("<table>");
+    client.println("<tr><th>Parameter</th><th>Value</th></tr>");
+    client.printf("<tr><td>Hostname</td><td>%s</td></tr>", config.hostname);
+    client.printf("<tr><td>IP Address</td><td>%s</td></tr>", 
+                  config.ip_address == 0 ? "DHCP" : "Static");
+    client.printf("<tr><td>Syslog Server</td><td>%s:%d</td></tr>", 
+                  config.syslog_server, config.syslog_port);
+    client.printf("<tr><td>Log Level</td><td>%d</td></tr>", config.log_level);
+    client.println("</table>");
+    
+    client.println("<h2>GNSS Settings</h2>");
+    client.println("<table>");
+    client.println("<tr><th>Constellation</th><th>Status</th></tr>");
+    client.printf("<tr><td>GPS</td><td>%s</td></tr>", config.gps_enabled ? "Enabled" : "Disabled");
+    client.printf("<tr><td>GLONASS</td><td>%s</td></tr>", config.glonass_enabled ? "Enabled" : "Disabled");
+    client.printf("<tr><td>Galileo</td><td>%s</td></tr>", config.galileo_enabled ? "Enabled" : "Disabled");
+    client.printf("<tr><td>BeiDou</td><td>%s</td></tr>", config.beidou_enabled ? "Enabled" : "Disabled");
+    client.printf("<tr><td>QZSS</td><td>%s</td></tr>", config.qzss_enabled ? "Enabled" : "Disabled");
+    client.printf("<tr><td>QZSS L1S</td><td>%s</td></tr>", config.qzss_l1s_enabled ? "Enabled" : "Disabled");
+    client.printf("<tr><td>Update Rate</td><td>%d Hz</td></tr>", config.gnss_update_rate);
+    client.println("</table>");
+    
+    client.println("<h2>NTP Server Settings</h2>");
+    client.println("<table>");
+    client.printf("<tr><td>NTP Enabled</td><td>%s</td></tr>", config.ntp_enabled ? "Yes" : "No");
+    client.printf("<tr><td>NTP Port</td><td>%d</td></tr>", config.ntp_port);
+    client.printf("<tr><td>Stratum</td><td>%d</td></tr>", config.ntp_stratum);
+    client.println("</table>");
+    
+    client.println("<h2>Actions</h2>");
+    client.println("<p><a href=\"/api/config\">View JSON Configuration</a></p>");
+    client.println("<p><strong>Note:</strong> Configuration editing via web interface will be available in future versions.</p>");
+  } else {
+    client.println("<p>Configuration Manager not available</p>");
+  }
+  
+  client.println("</body></html>");
+}
+
+void WebServer::configApiGet(EthernetClient &client) {
+  if (configManager) {
+    String configJson = configManager->configToJson();
+    sendJsonResponse(client, configJson);
+  } else {
+    sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
+  }
+}
+
+void WebServer::configApiPost(EthernetClient &client, String postData) {
+  if (!configManager) {
+    sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
+    return;
+  }
+  
+  if (postData.length() == 0) {
+    sendJsonResponse(client, "{\"error\": \"No POST data received\"}", 400);
+    return;
+  }
+  
+  if (configManager->configFromJson(postData)) {
+    sendJsonResponse(client, "{\"success\": true, \"message\": \"Configuration updated successfully\"}");
+  } else {
+    sendJsonResponse(client, "{\"error\": \"Configuration validation failed\"}", 400);
+  }
+}
+
+void WebServer::sendJsonResponse(EthernetClient &client, const String& json, int statusCode) {
+  client.printf("HTTP/1.1 %d %s\r\n", statusCode, statusCode == 200 ? "OK" : "Error");
+  client.println("Content-Type: application/json");
+  client.println("Connection: close");
+  client.println();
+  client.println(json);
 }

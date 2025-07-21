@@ -16,6 +16,7 @@
 #include "NtpServer.h"
 #include "NtpTypes.h"
 #include "DisplayManager.h"
+#include "ConfigManager.h"
 
 // Hardware configuration moved to HardwareConfig.h
 
@@ -30,6 +31,7 @@ uRTCLib rtc;
 byte rtcModel = RTC_MODEL;
 
 // Global system instances
+ConfigManager configManager;
 TimeSync timeSync = {0, 0, 0, false, 1.0};
 TimeManager timeManager(&rtc, &timeSync, nullptr);
 NetworkManager networkManager(&ntpUdp);
@@ -182,6 +184,9 @@ void setup()
   // I2C for OLED and RTC
   Wire.begin();
 
+  // Initialize configuration manager first
+  configManager.init();
+
   // RTC setup
   setupRtc();
 
@@ -199,7 +204,8 @@ void setup()
   ntpServer = new NtpServer(&ntpUdp, &timeManager, const_cast<UdpSocketManager*>(&udpStatus));
   ntpServer->init();
   
-  // NTP server is now accessible via global ntpServer pointer for metrics
+  // Connect ConfigManager to web server for configuration management
+  webServer.setConfigManager(&configManager);
 
   // Webサーバーを起動（ネットワーク接続状態に関わらず起動）
   server.begin();
