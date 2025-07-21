@@ -76,16 +76,16 @@ graph TB
 Raspberry Pi Pico 2 Pin Assignments:
 
 GPIO Pins:
-- GPIO 0 (I2C0 SDA)  → ZED-F9T SDA (shared I2C bus)
-- GPIO 1 (I2C0 SCL)  → ZED-F9T SCL (shared I2C bus)
-- GPIO 2             → PPS Input (ZED-F9T PPS)
+- GPIO 0 (I2C0 SDA)  → SH1106 SDA (OLED/RTC I2C bus)
+- GPIO 1 (I2C0 SCL)  → SH1106 SCL (OLED/RTC I2C bus)
+- GPIO 6 (I2C1 SDA)  → ZED-F9T SDA (GPS I2C bus)
+- GPIO 7 (I2C1 SCL)  → ZED-F9T SCL (GPS I2C bus)
+- GPIO 8             → PPS Input (ZED-F9T PPS)
 - GPIO 3             → ZED-F9T SAFEBOOT (optional, for firmware updates)
-- GPIO 0 (I2C0 SDA)  → SH1106 SDA (shared I2C bus)
-- GPIO 1 (I2C0 SCL)  → SH1106 SCL (shared I2C bus)
 - GPIO 4             → Status LED 1 (GNSS Fix Status) - Green
 - GPIO 5             → Status LED 2 (Network Status) - Blue  
-- GPIO 6             → Status LED 3 (NTP Service Status) - Yellow
-- GPIO 7             → Status LED 4 (QZSS L1S Alert Status) - Red
+- GPIO 14            → Status LED 3 (Error Status) - Red
+- GPIO 15            → Status LED 4 (PPS Status) - Yellow
 - GPIO 16 (SPI0 RX)  → W5500 MISO
 - GPIO 17 (SPI0 CSn) → W5500 CS
 - GPIO 18 (SPI0 SCK) → W5500 SCLK
@@ -105,8 +105,8 @@ Power Connections:
 Status LEDs:
 - LED1 (Green)  → GPIO 4 via 330Ω resistor (GNSS Fix Status)
 - LED2 (Blue)   → GPIO 5 via 330Ω resistor (Network Status)  
-- LED3 (Yellow) → GPIO 6 via 330Ω resistor (NTP Service Status)
-- LED4 (Red)    → GPIO 7 via 330Ω resistor (QZSS L1S Alert Status)
+- LED3 (Red)    → GPIO 14 via 330Ω resistor (Error Status)
+- LED4 (Yellow) → GPIO 15 via 330Ω resistor (PPS Status)
 
 GNSS Antenna:
 - ZED-F9T ANT → External GNSS antenna (supports GPS L1/L2, GLONASS L1/L2, Galileo E1/E5b, BeiDou B1I/B2I, QZSS L1/L2)
@@ -119,18 +119,18 @@ GNSS Antenna:
                     Raspberry Pi Pico 2
                    ┌─────────────────────┐
                    │                     │
-    ZED-F9T ───────┤ GPIO 0 (SDA)        │ ← Shared I2C Bus
-    (I2C 0x42)     │ GPIO 1 (SCL)        │   (4.7kΩ pull-up resistors)
-    PPS ───────────┤ GPIO 2              │
-                   │ GPIO 3 (SAFEBOOT)   │
+    SH1106 ────────┤ GPIO 0 (SDA)        │ ← I2C0 Bus (OLED/RTC)
+    RTC ───────────┤ GPIO 1 (SCL)        │   (4.7kΩ pull-up resistors)
+    (I2C 0x3C/0x68)│                     │
                    │                     │
-    SH1106 ────────┤ GPIO 0 (SDA)        │ ← Shared I2C Bus
-    (I2C 0x3C)     │ GPIO 1 (SCL)        │
+    ZED-F9T ───────┤ GPIO 6 (SDA)        │ ← I2C1 Bus (GPS)
+    (I2C 0x42)     │ GPIO 7 (SCL)        │   (4.7kΩ pull-up resistors)
+    PPS ───────────┤ GPIO 8              │
                    │                     │
     LED1 (Green)───┤ GPIO 4              │ ← GNSS Fix Status
     LED2 (Blue)────┤ GPIO 5              │ ← Network Status
-    LED3 (Yellow)──┤ GPIO 6              │ ← NTP Service Status
-    LED4 (Red)─────┤ GPIO 7              │ ← QZSS L1S Alert Status
+    LED3 (Red)─────┤ GPIO 14             │ ← Error Status
+    LED4 (Yellow)──┤ GPIO 15             │ ← PPS Status
                    │                     │
     W5500 ─────────┤ GPIO 16 (MISO)      │
     (SPI)          │ GPIO 17 (CS)        │
@@ -142,7 +142,9 @@ GNSS Antenna:
     Power ─────────┤ 3V3, GND           │
                    └─────────────────────┘
 
-Note: I2C bus requires 4.7kΩ pull-up resistors on SDA and SCL lines
+Note: Both I2C buses require 4.7kΩ pull-up resistors on SDA and SCL lines
+      I2C0 (GPIO 0/1): OLED Display and RTC
+      I2C1 (GPIO 6/7): GPS Module  
       LEDs require 330Ω current limiting resistors
 ```
 
@@ -189,7 +191,7 @@ Note: I2C bus requires 4.7kΩ pull-up resistors on SDA and SCL lines
   - UBX-NAV-PVT メッセージによる高精度位置・時刻取得
   - PPS信号エッジ検出と時刻補正
   - 衛星信号品質監視（C/N0, 衛星数）
-  - I2Cバス共有管理（OLEDディスプレイと）
+  - I2Cバス分離管理（Wire1使用でOLEDディスプレイとRTCから独立）
   - QZSS L1S災害情報の解析と表示
 
 ### NTP Server Service

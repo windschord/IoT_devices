@@ -34,6 +34,7 @@ byte mac[] = {
     0x6e, 0xc9, 0x4c, 0x32, 0x3a, 0xf6};
 
 volatile unsigned long lastPps = 0;
+bool gpsConnected = false;
 
 void trigerPps()
 {
@@ -149,16 +150,17 @@ void setupGps()
   Wire1.begin();
   Serial.println("Wire1 begin");
 
-  Wire1.beginTransmission(0x42);
-  Wire1.endTransmission(false);
-
   if (myGNSS.begin(Wire1) == false) // Connect to the u-blox module using Wire port
   {
-    Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring. Freezing."));
+    Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring."));
+    Serial.println(F("Continuing without GPS for debugging..."));
     analogWrite(LED_ERROR_PIN, 255);
-    while (1)
-      ;
+    gpsConnected = false;
+    return; // エラーで停止せず、続行する
   }
+  
+  Serial.println("GPS module connected successfully!");
+  gpsConnected = true;
 
   myGNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output both NMEA and UBX messages
   myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); // Save (only) the communications port settings to flash and BBR
@@ -217,7 +219,7 @@ void setupRtc()
 void setup()
 {
   // Open serial communications and wait for port to open:
-  Serial.begin(115200);
+  Serial.begin(9600);
   while (!Serial)
   {
     ; // wait for serial port to connect. Needed for native USB port only
@@ -282,10 +284,13 @@ void setup()
 }
 
 int displayCount = 0;
+
 void loop()
 {
-  myGNSS.checkUblox();     // Check for the arrival of new data and process it.
-  myGNSS.checkCallbacks(); // Check if any callbacks are waiting to be processed.
+  if (gpsConnected) {
+    myGNSS.checkUblox();     // Check for the arrival of new data and process it.
+    myGNSS.checkCallbacks(); // Check if any callbacks are waiting to be processed.
+  }
 
   webServer.server(Serial, server, gpsClient.getUbxNavSatData_t(), gpsClient.getGpsSummaryData());
 

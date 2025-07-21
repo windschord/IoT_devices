@@ -21,11 +21,11 @@ pio run -t clean
 # コードチェック（アップロードなしでコンパイル）
 pio check
 
-# シリアル出力をモニター
-pio device monitor
+# シリアル出力をモニター（デフォルトボーレート9600）
+pio device monitor -b 9600
 
 # 特定のボーレートでモニター
-pio device monitor -b 115200
+pio device monitor -b 9600
 ```
 
 ### ライブラリ管理
@@ -130,6 +130,8 @@ pio lib update
 - 常に資料にしたがう
 - 仕様を変える場合はユーザーに確認してから、@requirements.md -> @design.md ->  @tasks.mdの順に修正する
 - @tasks.md を進捗に沿って更新する
+- 組み込みでリソースが限られるため、可能な限り処理を単純にして可読性の高いコードにする
+
 ### 資料
 - 要求書: @requirements.md
 - 設計書: @design.md
