@@ -132,9 +132,18 @@ void setupRtc()
   rtc.set_model(rtcModel);
   // refresh data from RTC HW in RTC class object so flags like rtc.lostPower(), rtc.getEOSCFlag(), etc, can get populated
   rtc.refresh();
-  // Only use once, then disable
-  // rtc.set(0, 45, 10, 1, 29, 12, 24);
-  //  RTCLib::set(byte second, byte minute, byte hour (0-23:24-hr mode only), byte dayOfWeek (Sun = 1, Sat = 7), byte dayOfMonth (1-12), byte month, byte year)
+  
+  // Check if RTC lost power and needs initialization
+  if (rtc.lostPower()) {
+    Serial.println("RTC lost power - setting to current time (2025-01-21 12:00:00)");
+    // RTCLib::set(byte second, byte minute, byte hour (0-23:24-hr mode only), byte dayOfWeek (Tue = 3), byte dayOfMonth (1-31), byte month (1-12), byte year (25))
+    rtc.set(0, 0, 12, 3, 21, 1, 25);  // 2025-01-21 12:00:00 Tuesday
+  } else {
+    Serial.print("RTC time: ");
+    Serial.printf("20%02d/%02d/%02d %02d:%02d:%02d\n", 
+                  rtc.year(), rtc.month(), rtc.day(), 
+                  rtc.hour(), rtc.minute(), rtc.second());
+  }
 
   // use the following if you want to set main clock in 24 hour mode
   rtc.set_12hour_mode(false);

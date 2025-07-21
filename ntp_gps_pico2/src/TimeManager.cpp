@@ -46,7 +46,24 @@ unsigned long TimeManager::getHighPrecisionTime() {
         timeinfo.tm_hour = rtc->hour();
         timeinfo.tm_min = rtc->minute();
         timeinfo.tm_sec = rtc->second();
-        return mktime(&timeinfo) * 1000 + millis() % 1000;
+        
+        // Check if RTC time is reasonable (after 2020)
+        time_t rtcTime = mktime(&timeinfo);
+        time_t year2020 = 1577836800; // 2020-01-01 00:00:00 UTC
+        
+        if (rtcTime < year2020) {
+            // RTC time is invalid, use a default reasonable time
+            // 2025-01-21 12:00:00 as fallback
+            timeinfo.tm_year = 125; // 2025
+            timeinfo.tm_mon = 0;    // January
+            timeinfo.tm_mday = 21;  // 21st
+            timeinfo.tm_hour = 12;
+            timeinfo.tm_min = 0;
+            timeinfo.tm_sec = 0;
+            rtcTime = mktime(&timeinfo);
+        }
+        
+        return rtcTime * 1000 + millis() % 1000;
     }
 }
 

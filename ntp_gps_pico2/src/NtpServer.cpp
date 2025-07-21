@@ -155,7 +155,7 @@ void NtpServer::createNtpResponse() {
     
     // Set timestamps
     responsePacket.reference_timestamp = htonTimestamp(getReferenceTimestamp());
-    responsePacket.origin_timestamp = receivedPacket.transmit_timestamp;  // Echo client's transmit time
+    responsePacket.origin_timestamp = htonTimestamp(receivedPacket.transmit_timestamp);  // Echo client's transmit time (convert to network byte order)
     
     // Set receive timestamp (when we received the client's request)
     uint32_t receiveUnixTime = timeManager->getHighPrecisionTime() / 1000;
