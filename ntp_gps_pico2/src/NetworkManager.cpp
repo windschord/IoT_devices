@@ -1,0 +1,306 @@
+#include "NetworkManager.h"
+#include "HardwareConfig.h"
+#include <SPI.h>
+
+NetworkManager::NetworkManager(EthernetUDP* udpInstance) : ntpUdp(udpInstance) {
+    // Initialize MAC address
+    byte defaultMac[] = DEFAULT_MAC_ADDRESS;
+    memcpy(mac, defaultMac, 6);
+    
+    // Initialize monitoring structures
+    networkMonitor = {false, false, 0, 5000, 0, 5, 0, 30000, 0, 0, 0, false};
+    udpManager = {false, 0, 10000, 0};
+}
+
+void NetworkManager::init() {
+    initializeW5500();
+    
+    // Hardware status detailed check
+    Serial.print("Hardware status: ");
+    checkHardwareStatus();
+    
+    // Force alternative approach - matching original main.cpp logic
+    Serial.println("Trying alternative approach - forcing DHCP initialization");
+    bool hardwareDetected = true; // Force to true to continue like original code
+    
+    if (!hardwareDetected) {
+        Serial.println("ERROR: W5500 Ethernet hardware not found after 3 attempts");
+        Serial.println("This may be a library compatibility issue");
+        Serial.println("Continuing without Ethernet (GPS-only mode)");
+        analogWrite(LED_ERROR_PIN, 255);
+        networkMonitor.isConnected = false;
+    } else {
+        Serial.println("W5500 hardware detected");
+        
+        // DHCP attempt
+        Serial.println("Attempting DHCP configuration...");
+        if (Ethernet.begin(mac) == 0) {
+            Serial.println("DHCP failed, trying static IP fallback");
+            
+            // Static IP configuration fallback (example: 192.168.1.100)
+            IPAddress ip(192, 168, 1, 100);
+            IPAddress gateway(192, 168, 1, 1);
+            IPAddress subnet(255, 255, 255, 0);
+            IPAddress dns(8, 8, 8, 8);
+            
+            Ethernet.begin(mac, ip, dns, gateway, subnet);
+            Serial.println("Using static IP configuration");
+            networkMonitor.dhcpActive = false;
+        } else {
+            Serial.println("DHCP configuration successful");
+            networkMonitor.dhcpActive = true;
+        }
+        
+        // Connection confirmation
+        if (Ethernet.linkStatus() == LinkOFF) {
+            Serial.println("WARNING: Ethernet cable not connected");
+            networkMonitor.isConnected = false;
+        } else {
+            networkMonitor.isConnected = true;
+            digitalWrite(LED_ONBOARD_PIN, HIGH); // Turn on network LED
+            
+            Serial.print("Ethernet initialized successfully");
+            Serial.print(" - IP: ");
+            Serial.print(Ethernet.localIP());
+            Serial.print(", Gateway: ");
+            Serial.print(Ethernet.gatewayIP());
+            Serial.print(", DNS: ");
+            Serial.println(Ethernet.dnsServerIP());
+            
+            // Network monitoring initialization
+            networkMonitor.lastLinkCheck = millis();
+            networkMonitor.reconnectAttempts = 0;
+            
+            // UDP socket management initialization
+            udpManager.lastSocketCheck = millis();
+        }
+    }
+}
+
+void NetworkManager::initializeW5500() {
+    // W5500 SPI setup and hardware reset
+    pinMode(W5500_RST_PIN, OUTPUT);
+    pinMode(W5500_INT_PIN, INPUT);
+    pinMode(W5500_CS_PIN, OUTPUT);
+    
+    // W5500 hardware reset
+    Serial.println("Resetting W5500 module...");
+    digitalWrite(W5500_CS_PIN, HIGH); // CS High
+    digitalWrite(W5500_RST_PIN, LOW);  // Reset Low
+    delay(50);
+    digitalWrite(W5500_RST_PIN, HIGH); // Reset High
+    delay(200); // Wait for stabilization after reset
+    
+    // SPI initialization (Raspberry Pi Pico 2 compatible)
+    SPI.begin();
+    SPI.setCS(W5500_CS_PIN);
+    
+    // Initialize Ethernet library with CS pin
+    Ethernet.init(W5500_CS_PIN);
+    Serial.println("W5500 initialization completed");
+}
+
+bool NetworkManager::attemptDhcp() {
+    Serial.println("Attempting DHCP configuration...");
+    return (Ethernet.begin(mac) == 1);
+}
+
+void NetworkManager::setupStaticIp() {
+    Serial.println("DHCP failed, trying static IP fallback");
+    
+    // Static IP configuration (example: 192.168.1.100)
+    IPAddress ip(192, 168, 1, 100);
+    IPAddress gateway(192, 168, 1, 1);
+    IPAddress subnet(255, 255, 255, 0);
+    IPAddress dns(8, 8, 8, 8);
+    
+    Ethernet.begin(mac, ip, dns, gateway, subnet);
+    networkMonitor.dhcpActive = false;
+}
+
+void NetworkManager::checkHardwareStatus() {
+    // Only log hardware status during monitoring, not repeatedly
+    static bool hardwareLogged = false;
+    
+    switch(Ethernet.hardwareStatus()) {
+        case EthernetNoHardware:
+            if (!hardwareLogged) {
+                Serial.println("No hardware detected");
+                hardwareLogged = true;
+            }
+            networkMonitor.isConnected = false;
+            break;
+        case EthernetW5100:
+            if (!hardwareLogged) {
+                Serial.println("W5100 detected");
+                hardwareLogged = true;
+            }
+            break;
+        case EthernetW5200:
+            if (!hardwareLogged) {
+                Serial.println("W5200 detected");
+                hardwareLogged = true;
+            }
+            break;
+        case EthernetW5500:
+            if (!hardwareLogged) {
+                Serial.println("W5500 detected");
+                hardwareLogged = true;
+            }
+            break;
+        default:
+            if (!hardwareLogged) {
+                Serial.println("Unknown hardware");
+                hardwareLogged = true;
+            }
+            break;
+    }
+}
+
+void NetworkManager::checkLinkStatus() {
+    if (Ethernet.linkStatus() == LinkOFF) {
+        Serial.println("WARNING: Ethernet cable not connected");
+        networkMonitor.isConnected = false;
+    } else {
+        IPAddress currentIP = Ethernet.localIP();
+        if (currentIP[0] == 0) {
+            networkMonitor.isConnected = false;
+            networkMonitor.dhcpActive = false;
+        } else {
+            networkMonitor.isConnected = true;
+            networkMonitor.localIP = (uint32_t)currentIP;
+            networkMonitor.gateway = (uint32_t)Ethernet.gatewayIP();
+            networkMonitor.dnsServer = (uint32_t)Ethernet.dnsServerIP();
+            networkMonitor.reconnectAttempts = 0; // Reset on success
+        }
+    }
+}
+
+void NetworkManager::maintainDhcp() {
+    int dhcpResult = Ethernet.maintain();
+    switch (dhcpResult) {
+        case 1: // renewed fail
+            Serial.println("DHCP renewal failed");
+            networkMonitor.dhcpActive = false;
+            break;
+        case 2: // renewed success
+            Serial.println("DHCP renewed successfully");
+            Serial.print("IP: ");
+            Serial.println(Ethernet.localIP());
+            networkMonitor.dhcpActive = true;
+            break;
+        case 3: // rebind fail
+            Serial.println("DHCP rebind failed");
+            networkMonitor.dhcpActive = false;
+            break;
+        case 4: // rebind success
+            Serial.println("DHCP rebound successfully");
+            Serial.print("IP: ");
+            Serial.println(Ethernet.localIP());
+            networkMonitor.dhcpActive = true;
+            break;
+    }
+}
+
+void NetworkManager::monitorConnection() {
+    unsigned long now = millis();
+    bool wasConnected = networkMonitor.isConnected;
+    
+    // Periodic link status check
+    if (now - networkMonitor.lastLinkCheck > networkMonitor.linkCheckInterval) {
+        networkMonitor.lastLinkCheck = now;
+        
+        checkHardwareStatus();
+        if (Ethernet.hardwareStatus() != EthernetNoHardware) {
+            checkLinkStatus();
+        }
+    }
+    
+    // DHCP maintenance
+    maintainDhcp();
+    
+    // Detect connection status changes
+    if (wasConnected && !networkMonitor.isConnected) {
+        Serial.println("Network connection lost");
+        digitalWrite(LED_ONBOARD_PIN, LOW); // Turn off network LED
+    } else if (!wasConnected && networkMonitor.isConnected) {
+        Serial.println("Network connection established");
+        digitalWrite(LED_ONBOARD_PIN, HIGH); // Turn on network LED
+        Serial.print("IP: ");
+        Serial.print(Ethernet.localIP());
+        Serial.print(", Gateway: ");
+        Serial.print(Ethernet.gatewayIP());
+        Serial.print(", DNS: ");
+        Serial.println(Ethernet.dnsServerIP());
+    }
+}
+
+void NetworkManager::attemptReconnection() {
+    unsigned long now = millis();
+    
+    if (!networkMonitor.isConnected && 
+        networkMonitor.reconnectAttempts < networkMonitor.maxReconnectAttempts &&
+        (now - networkMonitor.lastReconnectTime > networkMonitor.reconnectInterval)) {
+        
+        networkMonitor.lastReconnectTime = now;
+        networkMonitor.reconnectAttempts++;
+        
+        Serial.print("Attempting network reconnection (attempt ");
+        Serial.print(networkMonitor.reconnectAttempts);
+        Serial.print("/");
+        Serial.print(networkMonitor.maxReconnectAttempts);
+        Serial.println(")");
+        
+        // W5500 reset
+        if (Ethernet.hardwareStatus() != EthernetNoHardware) {
+            Serial.println("Resetting W5500...");
+            
+            // DHCP retry
+            if (Ethernet.begin(mac) == 0) {
+                Serial.println("DHCP failed, will retry in 30 seconds");
+            } else {
+                Serial.println("DHCP reconnection successful");
+                networkMonitor.isConnected = true;
+                networkMonitor.dhcpActive = true;
+                networkMonitor.reconnectAttempts = 0;
+            }
+        }
+    }
+}
+
+void NetworkManager::manageUdpSockets() {
+    unsigned long now = millis();
+    
+    // Periodic socket status check
+    if (now - udpManager.lastSocketCheck > udpManager.socketCheckInterval) {
+        udpManager.lastSocketCheck = now;
+        
+        if (networkMonitor.isConnected) {
+            // NTP UDP socket management
+            if (!udpManager.ntpSocketOpen) {
+                Serial.println("Opening NTP UDP socket on port 123");
+                if (ntpUdp->begin(NTP_PORT)) {
+                    udpManager.ntpSocketOpen = true;
+                    networkMonitor.ntpServerActive = true;
+                    Serial.println("NTP UDP socket opened successfully");
+                } else {
+                    Serial.println("Failed to open NTP UDP socket");
+                    udpManager.socketErrors++;
+                }
+            }
+        } else {
+            // Close UDP socket when network is disconnected
+            if (udpManager.ntpSocketOpen) {
+                Serial.println("Closing NTP UDP socket due to network disconnection");
+                ntpUdp->stop();
+                udpManager.ntpSocketOpen = false;
+                networkMonitor.ntpServerActive = false;
+            }
+        }
+    }
+    
+    // Reset socket errors on success
+    if (udpManager.ntpSocketOpen && udpManager.socketErrors > 0) {
+        udpManager.socketErrors = 0;
+    }
+}

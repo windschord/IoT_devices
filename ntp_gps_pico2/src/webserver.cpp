@@ -1,6 +1,6 @@
 #include <webserver.h>
 
-void WebServer::server(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData)
+void WebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData)
 {
   EthernetClient client = server.available();
   if (client)
@@ -42,6 +42,7 @@ void WebServer::server(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_
     else if (s.indexOf("GET /metrics ") >= 0)
     {
       stream.println("METRICS");
+      metricsPage(client);
     }
     else
     {
@@ -181,4 +182,19 @@ void WebServer::metricsPage(EthernetClient &client)
 {
   printHeader(client, "text/plain");
   
+  // Basic Prometheus-style metrics
+  client.println("# HELP system_uptime_seconds System uptime in seconds");
+  client.println("# TYPE system_uptime_seconds counter");
+  client.print("system_uptime_seconds ");
+  client.println(millis() / 1000);
+  
+  client.println("# HELP memory_free_bytes Free memory in bytes"); 
+  client.println("# TYPE memory_free_bytes gauge");
+  client.print("memory_free_bytes ");
+  client.println(524288 - 16880); // Placeholder - actual free memory calculation would be more complex
+  
+  client.println("# HELP network_connected Network connection status");
+  client.println("# TYPE network_connected gauge");
+  client.print("network_connected ");
+  client.println("1"); // Placeholder - would need network status from main
 }

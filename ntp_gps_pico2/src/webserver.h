@@ -9,7 +9,7 @@
 class WebServer
 {
 public:
-    void server(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData);
+    void handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData);
 
 private:
     void rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData);
