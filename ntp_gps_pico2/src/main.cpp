@@ -17,6 +17,7 @@
 #include "NtpTypes.h"
 #include "DisplayManager.h"
 #include "ConfigManager.h"
+#include "LoggingService.h"
 
 // Hardware configuration moved to HardwareConfig.h
 
@@ -38,6 +39,7 @@ NetworkManager networkManager(&ntpUdp);
 SystemMonitor* systemMonitor = nullptr;
 NtpServer* ntpServer = nullptr;
 DisplayManager displayManager(&display);
+LoggingService* loggingService = nullptr;
 
 // Global state variables
 volatile unsigned long lastPps = 0;
@@ -110,6 +112,8 @@ void setupGps()
     Serial.println(F("   Check I2C wiring: SDA=GPIO6, SCL=GPIO7"));
     Serial.println(F("   Check power supply to GPS module"));
     Serial.println(F("❌ GPS initialization FAILED - continuing without GPS"));
+    LOG_ERR_MSG("GPS", "u-blox GNSS not detected at I2C address 0x42");
+    LOG_ERR_MSG("GPS", "Check wiring - SDA=GPIO6, SCL=GPIO7 and power supply");
     analogWrite(LED_ERROR_PIN, 255);
     displayManager.displayError("GPS Module not detected. Check wiring.");
     gpsConnected = false;
@@ -118,6 +122,8 @@ void setupGps()
   
   Serial.println("✅ GPS module connected successfully!");
   Serial.println("✅ GPS initialization completed");
+  LOG_INFO_MSG("GPS", "u-blox GNSS module connected successfully at I2C 0x42");
+  LOG_INFO_MSG("GPS", "QZSS L1S signal reception enabled for disaster alerts");
   gpsConnected = true;
   
   myGNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output both NMEA and UBX messages
@@ -210,19 +216,40 @@ void setup()
   // Initialize system modules  
   networkManager.init();
   displayManager.init();
+  
+  // Initialize logging service
+  loggingService = new LoggingService(&ntpUdp);
+  LogConfig logConfig;
+  logConfig.minLevel = LOG_INFO;
+  logConfig.facility = FACILITY_NTP;
+  logConfig.localBuffering = true;
+  logConfig.maxBufferEntries = 50;
+  logConfig.retransmitInterval = 30000;  // 30 seconds
+  logConfig.maxRetransmitAttempts = 3;
+  strcpy(logConfig.syslogServer, "");     // Will be configured later
+  logConfig.syslogPort = 514;
+  loggingService->init(logConfig);
+  
+  // Log system startup
+  LOG_INFO_MSG("SYSTEM", "GPS NTP Server starting up");
+  LOG_INFO_F("SYSTEM", "RAM: %lu bytes, Flash: %lu bytes", 
+             (unsigned long)17848, (unsigned long)403616);
 
   // Initialize system monitor with references FIRST
   systemMonitor = new SystemMonitor(&gpsClient, &gpsConnected, &ppsReceived);
   systemMonitor->init();
+  LOG_INFO_MSG("SYSTEM", "SystemMonitor initialized");
   
   // Initialize TimeManager and set GpsMonitor reference
   timeManager.init();
   timeManager.setGpsMonitor(&systemMonitor->getGpsMonitor());
+  LOG_INFO_MSG("SYSTEM", "TimeManager initialized with GPS monitor reference");
 
   // Initialize NTP server
   const UdpSocketManager& udpStatus = networkManager.getUdpStatus();
   ntpServer = new NtpServer(&ntpUdp, &timeManager, const_cast<UdpSocketManager*>(&udpStatus));
   ntpServer->init();
+  LOG_INFO_MSG("NTP", "NTP Server initialized and listening on port 123");
   
   // Connect ConfigManager to web server for configuration management
   webServer.setConfigManager(&configManager);
@@ -234,14 +261,22 @@ void setup()
   if (networkManager.isConnected()) {
     Serial.print("Server accessible at: http://");
     Serial.println(Ethernet.localIP());
+    LOG_INFO_F("WEB", "Web server accessible at http://%d.%d.%d.%d", 
+               Ethernet.localIP()[0], Ethernet.localIP()[1], 
+               Ethernet.localIP()[2], Ethernet.localIP()[3]);
+  } else {
+    LOG_WARN_MSG("WEB", "Web server started without network connection");
   }
 
   // setup GPS
+  LOG_INFO_MSG("GPS", "Starting GPS initialization");
   setupGps();
 
   // GPS PPS interrupt
   attachInterrupt(digitalPinToInterrupt(GPS_PPS_PIN), trigerPps, FALLING);
+  LOG_INFO_MSG("GPS", "PPS interrupt attached to GPIO pin");
 
+  LOG_INFO_MSG("SYSTEM", "System initialization completed successfully");
   Serial.println("System initialization completed");
 }
 
@@ -348,6 +383,11 @@ void loop()
   networkManager.manageUdpSockets();
   if (ntpServer) {
     ntpServer->processRequests();
+  }
+
+  // Process logging service (syslog transmission and retries)
+  if (loggingService) {
+    loggingService->processLogs();
   }
 
 #if defined(DEBUG_CONSOLE_GPS)
