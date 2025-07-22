@@ -1,6 +1,7 @@
 #include <webserver.h>
 #include "NtpServer.h"
 #include "ConfigManager.h"
+#include "PrometheusMetrics.h"
 
 void WebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData)
 {
@@ -203,67 +204,55 @@ void WebServer::metricsPage(EthernetClient &client)
 {
   printHeader(client, "text/plain");
   
-  // System metrics
-  client.println("# HELP system_uptime_seconds System uptime in seconds");
-  client.println("# TYPE system_uptime_seconds counter");
-  client.print("system_uptime_seconds ");
-  client.println(millis() / 1000);
-  
-  client.println("# HELP memory_free_bytes Free memory in bytes"); 
-  client.println("# TYPE memory_free_bytes gauge");
-  client.print("memory_free_bytes ");
-  client.println(524288 - 16880); // Approximate calculation
-  
-  client.println("# HELP network_connected Network connection status");
-  client.println("# TYPE network_connected gauge");
-  client.print("network_connected ");
-  client.println("1"); // Active if serving this page
-  
-  // NTP Server metrics
-  if (ntpServer) {
-    const auto& stats = ntpServer->getStatistics();
-    
-    client.println("# HELP ntp_requests_total Total number of NTP requests received");
-    client.println("# TYPE ntp_requests_total counter");
-    client.print("ntp_requests_total ");
-    client.println(stats.requests_total);
-    
-    client.println("# HELP ntp_requests_valid Valid NTP requests processed");
-    client.println("# TYPE ntp_requests_valid counter");
-    client.print("ntp_requests_valid ");
-    client.println(stats.requests_valid);
-    
-    client.println("# HELP ntp_requests_invalid Invalid NTP requests rejected");
-    client.println("# TYPE ntp_requests_invalid counter");
-    client.print("ntp_requests_invalid ");
-    client.println(stats.requests_invalid);
-    
-    client.println("# HELP ntp_responses_sent NTP responses successfully sent");
-    client.println("# TYPE ntp_responses_sent counter");
-    client.print("ntp_responses_sent ");
-    client.println(stats.responses_sent);
-    
-    client.println("# HELP ntp_processing_time_avg_ms Average NTP request processing time in milliseconds");
-    client.println("# TYPE ntp_processing_time_avg_ms gauge");
-    client.print("ntp_processing_time_avg_ms ");
-    client.println(stats.avg_processing_time, 3);
-    
-    client.println("# HELP ntp_last_request_time_seconds Time since last NTP request in seconds");
-    client.println("# TYPE ntp_last_request_time_seconds gauge");
-    if (stats.last_request_time > 0) {
-      client.print("ntp_last_request_time_seconds ");
-      client.println((millis() - stats.last_request_time) / 1000);
-    } else {
-      client.println("ntp_last_request_time_seconds 0");
-    }
+  // PrometheusMetricsが利用可能な場合は包括的なメトリクスを出力
+  if (prometheusMetrics) {
+    // 大きなバッファを用意（Prometheusメトリクス全体用）
+    static char metricsBuffer[4096];
+    prometheusMetrics->generatePrometheusOutput(metricsBuffer, sizeof(metricsBuffer));
+    client.print(metricsBuffer);
   } else {
-    client.println("# NTP Server not initialized");
-    client.println("ntp_requests_total 0");
-    client.println("ntp_requests_valid 0");
-    client.println("ntp_requests_invalid 0");
-    client.println("ntp_responses_sent 0");
-    client.println("ntp_processing_time_avg_ms 0");
-    client.println("ntp_last_request_time_seconds 0");
+    // フォールバック：基本的なシステムメトリクスのみ
+    client.println("# HELP system_uptime_seconds System uptime in seconds");
+    client.println("# TYPE system_uptime_seconds counter");
+    client.print("system_uptime_seconds ");
+    client.println(millis() / 1000);
+    
+    client.println("# HELP memory_free_bytes Free memory in bytes"); 
+    client.println("# TYPE memory_free_bytes gauge");
+    client.print("memory_free_bytes ");
+    client.println(524288 - 17856); // 実測値を使用
+    
+    client.println("# HELP network_connected Network connection status");
+    client.println("# TYPE network_connected gauge");
+    client.print("network_connected ");
+    client.println("1"); // このページを提供している場合は接続中
+    
+    // NTP Server metrics（基本版）
+    if (ntpServer) {
+      const auto& stats = ntpServer->getStatistics();
+      
+      client.println("# HELP ntp_requests_total Total number of NTP requests received");
+      client.println("# TYPE ntp_requests_total counter");
+      client.print("ntp_requests_total ");
+      client.println(stats.requests_total);
+      
+      client.println("# HELP ntp_responses_total Total number of NTP responses sent");
+      client.println("# TYPE ntp_responses_total counter");
+      client.print("ntp_responses_total ");
+      client.println(stats.responses_sent);
+      
+      client.println("# HELP ntp_average_response_time_ms Average NTP response time in milliseconds");
+      client.println("# TYPE ntp_average_response_time_ms gauge");
+      client.print("ntp_average_response_time_ms ");
+      client.println(stats.avg_processing_time, 3);
+    } else {
+      client.println("# NTP Server not initialized");
+      client.println("ntp_requests_total 0");
+      client.println("ntp_responses_total 0");
+      client.println("ntp_average_response_time_ms 0");
+    }
+    
+    client.println("# PrometheusMetrics not available - showing basic metrics only");
   }
 }
 

@@ -18,6 +18,7 @@
 #include "DisplayManager.h"
 #include "ConfigManager.h"
 #include "LoggingService.h"
+#include "PrometheusMetrics.h"
 
 // Hardware configuration moved to HardwareConfig.h
 
@@ -40,6 +41,7 @@ SystemMonitor* systemMonitor = nullptr;
 NtpServer* ntpServer = nullptr;
 DisplayManager displayManager(&display);
 LoggingService* loggingService = nullptr;
+PrometheusMetrics* prometheusMetrics = nullptr;
 
 // Global state variables
 volatile unsigned long lastPps = 0;
@@ -230,10 +232,15 @@ void setup()
   logConfig.syslogPort = 514;
   loggingService->init(logConfig);
   
+  // Initialize Prometheus metrics
+  prometheusMetrics = new PrometheusMetrics();
+  prometheusMetrics->init();
+  LOG_INFO_MSG("SYSTEM", "PrometheusMetrics initialized");
+
   // Log system startup
   LOG_INFO_MSG("SYSTEM", "GPS NTP Server starting up");
   LOG_INFO_F("SYSTEM", "RAM: %lu bytes, Flash: %lu bytes", 
-             (unsigned long)17848, (unsigned long)403616);
+             (unsigned long)17856, (unsigned long)406192);
 
   // Initialize system monitor with references FIRST
   systemMonitor = new SystemMonitor(&gpsClient, &gpsConnected, &ppsReceived);
@@ -251,8 +258,10 @@ void setup()
   ntpServer->init();
   LOG_INFO_MSG("NTP", "NTP Server initialized and listening on port 123");
   
-  // Connect ConfigManager to web server for configuration management
+  // Connect ConfigManager and PrometheusMetrics to web server
   webServer.setConfigManager(&configManager);
+  webServer.setPrometheusMetrics(prometheusMetrics);
+  LOG_INFO_MSG("WEB", "WebServer configured with ConfigManager and PrometheusMetrics");
 
   // Webサーバーを起動（ネットワーク接続状態に関わらず起動）
   server.begin();
@@ -388,6 +397,17 @@ void loop()
   // Process logging service (syslog transmission and retries)
   if (loggingService) {
     loggingService->processLogs();
+  }
+
+  // Update Prometheus metrics
+  if (prometheusMetrics && ntpServer && systemMonitor) {
+    GpsSummaryData gpsData = gpsClient.getGpsSummaryData();
+    const NtpStatistics& ntpStats = ntpServer->getStatistics();
+    const GpsMonitor& gpsMonitor = systemMonitor->getGpsMonitor();
+    extern TimeManager timeManager;
+    unsigned long ppsCount = timeManager.getPpsCount();
+    
+    prometheusMetrics->update(&ntpStats, &gpsData, &gpsMonitor, ppsCount);
   }
 
 #if defined(DEBUG_CONSOLE_GPS)
