@@ -19,6 +19,8 @@
 #include "ConfigManager.h"
 #include "LoggingService.h"
 #include "PrometheusMetrics.h"
+#include "SystemController.h"
+#include "ErrorHandler.h"
 
 // Hardware configuration moved to HardwareConfig.h
 
@@ -42,6 +44,8 @@ NtpServer* ntpServer = nullptr;
 DisplayManager displayManager(&display);
 LoggingService* loggingService = nullptr;
 PrometheusMetrics* prometheusMetrics = nullptr;
+SystemController systemController;
+ErrorHandler errorHandler;
 
 // Global state variables
 volatile unsigned long lastPps = 0;
@@ -114,6 +118,10 @@ void setupGps()
     Serial.println(F("   Check I2C wiring: SDA=GPIO6, SCL=GPIO7"));
     Serial.println(F("   Check power supply to GPS module"));
     Serial.println(F("❌ GPS initialization FAILED - continuing without GPS"));
+    
+    // ErrorHandlerを使用してエラーを報告
+    REPORT_HW_ERROR("GPS", "u-blox GNSS not detected at I2C address 0x42");
+    
     LOG_ERR_MSG("GPS", "u-blox GNSS not detected at I2C address 0x42");
     LOG_ERR_MSG("GPS", "Check wiring - SDA=GPIO6, SCL=GPIO7 and power supply");
     analogWrite(LED_ERROR_PIN, 255);
@@ -209,7 +217,10 @@ void setup()
   // I2C for OLED and RTC
   Wire.begin();
 
-  // Initialize configuration manager first
+  // Initialize error handler first (for early error reporting)
+  errorHandler.init();
+  
+  // Initialize configuration manager
   configManager.init();
 
   // RTC setup
@@ -285,6 +296,18 @@ void setup()
   attachInterrupt(digitalPinToInterrupt(GPS_PPS_PIN), trigerPps, FALLING);
   LOG_INFO_MSG("GPS", "PPS interrupt attached to GPIO pin");
 
+  // Initialize SystemController and register all services
+  systemController.init();
+  systemController.setServices(&timeManager, &networkManager, systemMonitor,
+                               ntpServer, &displayManager, &configManager,
+                               loggingService, prometheusMetrics);
+  
+  // Update hardware status in SystemController
+  systemController.updateGpsStatus(gpsConnected);
+  systemController.updateNetworkStatus(networkManager.isConnected());
+  systemController.updateDisplayStatus(true); // Display is always available
+  
+  LOG_INFO_MSG("SYSTEM", "SystemController initialized and services registered");
   LOG_INFO_MSG("SYSTEM", "System initialization completed successfully");
   Serial.println("System initialization completed");
 }
@@ -293,6 +316,16 @@ unsigned long ledOffTime = 0;
 
 void loop()
 {
+  // Error handler update (error monitoring and recovery)
+  errorHandler.update();
+  
+  // System controller update (system-wide health monitoring and state management)
+  systemController.update();
+  
+  // Update hardware status in SystemController
+  systemController.updateGpsStatus(gpsConnected);
+  systemController.updateNetworkStatus(networkManager.isConnected());
+  
   // GPS signal monitoring and fallback management
   if (systemMonitor) {
     systemMonitor->monitorGpsSignal();
