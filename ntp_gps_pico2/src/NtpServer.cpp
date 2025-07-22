@@ -170,7 +170,13 @@ bool NtpServer::sendNtpResponse() {
     transmitTimestamp_us = micros();
     uint32_t transmitUnixTime = timeManager->getHighPrecisionTime() / 1000;
     uint32_t transmitMicroseconds = transmitTimestamp_us % 1000000;
-    responsePacket.transmit_timestamp = htonTimestamp(unixToNtpTimestamp(transmitUnixTime, transmitMicroseconds));
+    
+    // Debug NTP timestamp conversion
+    NtpTimestamp ntpTs = unixToNtpTimestamp(transmitUnixTime, transmitMicroseconds);
+    Serial.printf("NTP Timestamp Debug - Unix: %lu, NTP: %lu (0x%08X), Expected: %lu\n", 
+                  transmitUnixTime, ntpTs.seconds, ntpTs.seconds, transmitUnixTime + 2208988800UL);
+    
+    responsePacket.transmit_timestamp = htonTimestamp(ntpTs);
     
     // Convert response packet to byte array
     byte* response = (byte*)&responsePacket;
@@ -257,7 +263,13 @@ NtpTimestamp NtpServer::getReferenceTimestamp() {
     // Time when local clock was last set or corrected
     // For simplicity, use current time minus a small offset
     uint32_t refTime = timeManager->getHighPrecisionTime() / 1000 - 1;
-    return unixToNtpTimestamp(refTime, 0);
+    NtpTimestamp refTimestamp = unixToNtpTimestamp(refTime, 0);
+    
+    // Debug reference timestamp
+    Serial.printf("Reference Timestamp Debug - Unix: %lu, NTP: %lu (0x%08X)\n", 
+                  refTime, refTimestamp.seconds, refTimestamp.seconds);
+    
+    return refTimestamp;
 }
 
 void NtpServer::updateStatistics(bool validRequest, float processingTimeMs) {

@@ -1,6 +1,51 @@
 #include "TimeManager.h"
 #include "HardwareConfig.h"
 
+// UTC時刻からUnixタイムスタンプを計算する関数
+time_t gpsTimeToUnixTimestamp(uint16_t year, uint8_t month, uint8_t day, 
+                             uint8_t hour, uint8_t min, uint8_t sec) {
+    // Unixエポック (1970年1月1日) からの経過秒数を計算
+    
+    // 1970年からの経過年数
+    int years_since_epoch = year - 1970;
+    
+    // うるう年の数を計算
+    int leap_years = 0;
+    for (int y = 1970; y < year; y++) {
+        if ((y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)) {
+            leap_years++;
+        }
+    }
+    
+    // 各月の日数（平年）
+    int days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    
+    // 現在年がうるう年かチェック
+    bool is_leap_year = ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0));
+    if (is_leap_year) {
+        days_in_month[1] = 29; // 2月
+    }
+    
+    // 年の日数を計算
+    int total_days = years_since_epoch * 365 + leap_years;
+    
+    // 月の日数を追加
+    for (int m = 1; m < month; m++) {
+        total_days += days_in_month[m - 1];
+    }
+    
+    // 日を追加（1日ベースなので-1）
+    total_days += day - 1;
+    
+    // 秒に変換
+    time_t timestamp = (time_t)total_days * 24 * 60 * 60;
+    timestamp += hour * 60 * 60;
+    timestamp += min * 60;
+    timestamp += sec;
+    
+    return timestamp;
+}
+
 TimeManager::TimeManager(uRTCLib* rtcInstance, TimeSync* timeSyncInstance, const GpsMonitor* gpsMonitorInstance)
     : rtc(rtcInstance), timeSync(timeSyncInstance), gpsMonitor(gpsMonitorInstance),
       ppsReceived(false), ppsTimestamp(0), ppsCount(0) {
@@ -59,7 +104,17 @@ unsigned long TimeManager::getHighPrecisionTime() {
     if (timeSync->synchronized && gpsConnected && gpsMonitor && !gpsMonitor->inFallbackMode) {
         // Return high-precision PPS-synchronized time
         unsigned long elapsed = micros() - timeSync->ppsTime;
-        return timeSync->gpsTime * 1000 + elapsed / 1000; // milliseconds
+        unsigned long result = timeSync->gpsTime * 1000 + elapsed / 1000; // milliseconds
+        
+        // Debug GPS time usage
+        static unsigned long lastGpsTimeDebug = 0;
+        if (millis() - lastGpsTimeDebug > 5000) { // Every 5 seconds
+            Serial.printf("GPS Time Debug - timeSync->gpsTime: %lu, elapsed: %lu, result: %lu\n", 
+                         timeSync->gpsTime, elapsed, result);
+            lastGpsTimeDebug = millis();
+        }
+        
+        return result;
     } else {
         // RTC fallback time
         rtc->refresh();
@@ -125,6 +180,11 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
         ppsReceived = false; // Reset flag
         
         if (gpsData.timeValid && gpsData.dateValid) {
+            // Debug GPS date/time data
+            Serial.printf("GPS Date/Time Debug - Year: %d, Month: %d, Day: %d, Hour: %d, Min: %d, Sec: %d\n",
+                         gpsData.year, gpsData.month, gpsData.day, 
+                         gpsData.hour, gpsData.min, gpsData.sec);
+            
             // Convert to Unix timestamp
             struct tm timeinfo = {0};
             timeinfo.tm_year = gpsData.year - 1900;
@@ -134,9 +194,26 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
             timeinfo.tm_min = gpsData.min;
             timeinfo.tm_sec = gpsData.sec;
             
-            timeSync->gpsTime = mktime(&timeinfo);
+            // Debug converted timeinfo
+            Serial.printf("timeinfo - tm_year: %d, tm_mon: %d, tm_mday: %d\n",
+                         timeinfo.tm_year, timeinfo.tm_mon, timeinfo.tm_mday);
+            
+            // 従来のmktime()の結果
+            time_t mktime_result = mktime(&timeinfo);
+            Serial.printf("mktime() result: %lu (Unix timestamp)\n", mktime_result);
+            
+            // 新しいUTC計算関数の結果
+            time_t utc_result = gpsTimeToUnixTimestamp(gpsData.year, gpsData.month, gpsData.day,
+                                                      gpsData.hour, gpsData.min, gpsData.sec);
+            Serial.printf("UTC calculation result: %lu (Unix timestamp)\n", utc_result);
+            
+            // UTCタイムスタンプを使用（より信頼性が高い）
+            timeSync->gpsTime = utc_result;
             timeSync->ppsTime = ppsTimestamp;
             timeSync->synchronized = true;
+            
+            // Debug GPS time sync
+            Serial.printf("GPS Time Sync - Set timeSync->gpsTime to: %lu (UTC timestamp)\n", utc_result);
             
             // Synchronize with RTC
             rtc->set(gpsData.sec, gpsData.min, gpsData.hour, 1, 
