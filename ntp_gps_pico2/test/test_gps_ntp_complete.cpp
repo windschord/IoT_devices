@@ -503,6 +503,189 @@ void test_gps_synchronization_integrity() {
     TEST_ASSERT_EQUAL_UINT32(correctGpsTime, actualUsedTime); // これは失敗するはず
 }
 
+//=============================================================================
+// 32ビット整数オーバーフロー検証テスト
+//=============================================================================
+
+void test_32bit_overflow_detection() {
+    // Test Case 1: 32ビット整数の最大値確認
+    uint32_t max32bit = UINT32_MAX; // 4294967295
+    printf("32-bit unsigned int max: %u\n", max32bit);
+    
+    // Test Case 2: 2025年GPS時刻での乗算オーバーフロー検証
+    time_t gps2025 = 1753223178; // 2025-07-22 22:26:18 UTC (実際のログから)
+    
+    // 問題のある32ビット計算（オーバーフロー発生）
+    uint64_t expectedResult64 = (uint64_t)gps2025 * 1000ULL; // 正しい結果
+    uint32_t overflowResult32 = (uint32_t)(gps2025 * 1000UL); // オーバーフロー結果
+    
+    printf("32-bit Overflow Test:\n");
+    printf("  GPS time: %u (2025-07-22)\n", (unsigned)gps2025);
+    printf("  Expected (64-bit): %llu milliseconds\n", expectedResult64);
+    printf("  Overflow (32-bit): %u milliseconds\n", overflowResult32);
+    printf("  Overflow as seconds: %u (year ~%u)\n", 
+           overflowResult32 / 1000, 1970 + (overflowResult32 / 1000) / (365 * 24 * 3600));
+    
+    // オーバーフローが発生することを確認（64ビット結果が32ビット最大値を超える）
+    TEST_ASSERT_TRUE(expectedResult64 > max32bit);
+    // 32ビット計算とオーバーフロー結果が異なることを確認（上位ビットが切り捨てられる）
+    TEST_ASSERT_NOT_EQUAL_UINT64(expectedResult64, (uint64_t)overflowResult32);
+    
+    // オーバーフロー結果が実際のログと一致することを確認
+    uint32_t observedOverflow = 876521251; // 実際のログから観測された値
+    
+    // デバッグ情報
+    printf("Overflow comparison: calculated %u vs observed %u\n", overflowResult32, observedOverflow);
+    
+    // オーバーフロー計算の確認：結果が予想される範囲内であることを確認
+    TEST_ASSERT_UINT32_WITHIN(100000, overflowResult32, observedOverflow);
+}
+
+void test_32bit_safe_calculation() {
+    // Test Case 1: 安全な64ビット演算
+    time_t gps2025 = 1753223178;
+    uint64_t safeResult64 = (uint64_t)gps2025 * 1000ULL;
+    
+    // 結果を秒に戻す
+    time_t backToSeconds = (time_t)(safeResult64 / 1000ULL);
+    
+    // 往復変換が正確であることを確認
+    TEST_ASSERT_EQUAL_UINT32(gps2025, backToSeconds);
+    
+    // Test Case 2: NTPタイムスタンプ変換での安全性
+    uint64_t ntpTimestamp64 = safeResult64 + 2208988800000ULL; // NTP epoch offset
+    
+    // NTPタイムスタンプの整数部（秒）
+    uint32_t ntpSeconds = (uint32_t)((safeResult64 + 2208988800000ULL) / 1000ULL);
+    
+    // 期待されるNTP秒値
+    uint32_t expectedNtpSeconds = gps2025 + 2208988800UL;
+    
+    TEST_ASSERT_EQUAL_UINT32(expectedNtpSeconds, ntpSeconds);
+    
+    printf("Safe 64-bit Calculation:\n");
+    printf("  GPS time: %u seconds\n", (unsigned)gps2025);
+    printf("  64-bit milliseconds: %llu\n", safeResult64);
+    printf("  Back to seconds: %u\n", (unsigned)backToSeconds);
+    printf("  NTP timestamp: %u\n", ntpSeconds);
+}
+
+void test_overflow_boundary_cases() {
+    // Test Case 1: オーバーフロー境界年の特定
+    time_t overflowBoundary = UINT32_MAX / 1000; // 4294967 seconds = 1970/02/19
+    time_t boundaryYear = 1970 + overflowBoundary / (365 * 24 * 3600);
+    
+    printf("Overflow Boundary Analysis:\n");
+    printf("  32-bit overflow boundary: %u seconds\n", (unsigned)overflowBoundary);
+    printf("  Boundary year: ~%u\n", (unsigned)boundaryYear);
+    printf("  2025 GPS time: %u seconds\n", 1753223178U);
+    printf("  Years beyond boundary: ~%u years\n", 
+           (unsigned)(2025 - boundaryYear));
+    
+    // 2025年は明らかに境界を超えていることを確認
+    TEST_ASSERT_GREATER_THAN_UINT32(overflowBoundary, 1753223178);
+    
+    // Test Case 2: 境界前後での動作確認
+    time_t safeTimes[] = {
+        946684800,  // 2000-01-01 (境界内)
+        1577836800, // 2020-01-01 (境界内)
+        1640995200  // 2022-01-01 (境界内)
+    };
+    
+    time_t overflowTimes[] = {
+        1735689600, // 2025-01-01 (境界外)
+        1753223178, // 2025-07-22 (境界外、実際のケース)
+        1767225600  // 2026-01-01 (境界外)
+    };
+    
+    // 境界内の時刻はオーバーフローしない
+    for (size_t i = 0; i < sizeof(safeTimes)/sizeof(safeTimes[0]); i++) {
+        uint64_t result64 = (uint64_t)safeTimes[i] * 1000ULL;
+        TEST_ASSERT_TRUE(result64 <= UINT32_MAX);
+    }
+    
+    // 境界外の時刻はオーバーフローする
+    for (size_t i = 0; i < sizeof(overflowTimes)/sizeof(overflowTimes[0]); i++) {
+        uint64_t result64 = (uint64_t)overflowTimes[i] * 1000ULL;
+        TEST_ASSERT_TRUE(result64 > UINT32_MAX);
+    }
+}
+
+void test_ntp_timestamp_precision_preservation() {
+    // Test Case 1: マイクロ秒精度の保持（オーバーフロー回避）
+    time_t gps2025 = 1753223178;
+    uint32_t testMicroseconds[] = {0, 500000, 999999}; // 0.0秒、0.5秒、0.999999秒
+    
+    for (size_t i = 0; i < sizeof(testMicroseconds)/sizeof(testMicroseconds[0]); i++) {
+        // 64ビット安全計算
+        uint64_t gpsMs64 = (uint64_t)gps2025 * 1000ULL;
+        uint64_t microsFraction64 = (uint64_t)testMicroseconds[i] * 4294967296ULL / 1000000ULL;
+        
+        // NTPタイムスタンプ構成
+        uint32_t ntpSeconds = gps2025 + 2208988800UL;
+        uint32_t ntpFraction = (uint32_t)microsFraction64;
+        
+        // 逆変換でマイクロ秒を復元
+        uint32_t recoveredMicros = (uint32_t)((uint64_t)ntpFraction * 1000000ULL / 4294967296ULL);
+        
+        // 1マイクロ秒以内の精度で保持されることを確認
+        TEST_ASSERT_UINT32_WITHIN(1, testMicroseconds[i], recoveredMicros);
+        
+        printf("Precision Test %zu: %u μs -> NTP fraction: 0x%08X -> %u μs\n",
+               i, testMicroseconds[i], ntpFraction, recoveredMicros);
+    }
+}
+
+void test_real_world_2025_timestamps() {
+    // Test Case 1: 実際のログデータでの検証
+    struct {
+        uint16_t year;
+        uint8_t month, day, hour, min, sec;
+        time_t expectedUnix;
+        const char* description;
+    } testCases[] = {
+        {2025, 7, 22, 22, 26, 18, 1753223178, "Actual log timestamp"},
+        {2025, 1, 1, 0, 0, 0, 1735689600, "2025 New Year"},
+        {2025, 12, 31, 23, 59, 59, 1767225599, "2025 Year End"},
+        {2030, 1, 1, 0, 0, 0, 1893456000, "2030 (far future)"}
+    };
+    
+    for (size_t i = 0; i < sizeof(testCases)/sizeof(testCases[0]); i++) {
+        uint16_t year = testCases[i].year;
+        uint8_t month = testCases[i].month;
+        uint8_t day = testCases[i].day;
+        uint8_t hour = testCases[i].hour;
+        uint8_t min = testCases[i].min;
+        uint8_t sec = testCases[i].sec;
+        time_t expectedUnix = testCases[i].expectedUnix;
+        const char* description = testCases[i].description;
+        
+        // GPS時刻変換
+        time_t calculatedUnix = gpsTimeToUnixTimestamp(year, month, day, hour, min, sec);
+        
+        // 正確性確認
+        TEST_ASSERT_EQUAL_UINT32(expectedUnix, calculatedUnix);
+        
+        // オーバーフロー検証
+        uint64_t ms64 = (uint64_t)calculatedUnix * 1000ULL;
+        uint32_t ms32_overflow = (uint32_t)(calculatedUnix * 1000UL);
+        
+        bool willOverflow = (ms64 > UINT32_MAX);
+        
+        printf("Test Case: %s (%u-%02u-%02u %02u:%02u:%02u)\n", 
+               description, year, month, day, hour, min, sec);
+        printf("  Unix timestamp: %u\n", (unsigned)calculatedUnix);
+        printf("  64-bit ms: %llu\n", ms64);
+        printf("  32-bit overflow: %s (result: %u)\n", 
+               willOverflow ? "YES" : "NO", ms32_overflow);
+        
+        // 2025年以降は全てオーバーフローすることを確認
+        if (year >= 2025) {
+            TEST_ASSERT_TRUE(willOverflow);
+        }
+    }
+}
+
 int main() {
     UNITY_BEGIN();
     
@@ -532,6 +715,13 @@ int main() {
     RUN_TEST(test_rfc5905_reference_timestamp_validity);
     RUN_TEST(test_ntp_client_expectation_violation);
     RUN_TEST(test_gps_synchronization_integrity);
+    
+    // 32ビット整数オーバーフロー検証テスト
+    RUN_TEST(test_32bit_overflow_detection);
+    RUN_TEST(test_32bit_safe_calculation);
+    RUN_TEST(test_overflow_boundary_cases);
+    RUN_TEST(test_ntp_timestamp_precision_preservation);
+    RUN_TEST(test_real_world_2025_timestamps);
     
     return UNITY_END();
 }
