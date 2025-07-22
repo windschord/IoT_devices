@@ -157,8 +157,8 @@ void NtpServer::createNtpResponse() {
     responsePacket.reference_timestamp = htonTimestamp(getReferenceTimestamp());
     responsePacket.origin_timestamp = htonTimestamp(receivedPacket.transmit_timestamp);  // Echo client's transmit time (convert to network byte order)
     
-    // Set receive timestamp (when we received the client's request)
-    uint32_t receiveUnixTime = timeManager->getHighPrecisionTime() / 1000;
+    // Set receive timestamp (when we received the client's request) - GPS時刻を直接使用
+    uint32_t receiveUnixTime = timeManager->getUnixTimestamp();
     uint32_t receiveMicroseconds = receiveTimestamp_us % 1000000;
     responsePacket.receive_timestamp = htonTimestamp(unixToNtpTimestamp(receiveUnixTime, receiveMicroseconds));
     
@@ -168,7 +168,7 @@ void NtpServer::createNtpResponse() {
 bool NtpServer::sendNtpResponse() {
     // Set transmit timestamp as late as possible for precision
     transmitTimestamp_us = micros();
-    uint32_t transmitUnixTime = timeManager->getHighPrecisionTime() / 1000;
+    uint32_t transmitUnixTime = timeManager->getUnixTimestamp();
     uint32_t transmitMicroseconds = transmitTimestamp_us % 1000000;
     
     // Debug NTP timestamp conversion
@@ -202,13 +202,13 @@ bool NtpServer::sendNtpResponse() {
 }
 
 NtpTimestamp NtpServer::getCurrentNtpTimestamp() {
-    uint32_t unixTime = timeManager->getHighPrecisionTime() / 1000;
+    uint32_t unixTime = timeManager->getUnixTimestamp();
     uint32_t microseconds = micros() % 1000000;
     return unixToNtpTimestamp(unixTime, microseconds);
 }
 
 NtpTimestamp NtpServer::getHighPrecisionTimestamp(uint32_t microsecond_offset) {
-    uint32_t unixTime = timeManager->getHighPrecisionTime() / 1000;
+    uint32_t unixTime = timeManager->getUnixTimestamp();
     uint32_t totalMicroseconds = (micros() + microsecond_offset) % 1000000;
     return unixToNtpTimestamp(unixTime, totalMicroseconds);
 }
@@ -262,7 +262,7 @@ uint32_t NtpServer::getReferenceId() {
 NtpTimestamp NtpServer::getReferenceTimestamp() {
     // Time when local clock was last set or corrected
     // For simplicity, use current time minus a small offset
-    uint32_t refTime = timeManager->getHighPrecisionTime() / 1000 - 1;
+    uint32_t refTime = timeManager->getUnixTimestamp() - 1;
     NtpTimestamp refTimestamp = unixToNtpTimestamp(refTime, 0);
     
     // Debug reference timestamp

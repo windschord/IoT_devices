@@ -25,6 +25,8 @@ public:
     void setGpsMonitor(const GpsMonitor* gpsMonitorInstance) { gpsMonitor = gpsMonitorInstance; }
     
     unsigned long getHighPrecisionTime();
+    time_t getUnixTimestamp();  // GPS時刻を秒単位で取得（オーバーフロー回避）
+    uint32_t getMicrosecondFraction(); // マイクロ秒精度の小数部を取得
     int getNtpStratum();
     
     bool isPpsReceived() const { return ppsReceived; }

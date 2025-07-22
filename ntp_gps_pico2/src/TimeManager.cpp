@@ -125,13 +125,34 @@ unsigned long TimeManager::getHighPrecisionTime() {
     if (gpsTimeValid && gpsRecentlyUpdated) {
         // Return high-precision PPS-synchronized time
         unsigned long elapsed = micros() - timeSync->ppsTime;
-        unsigned long result = timeSync->gpsTime * 1000 + elapsed / 1000; // milliseconds
+        
+        // 64ビット演算を使用してオーバーフローを防ぐ
+        uint64_t gpsTimeMs64 = (uint64_t)timeSync->gpsTime * 1000ULL;
+        uint64_t elapsedMs64 = elapsed / 1000ULL;
+        uint64_t result64 = gpsTimeMs64 + elapsedMs64;
+        
+        // 32ビットに安全に収まるかチェック
+        unsigned long result;
+        if (result64 > ULONG_MAX) {
+            // オーバーフローの場合は秒単位で計算
+            result = timeSync->gpsTime * 1000UL; // 注意：まだオーバーフローする可能性
+            Serial.printf("WARNING: 64-bit overflow detected, using approximate calculation\n");
+        } else {
+            result = (unsigned long)result64;
+        }
         
         // Debug GPS time usage
         static unsigned long lastGpsTimeDebug = 0;
         if (millis() - lastGpsTimeDebug > 5000) { // Every 5 seconds
-            Serial.printf("GPS Time Path - timeSync->gpsTime: %lu, elapsed: %lu, result: %lu\n", 
-                         timeSync->gpsTime, elapsed, result);
+            Serial.printf("GPS Time Detail Debug:\n");
+            Serial.printf("  timeSync->gpsTime: %lu (Unix seconds)\n", timeSync->gpsTime);
+            Serial.printf("  64-bit gpsTimeMs: %llu (milliseconds)\n", gpsTimeMs64);
+            Serial.printf("  32-bit max: %lu\n", ULONG_MAX);
+            Serial.printf("  elapsed microseconds: %lu\n", elapsed);
+            Serial.printf("  elapsed milliseconds: %llu\n", elapsedMs64);
+            Serial.printf("  64-bit result: %llu (milliseconds)\n", result64);
+            Serial.printf("  final 32-bit result: %lu (milliseconds)\n", result);
+            Serial.printf("  result as seconds: %lu\n", result / 1000);
             lastGpsTimeDebug = millis();
         }
         
@@ -170,6 +191,65 @@ unsigned long TimeManager::getHighPrecisionTime() {
         }
         
         return rtcTime * 1000 + millis() % 1000;
+    }
+}
+
+time_t TimeManager::getUnixTimestamp() {
+    // GPS時刻の有効性を優先的にチェック
+    bool gpsTimeValid = (timeSync->synchronized && timeSync->gpsTime > 1000000000);
+    bool gpsRecentlyUpdated = (millis() - timeSync->lastGpsUpdate < 30000);
+    
+    if (gpsTimeValid && gpsRecentlyUpdated) {
+        // GPS時刻を秒単位で返す（オーバーフロー無し）
+        unsigned long elapsedSec = (micros() - timeSync->ppsTime) / 1000000;
+        time_t result = timeSync->gpsTime + elapsedSec;
+        
+        static unsigned long lastGpsDebug = 0;
+        if (millis() - lastGpsDebug > 5000) {
+            Serial.printf("GPS Unix Timestamp - GPS base: %lu, elapsed: %lu sec, result: %lu\n",
+                         timeSync->gpsTime, elapsedSec, result);
+            lastGpsDebug = millis();
+        }
+        
+        return result;
+    } else {
+        // RTC fallback
+        rtc->refresh();
+        struct tm timeinfo = {0};
+        timeinfo.tm_year = rtc->year() + 100;
+        timeinfo.tm_mon = rtc->month() - 1;
+        timeinfo.tm_mday = rtc->day();
+        timeinfo.tm_hour = rtc->hour();
+        timeinfo.tm_min = rtc->minute();
+        timeinfo.tm_sec = rtc->second();
+        
+        time_t rtcTime = mktime(&timeinfo);
+        time_t year2020 = 1577836800;
+        
+        if (rtcTime < year2020) {
+            // RTCが無効な場合のデフォルト時刻
+            return 1737504000; // 2025-01-21 12:00:00
+        }
+        
+        return rtcTime;
+    }
+}
+
+uint32_t TimeManager::getMicrosecondFraction() {
+    // GPS時刻の有効性を優先的にチェック
+    bool gpsTimeValid = (timeSync->synchronized && timeSync->gpsTime > 1000000000);
+    bool gpsRecentlyUpdated = (millis() - timeSync->lastGpsUpdate < 30000);
+    
+    if (gpsTimeValid && gpsRecentlyUpdated) {
+        // PPS信号からの経過マイクロ秒
+        unsigned long elapsed = micros() - timeSync->ppsTime;
+        uint32_t microsInSecond = elapsed % 1000000;
+        
+        // マイクロ秒をNTPフラクション部に変換（2^32 * microseconds / 1000000）
+        return (uint32_t)((uint64_t)microsInSecond * 4294967296ULL / 1000000ULL);
+    } else {
+        // RTCフォールバック時は現在のミリ秒を使用
+        return (uint32_t)((uint64_t)(millis() % 1000) * 4294967296ULL / 1000ULL);
     }
 }
 
