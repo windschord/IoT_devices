@@ -58,6 +58,7 @@ void TimeManager::init() {
     // Reset sync state
     timeSync->synchronized = false;
     timeSync->accuracy = 1.0;
+    timeSync->lastGpsUpdate = 0; // GPS更新時刻を初期化
 }
 
 void TimeManager::onPpsInterrupt() {
@@ -101,7 +102,27 @@ unsigned long TimeManager::getHighPrecisionTime() {
         lastTimeDebug = millis();
     }
     
-    if (timeSync->synchronized && gpsConnected && gpsMonitor && !gpsMonitor->inFallbackMode) {
+    // Debug condition check
+    static unsigned long lastConditionDebug = 0;
+    if (millis() - lastConditionDebug > 3000) { // Every 3 seconds
+        unsigned long timeSinceGpsUpdate = millis() - timeSync->lastGpsUpdate;
+        bool gpsTimeValid = (timeSync->synchronized && timeSync->gpsTime > 1000000000);
+        bool gpsRecentlyUpdated = (timeSinceGpsUpdate < 30000);
+        
+        Serial.printf("GPS Condition Debug - gpsTimeValid: %s, recentlyUpdated: %s (age: %lu ms)\n",
+                     gpsTimeValid ? "YES" : "NO",
+                     gpsRecentlyUpdated ? "YES" : "NO",
+                     timeSinceGpsUpdate);
+        Serial.printf("GPS Condition Debug - timeSync->gpsTime: %lu, synchronized: %s\n",
+                     timeSync->gpsTime, timeSync->synchronized ? "YES" : "NO");
+        lastConditionDebug = millis();
+    }
+    
+    // GPS時刻の有効性を優先的にチェック
+    bool gpsTimeValid = (timeSync->synchronized && timeSync->gpsTime > 1000000000); // 2001年以降
+    bool gpsRecentlyUpdated = (millis() - timeSync->lastGpsUpdate < 30000); // 30秒以内
+    
+    if (gpsTimeValid && gpsRecentlyUpdated) {
         // Return high-precision PPS-synchronized time
         unsigned long elapsed = micros() - timeSync->ppsTime;
         unsigned long result = timeSync->gpsTime * 1000 + elapsed / 1000; // milliseconds
@@ -109,7 +130,7 @@ unsigned long TimeManager::getHighPrecisionTime() {
         // Debug GPS time usage
         static unsigned long lastGpsTimeDebug = 0;
         if (millis() - lastGpsTimeDebug > 5000) { // Every 5 seconds
-            Serial.printf("GPS Time Debug - timeSync->gpsTime: %lu, elapsed: %lu, result: %lu\n", 
+            Serial.printf("GPS Time Path - timeSync->gpsTime: %lu, elapsed: %lu, result: %lu\n", 
                          timeSync->gpsTime, elapsed, result);
             lastGpsTimeDebug = millis();
         }
@@ -117,6 +138,12 @@ unsigned long TimeManager::getHighPrecisionTime() {
         return result;
     } else {
         // RTC fallback time
+        static unsigned long lastFallbackDebug = 0;
+        if (millis() - lastFallbackDebug > 5000) { // Every 5 seconds
+            Serial.printf("Using RTC Fallback - GPS conditions not met\n");
+            lastFallbackDebug = millis();
+        }
+        
         rtc->refresh();
         struct tm timeinfo = {0};
         timeinfo.tm_year = rtc->year() + 100; // RTC is 2-digit year
@@ -147,8 +174,12 @@ unsigned long TimeManager::getHighPrecisionTime() {
 }
 
 int TimeManager::getNtpStratum() {
-    if (timeSync->synchronized && !gpsMonitor->inFallbackMode) {
-        return 1; // Stratum 1 when GPS synchronized
+    // GPS時刻の有効性を優先的にチェック
+    bool gpsTimeValid = (timeSync->synchronized && timeSync->gpsTime > 1000000000);
+    bool gpsRecentlyUpdated = (millis() - timeSync->lastGpsUpdate < 30000);
+    
+    if (gpsTimeValid && gpsRecentlyUpdated) {
+        return 1; // Stratum 1 when GPS synchronized and recent
     } else {
         return 3; // Stratum 3 when RTC fallback
     }
@@ -210,6 +241,7 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
             // UTCタイムスタンプを使用（より信頼性が高い）
             timeSync->gpsTime = utc_result;
             timeSync->ppsTime = ppsTimestamp;
+            timeSync->lastGpsUpdate = millis(); // GPS更新時刻を記録
             timeSync->synchronized = true;
             
             // Debug GPS time sync

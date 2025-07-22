@@ -34,7 +34,7 @@ byte rtcModel = RTC_MODEL;
 
 // Global system instances
 ConfigManager configManager;
-TimeSync timeSync = {0, 0, 0, false, 1.0};
+TimeSync timeSync = {0, 0, 0, 0, false, 1.0};
 TimeManager timeManager(&rtc, &timeSync, nullptr);
 NetworkManager networkManager(&ntpUdp);
 SystemMonitor* systemMonitor = nullptr;

@@ -45,6 +45,7 @@ struct TimeSync {
   unsigned long gpsTime;      // GPS time (Unix timestamp)
   unsigned long ppsTime;      // Microseconds when PPS was received
   unsigned long rtcTime;      // RTC time
+  unsigned long lastGpsUpdate; // Last GPS time update (millis())
   bool synchronized;          // Synchronization status
   float accuracy;            // Accuracy (seconds)
 };
