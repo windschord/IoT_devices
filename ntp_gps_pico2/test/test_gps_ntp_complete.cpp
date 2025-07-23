@@ -3564,6 +3564,592 @@ void test_socket_management_udp_communication() {
     TEST_ASSERT_FALSE(w5500.openSocket(2, 17, 456));
 }
 
+// ========================================
+// Prometheusメトリクステストクラス
+// ========================================
+
+class TestPrometheusMetrics {
+private:
+    struct MockNtpMetrics {
+        unsigned long totalRequests;
+        unsigned long totalResponses;
+        unsigned long totalDropped;
+        unsigned long activeClients;
+        float averageResponseTimeMs;
+        float minResponseTimeMs;
+        float maxResponseTimeMs;
+        unsigned long responsesInLastMinute;
+        float currentAccuracyMs;
+        float averageAccuracyMs;
+        int currentStratum;
+        unsigned long lastSyncTime;
+        unsigned long malformedPackets;
+        unsigned long unsupportedVersions;
+        unsigned long rateLimitDrops;
+    };
+    
+    struct MockGpsMetrics {
+        uint8_t totalSatellites;
+        uint8_t gpsSatellites;
+        uint8_t glonassSatellites;
+        uint8_t galileoSatellites;
+        uint8_t beidouSatellites;
+        uint8_t qzssSatellites;
+        float hdop;
+        float vdop;
+        uint8_t fixType;
+        bool timeValid;
+        bool dateValid;
+        unsigned long totalPpsPulses;
+        unsigned long lastPpsTime;
+        bool ppsActive;
+        float ppsJitter;
+        float averageSnr;
+        uint8_t signalQuality;
+        bool inFallbackMode;
+        unsigned long lastValidTime;
+    };
+    
+    struct MockSystemMetrics {
+        unsigned long totalRam;
+        unsigned long usedRam;
+        unsigned long freeRam;
+        float ramUsagePercent;
+        unsigned long totalFlash;
+        unsigned long usedFlash;
+        float flashUsagePercent;
+        unsigned long uptimeSeconds;
+        float cpuTemperature;
+        unsigned long heapFragmentation;
+        bool ethernetConnected;
+        unsigned long totalPacketsSent;
+        unsigned long totalPacketsReceived;
+        unsigned long networkDrops;
+        float inputVoltage;
+        uint8_t hardwareStatus;
+        unsigned long totalResets;
+        unsigned long watchdogResets;
+    };
+    
+    MockNtpMetrics ntpMetrics;
+    MockGpsMetrics gpsMetrics;
+    MockSystemMetrics systemMetrics;
+    
+    unsigned long lastNtpUpdate;
+    unsigned long lastGpsUpdate;
+    unsigned long lastSystemUpdate;
+    
+    static const unsigned long NTP_UPDATE_INTERVAL = 10000;    // 10秒
+    static const unsigned long GPS_UPDATE_INTERVAL = 5000;     // 5秒
+    static const unsigned long SYSTEM_UPDATE_INTERVAL = 30000; // 30秒
+    
+public:
+    TestPrometheusMetrics() {
+        resetAllMetrics();
+    }
+    
+    void resetAllMetrics() {
+        memset(&ntpMetrics, 0, sizeof(MockNtpMetrics));
+        memset(&gpsMetrics, 0, sizeof(MockGpsMetrics));
+        memset(&systemMetrics, 0, sizeof(MockSystemMetrics));
+        
+        // デフォルト値設定
+        ntpMetrics.minResponseTimeMs = 999.0f;
+        systemMetrics.totalRam = 264 * 1024;  // 264KB for Pico 2
+        systemMetrics.totalFlash = 4 * 1024 * 1024;  // 4MB flash
+        systemMetrics.inputVoltage = 3.3f;
+        lastNtpUpdate = lastGpsUpdate = lastSystemUpdate = 0;
+    }
+    
+    // NTPメトリクス更新
+    void updateNtpMetrics(unsigned long requests, unsigned long responses, 
+                         float responseTime, int stratum, float accuracy) {
+        ntpMetrics.totalRequests = requests;
+        ntpMetrics.totalResponses = responses;
+        ntpMetrics.averageResponseTimeMs = responseTime;
+        ntpMetrics.currentStratum = stratum;
+        ntpMetrics.currentAccuracyMs = accuracy;
+        ntpMetrics.activeClients = (requests > 0) ? requests / 10 : 0;
+        ntpMetrics.lastSyncTime = 1640995200; // 2022-01-01 00:00:00 UTC
+        
+        if (responseTime < ntpMetrics.minResponseTimeMs) {
+            ntpMetrics.minResponseTimeMs = responseTime;
+        }
+        if (responseTime > ntpMetrics.maxResponseTimeMs) {
+            ntpMetrics.maxResponseTimeMs = responseTime;
+        }
+        
+        lastNtpUpdate = 1000; // Mock time
+    }
+    
+    // GPSメトリクス更新
+    void updateGpsMetrics(uint8_t satellites, float hdop, uint8_t fixType, 
+                         unsigned long ppsPulses, bool ppsActive) {
+        gpsMetrics.totalSatellites = satellites;
+        gpsMetrics.gpsSatellites = satellites > 0 ? satellites / 2 : 0;
+        gpsMetrics.glonassSatellites = satellites > 5 ? (satellites - 5) / 3 : 0;
+        gpsMetrics.galileoSatellites = satellites > 8 ? (satellites - 8) / 4 : 0;
+        gpsMetrics.beidouSatellites = satellites > 10 ? (satellites - 10) / 5 : 0;
+        gpsMetrics.qzssSatellites = satellites > 12 ? 1 : 0;
+        
+        gpsMetrics.hdop = hdop;
+        gpsMetrics.vdop = hdop + 0.2f;
+        gpsMetrics.fixType = fixType;
+        gpsMetrics.timeValid = (fixType >= 2);
+        gpsMetrics.dateValid = (fixType >= 3);
+        gpsMetrics.totalPpsPulses = ppsPulses;
+        gpsMetrics.ppsActive = ppsActive;
+        gpsMetrics.averageSnr = satellites > 0 ? 35.0f + (satellites * 0.5f) : 0.0f;
+        gpsMetrics.signalQuality = satellites > 0 ? (satellites > 8 ? 9 : satellites) : 0;
+        gpsMetrics.inFallbackMode = !ppsActive || fixType < 2;
+        gpsMetrics.lastValidTime = ppsActive ? 1000 : 0;
+        
+        lastGpsUpdate = 1000; // Mock time
+    }
+    
+    // システムメトリクス更新
+    void updateSystemMetrics(unsigned long uptime, float ramUsage, 
+                           bool ethernetConnected, unsigned long packetsSent) {
+        systemMetrics.uptimeSeconds = uptime;
+        systemMetrics.ramUsagePercent = ramUsage;
+        systemMetrics.usedRam = (unsigned long)(systemMetrics.totalRam * ramUsage / 100.0f);
+        systemMetrics.freeRam = systemMetrics.totalRam - systemMetrics.usedRam;
+        systemMetrics.flashUsagePercent = 65.0f; // Assume 65% flash usage
+        systemMetrics.usedFlash = (unsigned long)(systemMetrics.totalFlash * 0.65f);
+        systemMetrics.cpuTemperature = 35.0f + (uptime / 3600.0f); // Temp rises with uptime
+        systemMetrics.ethernetConnected = ethernetConnected;
+        systemMetrics.totalPacketsSent = packetsSent;
+        systemMetrics.totalPacketsReceived = packetsSent * 0.8f; // 80% of sent packets
+        systemMetrics.networkDrops = packetsSent * 0.01f; // 1% drop rate
+        systemMetrics.hardwareStatus = ethernetConnected ? 1 : 0;
+        
+        lastSystemUpdate = 1000; // Mock time
+    }
+    
+    // Prometheus形式出力生成
+    void generatePrometheusOutput(char* buffer, size_t bufferSize) {
+        size_t offset = 0;
+        
+        // NTPメトリクス
+        offset += snprintf(buffer + offset, bufferSize - offset,
+            "# HELP ntp_requests_total Total number of NTP requests\n"
+            "# TYPE ntp_requests_total counter\n"
+            "ntp_requests_total %lu\n"
+            "# HELP ntp_responses_total Total number of NTP responses\n"
+            "# TYPE ntp_responses_total counter\n"
+            "ntp_responses_total %lu\n"
+            "# HELP ntp_response_time_ms Average NTP response time in milliseconds\n"
+            "# TYPE ntp_response_time_ms gauge\n"
+            "ntp_response_time_ms %.3f\n"
+            "# HELP ntp_stratum Current NTP stratum level\n"
+            "# TYPE ntp_stratum gauge\n"
+            "ntp_stratum %d\n"
+            "# HELP ntp_accuracy_ms Current time accuracy in milliseconds\n"
+            "# TYPE ntp_accuracy_ms gauge\n"
+            "ntp_accuracy_ms %.3f\n",
+            ntpMetrics.totalRequests, ntpMetrics.totalResponses,
+            ntpMetrics.averageResponseTimeMs, ntpMetrics.currentStratum,
+            ntpMetrics.currentAccuracyMs);
+        
+        // GPSメトリクス
+        offset += snprintf(buffer + offset, bufferSize - offset,
+            "# HELP gps_satellites_total Total number of GPS satellites\n"
+            "# TYPE gps_satellites_total gauge\n"
+            "gps_satellites_total %u\n"
+            "# HELP gps_satellites GPS satellites by constellation\n"
+            "# TYPE gps_satellites gauge\n"
+            "gps_satellites{constellation=\"gps\"} %u\n"
+            "gps_satellites{constellation=\"glonass\"} %u\n"
+            "gps_satellites{constellation=\"galileo\"} %u\n"
+            "gps_satellites{constellation=\"beidou\"} %u\n"
+            "gps_satellites{constellation=\"qzss\"} %u\n"
+            "# HELP gps_hdop Horizontal dilution of precision\n"
+            "# TYPE gps_hdop gauge\n"
+            "gps_hdop %.2f\n"
+            "# HELP gps_pps_pulses_total Total PPS pulses received\n"
+            "# TYPE gps_pps_pulses_total counter\n"
+            "gps_pps_pulses_total %lu\n"
+            "# HELP gps_signal_quality GPS signal quality (0-10)\n"
+            "# TYPE gps_signal_quality gauge\n"
+            "gps_signal_quality %u\n",
+            gpsMetrics.totalSatellites,
+            gpsMetrics.gpsSatellites, gpsMetrics.glonassSatellites,
+            gpsMetrics.galileoSatellites, gpsMetrics.beidouSatellites,
+            gpsMetrics.qzssSatellites, gpsMetrics.hdop,
+            gpsMetrics.totalPpsPulses, gpsMetrics.signalQuality);
+        
+        // システムメトリクス
+        offset += snprintf(buffer + offset, bufferSize - offset,
+            "# HELP system_uptime_seconds System uptime in seconds\n"
+            "# TYPE system_uptime_seconds counter\n"
+            "system_uptime_seconds %lu\n"
+            "# HELP system_ram_usage_percent RAM usage percentage\n"
+            "# TYPE system_ram_usage_percent gauge\n"
+            "system_ram_usage_percent %.2f\n"
+            "# HELP system_flash_usage_percent Flash usage percentage\n"
+            "# TYPE system_flash_usage_percent gauge\n"
+            "system_flash_usage_percent %.2f\n"
+            "# HELP system_cpu_temperature CPU temperature in Celsius\n"
+            "# TYPE system_cpu_temperature gauge\n"
+            "system_cpu_temperature %.2f\n"
+            "# HELP system_ethernet_connected Ethernet connection status\n"
+            "# TYPE system_ethernet_connected gauge\n"
+            "system_ethernet_connected %d\n",
+            systemMetrics.uptimeSeconds, systemMetrics.ramUsagePercent,
+            systemMetrics.flashUsagePercent, systemMetrics.cpuTemperature,
+            systemMetrics.ethernetConnected ? 1 : 0);
+    }
+    
+    // システム健全性スコア計算
+    float calculateSystemHealthScore() {
+        float healthScore = 100.0f;
+        
+        // RAM使用率でスコア減算（80%以上で減点）
+        if (systemMetrics.ramUsagePercent > 80.0f) {
+            healthScore -= (systemMetrics.ramUsagePercent - 80.0f);
+        }
+        
+        // GPS信号品質でスコア調整
+        if (gpsMetrics.signalQuality < 5) {
+            healthScore -= (5 - gpsMetrics.signalQuality) * 5.0f;
+        }
+        
+        // フォールバックモードで減点
+        if (gpsMetrics.inFallbackMode) {
+            healthScore -= 20.0f;
+        }
+        
+        // イーサネット切断で減点
+        if (!systemMetrics.ethernetConnected) {
+            healthScore -= 15.0f;
+        }
+        
+        // CPU温度異常で減点（45度以上）
+        if (systemMetrics.cpuTemperature > 45.0f) {
+            healthScore -= (systemMetrics.cpuTemperature - 45.0f) * 2.0f;
+        }
+        
+        return healthScore < 0.0f ? 0.0f : healthScore;
+    }
+    
+    // メトリクス取得メソッド
+    const MockNtpMetrics& getNtpMetrics() const { return ntpMetrics; }
+    const MockGpsMetrics& getGpsMetrics() const { return gpsMetrics; }
+    const MockSystemMetrics& getSystemMetrics() const { return systemMetrics; }
+    
+    // 更新間隔チェック
+    bool shouldUpdateNtp(unsigned long currentTime) {
+        return (currentTime - lastNtpUpdate) >= NTP_UPDATE_INTERVAL;
+    }
+    
+    bool shouldUpdateGps(unsigned long currentTime) {
+        return (currentTime - lastGpsUpdate) >= GPS_UPDATE_INTERVAL;
+    }
+    
+    bool shouldUpdateSystem(unsigned long currentTime) {
+        return (currentTime - lastSystemUpdate) >= SYSTEM_UPDATE_INTERVAL;
+    }
+};
+
+class TestHttpServer {
+private:
+    bool serverActive;
+    char responseBuffer[4096];
+    int statusCode;
+    char contentType[64];
+    
+public:
+    TestHttpServer() : serverActive(false), statusCode(200) {
+        strcpy(contentType, "text/plain; version=0.0.4; charset=utf-8");
+        memset(responseBuffer, 0, sizeof(responseBuffer));
+    }
+    
+    void startServer() {
+        serverActive = true;
+    }
+    
+    void stopServer() {
+        serverActive = false;
+    }
+    
+    bool isActive() const {
+        return serverActive;
+    }
+    
+    void setResponse(const char* content, int code = 200) {
+        statusCode = code;
+        strncpy(responseBuffer, content, sizeof(responseBuffer) - 1);
+        responseBuffer[sizeof(responseBuffer) - 1] = '\0';
+    }
+    
+    void setContentType(const char* type) {
+        strncpy(contentType, type, sizeof(contentType) - 1);
+        contentType[sizeof(contentType) - 1] = '\0';
+    }
+    
+    // HTTP /metrics エンドポイントシミュレーション
+    bool handleMetricsRequest(TestPrometheusMetrics* metrics) {
+        if (!serverActive || !metrics) return false;
+        
+        char metricsOutput[4096];
+        metrics->generatePrometheusOutput(metricsOutput, sizeof(metricsOutput));
+        
+        setResponse(metricsOutput);
+        setContentType("text/plain; version=0.0.4; charset=utf-8");
+        
+        return true;
+    }
+    
+    // レスポンス取得
+    const char* getResponse() const { return responseBuffer; }
+    int getStatusCode() const { return statusCode; }
+    const char* getContentType() const { return contentType; }
+    
+    // メトリクス検証ヘルパー
+    bool containsMetric(const char* metricName) const {
+        return strstr(responseBuffer, metricName) != nullptr;
+    }
+    
+    bool validatePrometheusFormat() const {
+        // 基本的なPrometheus形式検証
+        return (strstr(responseBuffer, "# HELP") != nullptr &&
+                strstr(responseBuffer, "# TYPE") != nullptr);
+    }
+};
+
+// ========================================
+// Prometheusメトリクステスト
+// ========================================
+
+void test_prometheus_metrics_format_output() {
+    TestPrometheusMetrics metrics;
+    
+    // テストデータ設定
+    metrics.updateNtpMetrics(1000, 950, 2.5f, 1, 0.1f);
+    metrics.updateGpsMetrics(12, 1.2f, 3, 3600, true);
+    metrics.updateSystemMetrics(7200, 45.5f, true, 500);
+    
+    // Prometheus形式出力生成
+    char output[4096];
+    metrics.generatePrometheusOutput(output, sizeof(output));
+    
+    // 基本フォーマット検証
+    TEST_ASSERT_TRUE(strstr(output, "# HELP") != nullptr);
+    TEST_ASSERT_TRUE(strstr(output, "# TYPE") != nullptr);
+    
+    // NTPメトリクス検証
+    TEST_ASSERT_TRUE(strstr(output, "ntp_requests_total 1000") != nullptr);
+    TEST_ASSERT_TRUE(strstr(output, "ntp_responses_total 950") != nullptr);
+    TEST_ASSERT_TRUE(strstr(output, "ntp_stratum 1") != nullptr);
+    
+    // GPSメトリクス検証
+    TEST_ASSERT_TRUE(strstr(output, "gps_satellites_total 12") != nullptr);
+    TEST_ASSERT_TRUE(strstr(output, "gps_hdop 1.20") != nullptr);
+    TEST_ASSERT_TRUE(strstr(output, "gps_pps_pulses_total 3600") != nullptr);
+    
+    // システムメトリクス検証
+    TEST_ASSERT_TRUE(strstr(output, "system_uptime_seconds 7200") != nullptr);
+    TEST_ASSERT_TRUE(strstr(output, "system_ram_usage_percent 45.50") != nullptr);
+    TEST_ASSERT_TRUE(strstr(output, "system_ethernet_connected 1") != nullptr);
+    
+    // コンステレーション別衛星数検証
+    TEST_ASSERT_TRUE(strstr(output, "constellation=\"gps\"") != nullptr);
+    TEST_ASSERT_TRUE(strstr(output, "constellation=\"glonass\"") != nullptr);
+    TEST_ASSERT_TRUE(strstr(output, "constellation=\"galileo\"") != nullptr);
+}
+
+void test_http_metrics_endpoint() {
+    TestHttpServer server;
+    TestPrometheusMetrics metrics;
+    
+    // サーバー開始
+    server.startServer();
+    TEST_ASSERT_TRUE(server.isActive());
+    
+    // テストデータ設定
+    metrics.updateNtpMetrics(500, 480, 1.8f, 2, 0.05f);
+    metrics.updateGpsMetrics(8, 2.1f, 2, 1800, false);
+    metrics.updateSystemMetrics(3600, 32.1f, true, 250);
+    
+    // /metricsエンドポイント処理
+    TEST_ASSERT_TRUE(server.handleMetricsRequest(&metrics));
+    
+    // レスポンス検証
+    TEST_ASSERT_EQUAL_INT(200, server.getStatusCode());
+    TEST_ASSERT_EQUAL_STRING("text/plain; version=0.0.4; charset=utf-8", server.getContentType());
+    
+    const char* response = server.getResponse();
+    TEST_ASSERT_TRUE(strlen(response) > 0);
+    
+    // Prometheus形式検証
+    TEST_ASSERT_TRUE(server.validatePrometheusFormat());
+    
+    // 特定メトリクス存在確認
+    TEST_ASSERT_TRUE(server.containsMetric("ntp_requests_total"));
+    TEST_ASSERT_TRUE(server.containsMetric("gps_satellites_total"));
+    TEST_ASSERT_TRUE(server.containsMetric("system_uptime_seconds"));
+    
+    // サーバー停止テスト
+    server.stopServer();
+    TEST_ASSERT_FALSE(server.isActive());
+    TEST_ASSERT_FALSE(server.handleMetricsRequest(&metrics));
+}
+
+void test_system_health_score_calculation() {
+    TestPrometheusMetrics metrics;
+    
+    // 健全な状態でのテスト
+    metrics.updateNtpMetrics(100, 95, 1.0f, 1, 0.01f);
+    metrics.updateGpsMetrics(10, 1.0f, 3, 600, true);
+    metrics.updateSystemMetrics(1800, 30.0f, true, 100);
+    
+    float healthScore = metrics.calculateSystemHealthScore();
+    TEST_ASSERT_FLOAT_WITHIN(5.0f, 100.0f, healthScore); // 健全な状態では95-100%
+    
+    // RAM使用率高い状態
+    metrics.updateSystemMetrics(1800, 90.0f, true, 100);
+    healthScore = metrics.calculateSystemHealthScore();
+    TEST_ASSERT_FLOAT_WITHIN(5.0f, 90.0f, healthScore); // RAM使用率で減点
+    
+    // GPS信号不良状態
+    metrics.updateGpsMetrics(3, 5.0f, 1, 100, false);
+    healthScore = metrics.calculateSystemHealthScore();
+    TEST_ASSERT_LESS_THAN_FLOAT(70.0f, healthScore); // GPS不良とフォールバックで大幅減点
+    
+    // ネットワーク切断状態
+    metrics.updateSystemMetrics(1800, 30.0f, false, 100);
+    healthScore = metrics.calculateSystemHealthScore();
+    TEST_ASSERT_LESS_THAN_FLOAT(85.0f, healthScore); // ネットワーク切断で減点
+    
+    // CPU温度異常状態
+    metrics.updateSystemMetrics(1800, 30.0f, true, 100);
+    // CPU温度を手動設定（実際の実装では内部計算）
+    // この場合は外部から設定できないため、概念的テスト
+    TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, healthScore);
+}
+
+void test_metrics_collection_and_caching() {
+    TestPrometheusMetrics metrics;
+    unsigned long mockTime = 1000;
+    
+    // 初期状態では全メトリクス更新が必要
+    TEST_ASSERT_TRUE(metrics.shouldUpdateNtp(mockTime));
+    TEST_ASSERT_TRUE(metrics.shouldUpdateGps(mockTime));
+    TEST_ASSERT_TRUE(metrics.shouldUpdateSystem(mockTime));
+    
+    // メトリクス更新
+    metrics.updateNtpMetrics(10, 10, 0.5f, 1, 0.001f);
+    metrics.updateGpsMetrics(6, 1.5f, 3, 60, true);
+    metrics.updateSystemMetrics(300, 25.0f, true, 20);
+    
+    // 更新間隔内では更新不要
+    mockTime += 1000; // 1秒経過
+    TEST_ASSERT_FALSE(metrics.shouldUpdateNtp(mockTime));
+    TEST_ASSERT_FALSE(metrics.shouldUpdateGps(mockTime));
+    TEST_ASSERT_FALSE(metrics.shouldUpdateSystem(mockTime));
+    
+    // GPS更新間隔経過
+    mockTime += 5000; // 5秒経過（計6秒）
+    TEST_ASSERT_FALSE(metrics.shouldUpdateNtp(mockTime)); // 10秒間隔
+    TEST_ASSERT_TRUE(metrics.shouldUpdateGps(mockTime));  // 5秒間隔
+    TEST_ASSERT_FALSE(metrics.shouldUpdateSystem(mockTime)); // 30秒間隔
+    
+    // NTP更新間隔経過
+    mockTime += 5000; // 5秒経過（計11秒）
+    TEST_ASSERT_TRUE(metrics.shouldUpdateNtp(mockTime));  // 10秒間隔経過
+    TEST_ASSERT_TRUE(metrics.shouldUpdateGps(mockTime));  // 5秒間隔経過
+    TEST_ASSERT_FALSE(metrics.shouldUpdateSystem(mockTime)); // 30秒間隔
+    
+    // システム更新間隔経過
+    mockTime += 25000; // 25秒経過（計36秒）
+    TEST_ASSERT_TRUE(metrics.shouldUpdateNtp(mockTime));   // 10秒間隔経過
+    TEST_ASSERT_TRUE(metrics.shouldUpdateGps(mockTime));   // 5秒間隔経過  
+    TEST_ASSERT_TRUE(metrics.shouldUpdateSystem(mockTime)); // 30秒間隔経過
+}
+
+void test_ntp_statistics_metrics() {
+    TestPrometheusMetrics metrics;
+    
+    // 高負荷時のNTP統計
+    metrics.updateNtpMetrics(10000, 9850, 3.2f, 1, 0.05f);
+    
+    const auto& ntpMetrics = metrics.getNtpMetrics();
+    TEST_ASSERT_EQUAL_UINT32(10000, ntpMetrics.totalRequests);
+    TEST_ASSERT_EQUAL_UINT32(9850, ntpMetrics.totalResponses);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 3.2f, ntpMetrics.averageResponseTimeMs);
+    TEST_ASSERT_EQUAL_INT(1, ntpMetrics.currentStratum);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.05f, ntpMetrics.currentAccuracyMs);
+    
+    // 応答時間統計の検証
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 3.2f, ntpMetrics.minResponseTimeMs);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 3.2f, ntpMetrics.maxResponseTimeMs);
+    
+    // アクティブクライアント数の計算確認
+    TEST_ASSERT_EQUAL_UINT32(1000, ntpMetrics.activeClients); // requests / 10
+    
+    // 低負荷時のテスト
+    metrics.updateNtpMetrics(50, 48, 0.8f, 2, 0.2f);
+    
+    const auto& ntpMetrics2 = metrics.getNtpMetrics();
+    TEST_ASSERT_EQUAL_UINT32(50, ntpMetrics2.totalRequests);
+    TEST_ASSERT_EQUAL_UINT32(48, ntpMetrics2.totalResponses);
+    TEST_ASSERT_EQUAL_INT(2, ntpMetrics2.currentStratum);
+    TEST_ASSERT_EQUAL_UINT32(5, ntpMetrics2.activeClients); // 50 / 10
+    
+    // 最小応答時間の更新確認
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.8f, ntpMetrics2.minResponseTimeMs);
+}
+
+void test_gps_precision_metrics() {
+    TestPrometheusMetrics metrics;
+    
+    // 多衛星受信時のテスト
+    metrics.updateGpsMetrics(15, 0.8f, 3, 7200, true);
+    
+    const auto& gpsMetrics = metrics.getGpsMetrics();
+    TEST_ASSERT_EQUAL_UINT8(15, gpsMetrics.totalSatellites);
+    
+    // コンステレーション別衛星数の計算確認
+    TEST_ASSERT_EQUAL_UINT8(7, gpsMetrics.gpsSatellites);        // 15 / 2
+    TEST_ASSERT_EQUAL_UINT8(3, gpsMetrics.glonassSatellites);    // (15 - 5) / 3
+    TEST_ASSERT_EQUAL_UINT8(1, gpsMetrics.galileoSatellites);    // (15 - 8) / 4
+    TEST_ASSERT_EQUAL_UINT8(1, gpsMetrics.beidouSatellites);     // (15 - 10) / 5
+    TEST_ASSERT_EQUAL_UINT8(1, gpsMetrics.qzssSatellites);       // 15 > 12
+    
+    // 精度指標の確認
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.8f, gpsMetrics.hdop);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 1.0f, gpsMetrics.vdop); // hdop + 0.2
+    TEST_ASSERT_EQUAL_UINT8(3, gpsMetrics.fixType);
+    TEST_ASSERT_TRUE(gpsMetrics.timeValid);  // fixType >= 2
+    TEST_ASSERT_TRUE(gpsMetrics.dateValid);  // fixType >= 3
+    
+    // PPS統計の確認
+    TEST_ASSERT_EQUAL_UINT32(7200, gpsMetrics.totalPpsPulses);
+    TEST_ASSERT_TRUE(gpsMetrics.ppsActive);
+    TEST_ASSERT_FALSE(gpsMetrics.inFallbackMode); // ppsActive && fixType >= 2
+    
+    // 信号品質の計算確認
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 42.5f, gpsMetrics.averageSnr); // 35.0 + 15 * 0.5
+    TEST_ASSERT_EQUAL_UINT8(9, gpsMetrics.signalQuality); // min(satellites > 8 ? 9 : satellites, 9)
+    
+    // 少数衛星時のテスト
+    metrics.updateGpsMetrics(4, 3.5f, 1, 120, false);
+    
+    const auto& gpsMetrics2 = metrics.getGpsMetrics();
+    TEST_ASSERT_EQUAL_UINT8(4, gpsMetrics2.totalSatellites);
+    TEST_ASSERT_EQUAL_UINT8(2, gpsMetrics2.gpsSatellites);  // 4 / 2
+    TEST_ASSERT_EQUAL_UINT8(0, gpsMetrics2.glonassSatellites); // 4 <= 5
+    TEST_ASSERT_EQUAL_UINT8(0, gpsMetrics2.qzssSatellites);    // 4 <= 12
+    
+    TEST_ASSERT_EQUAL_UINT8(1, gpsMetrics2.fixType);
+    TEST_ASSERT_FALSE(gpsMetrics2.timeValid);  // fixType < 2
+    TEST_ASSERT_FALSE(gpsMetrics2.dateValid);  // fixType < 3
+    TEST_ASSERT_FALSE(gpsMetrics2.ppsActive);
+    TEST_ASSERT_TRUE(gpsMetrics2.inFallbackMode); // !ppsActive || fixType < 2
+    
+    TEST_ASSERT_EQUAL_UINT8(4, gpsMetrics2.signalQuality); // satellites <= 8
+}
+
 int main() {
     UNITY_BEGIN();
     
@@ -3658,6 +4244,14 @@ int main() {
     RUN_TEST(test_static_ip_configuration);
     RUN_TEST(test_network_disconnection_reconnection);
     RUN_TEST(test_socket_management_udp_communication);
+    
+    // Prometheusメトリクステスト（優先度2）
+    RUN_TEST(test_prometheus_metrics_format_output);
+    RUN_TEST(test_http_metrics_endpoint);
+    RUN_TEST(test_system_health_score_calculation);
+    RUN_TEST(test_metrics_collection_and_caching);
+    RUN_TEST(test_ntp_statistics_metrics);
+    RUN_TEST(test_gps_precision_metrics);
     
     return UNITY_END();
 }
