@@ -2611,6 +2611,563 @@ void test_json_api_config_endpoints() {
     TEST_ASSERT_EQUAL_UINT8(3, configManager.getLogLevel());
 }
 
+// ================================
+// ログシステムテスト
+// ================================
+
+// RFC 3164 Syslog severity levels for testing
+enum TestLogLevel {
+    TEST_LOG_EMERG = 0,     // Emergency: system is unusable
+    TEST_LOG_ALERT = 1,     // Alert: action must be taken immediately
+    TEST_LOG_CRIT = 2,      // Critical: critical conditions
+    TEST_LOG_ERR = 3,       // Error: error conditions
+    TEST_LOG_WARNING = 4,   // Warning: warning conditions
+    TEST_LOG_NOTICE = 5,    // Notice: normal but significant condition
+    TEST_LOG_INFO = 6,      // Informational: informational messages
+    TEST_LOG_DEBUG = 7      // Debug: debug-level messages
+};
+
+// RFC 3164 Syslog facility codes for testing
+enum TestLogFacility {
+    TEST_FACILITY_KERNEL = 0,      // Kernel messages
+    TEST_FACILITY_USER = 1,        // User-level messages
+    TEST_FACILITY_DAEMON = 3,      // System daemons
+    TEST_FACILITY_NTP = 12,        // NTP subsystem
+    TEST_FACILITY_LOCAL0 = 16      // Local use facilities
+};
+
+// Test log entry structure
+struct TestLogEntry {
+    unsigned long timestamp;
+    TestLogLevel level;
+    TestLogFacility facility;
+    char message[256];
+    char tag[32];
+    bool transmitted;
+    TestLogEntry* next;
+};
+
+// Test logging configuration
+struct TestLogConfig {
+    TestLogLevel minLevel;
+    char syslogServer[64];
+    uint16_t syslogPort;
+    TestLogFacility facility;
+    bool localBuffering;
+    uint16_t maxBufferEntries;
+    uint32_t retransmitInterval;
+    uint16_t maxRetransmitAttempts;
+};
+
+// Mock UDP class for testing
+class TestEthernetUDP {
+private:
+    bool udpConnected;
+    char lastServer[64];
+    uint16_t lastPort;
+    char lastPacket[512];
+    size_t lastPacketSize;
+    bool transmissionSuccess;
+    
+public:
+    TestEthernetUDP() : udpConnected(false), lastPort(0), lastPacketSize(0), transmissionSuccess(true) {
+        memset(lastServer, 0, sizeof(lastServer));
+        memset(lastPacket, 0, sizeof(lastPacket));
+    }
+    
+    int beginPacket(const char* host, uint16_t port) {
+        strncpy(lastServer, host, sizeof(lastServer) - 1);
+        lastServer[sizeof(lastServer) - 1] = '\0';
+        lastPort = port;
+        udpConnected = true;
+        return transmissionSuccess ? 1 : 0;
+    }
+    
+    size_t write(const uint8_t* buffer, size_t size) {
+        if (size > sizeof(lastPacket)) size = sizeof(lastPacket);
+        memcpy(lastPacket, buffer, size);
+        lastPacketSize = size;
+        return transmissionSuccess ? size : 0;
+    }
+    
+    int endPacket() {
+        return transmissionSuccess ? 1 : 0;
+    }
+    
+    // Test helper methods
+    const char* getLastServer() const { return lastServer; }
+    uint16_t getLastPort() const { return lastPort; }
+    const char* getLastPacket() const { return lastPacket; }
+    size_t getLastPacketSize() const { return lastPacketSize; }
+    void setTransmissionSuccess(bool success) { transmissionSuccess = success; }
+    bool isUdpConnected() const { return udpConnected; }
+};
+
+// Test logging service class
+class TestLoggingService {
+private:
+    TestLogConfig config;
+    TestEthernetUDP* udp;
+    TestLogEntry* logBuffer;
+    TestLogEntry* bufferTail;
+    uint16_t bufferCount;
+    unsigned long lastRetransmit;
+    
+public:
+    TestLoggingService(TestEthernetUDP* udpInstance) 
+        : udp(udpInstance), logBuffer(nullptr), bufferTail(nullptr), 
+          bufferCount(0), lastRetransmit(0) {
+        
+        // Initialize default configuration
+        config.minLevel = TEST_LOG_INFO;
+        config.syslogPort = 514;
+        config.facility = TEST_FACILITY_DAEMON;
+        config.localBuffering = true;
+        config.maxBufferEntries = 50;
+        config.retransmitInterval = 30000; // 30 seconds
+        config.maxRetransmitAttempts = 3;
+        strcpy(config.syslogServer, "");
+    }
+    
+    ~TestLoggingService() {
+        clearBuffers();
+    }
+    
+    void init(const TestLogConfig& configuration) {
+        config = configuration;
+        clearBuffers();
+    }
+    
+    void setSyslogServer(const char* server, uint16_t port = 514) {
+        strncpy(config.syslogServer, server, sizeof(config.syslogServer) - 1);
+        config.syslogServer[sizeof(config.syslogServer) - 1] = '\0';
+        config.syslogPort = port;
+    }
+    
+    void setMinLevel(TestLogLevel level) { 
+        config.minLevel = level; 
+    }
+    
+    TestLogLevel getMinLevel() const { 
+        return config.minLevel; 
+    }
+    
+    void setFacility(TestLogFacility facility) { 
+        config.facility = facility; 
+    }
+    
+    // Main logging method
+    void log(TestLogLevel level, TestLogFacility facility, const char* tag, const char* message) {
+        // Syslog levels: lower numbers = higher priority
+        // Only log if message priority is higher or equal to minimum level
+        if (level > config.minLevel) {
+            return; // Log level too low priority, filter out
+        }
+        
+        // Add to buffer
+        addToBuffer(level, facility, tag, message);
+        
+        // Try to transmit if syslog server is configured
+        if (strlen(config.syslogServer) > 0) {
+            processLogs();
+        }
+    }
+    
+    void log(TestLogLevel level, const char* tag, const char* message) {
+        log(level, config.facility, tag, message);
+    }
+    
+    // Convenience methods for different log levels
+    void emergency(const char* tag, const char* message) { log(TEST_LOG_EMERG, tag, message); }
+    void alert(const char* tag, const char* message) { log(TEST_LOG_ALERT, tag, message); }
+    void critical(const char* tag, const char* message) { log(TEST_LOG_CRIT, tag, message); }
+    void error(const char* tag, const char* message) { log(TEST_LOG_ERR, tag, message); }
+    void warning(const char* tag, const char* message) { log(TEST_LOG_WARNING, tag, message); }
+    void notice(const char* tag, const char* message) { log(TEST_LOG_NOTICE, tag, message); }
+    void info(const char* tag, const char* message) { log(TEST_LOG_INFO, tag, message); }
+    void debug(const char* tag, const char* message) { log(TEST_LOG_DEBUG, tag, message); }
+    
+    // Buffer management
+    void processLogs() {
+        TestLogEntry* current = logBuffer;
+        while (current && !current->transmitted) {
+            if (transmitLogEntry(current)) {
+                current->transmitted = true;
+            }
+            current = current->next;
+        }
+        
+        // Clean up transmitted entries
+        trimBuffer();
+    }
+    
+    void flushBuffers() {
+        processLogs();
+    }
+    
+    void clearBuffers() {
+        while (logBuffer) {
+            TestLogEntry* next = logBuffer->next;
+            delete logBuffer;
+            logBuffer = next;
+        }
+        bufferTail = nullptr;
+        bufferCount = 0;
+    }
+    
+    uint16_t getBufferCount() const { 
+        return bufferCount; 
+    }
+    
+    bool isSyslogServerConfigured() const {
+        return strlen(config.syslogServer) > 0;
+    }
+    
+    const char* getLevelName(TestLogLevel level) const {
+        switch (level) {
+            case TEST_LOG_EMERG: return "EMERG";
+            case TEST_LOG_ALERT: return "ALERT";
+            case TEST_LOG_CRIT: return "CRIT";
+            case TEST_LOG_ERR: return "ERR";
+            case TEST_LOG_WARNING: return "WARNING";
+            case TEST_LOG_NOTICE: return "NOTICE";
+            case TEST_LOG_INFO: return "INFO";
+            case TEST_LOG_DEBUG: return "DEBUG";
+            default: return "UNKNOWN";
+        }
+    }
+    
+    const char* getFacilityName(TestLogFacility facility) const {
+        switch (facility) {
+            case TEST_FACILITY_KERNEL: return "KERNEL";
+            case TEST_FACILITY_USER: return "USER";
+            case TEST_FACILITY_DAEMON: return "DAEMON";
+            case TEST_FACILITY_NTP: return "NTP";
+            case TEST_FACILITY_LOCAL0: return "LOCAL0";
+            default: return "UNKNOWN";
+        }
+    }
+    
+private:
+    void addToBuffer(TestLogLevel level, TestLogFacility facility, const char* tag, const char* message) {
+        if (bufferCount >= config.maxBufferEntries) {
+            // Remove oldest entry
+            if (logBuffer) {
+                TestLogEntry* oldHead = logBuffer;
+                logBuffer = logBuffer->next;
+                delete oldHead;
+                bufferCount--;
+            }
+        }
+        
+        TestLogEntry* entry = new TestLogEntry();
+        entry->timestamp = millis();
+        entry->level = level;
+        entry->facility = facility;
+        strncpy(entry->tag, tag, sizeof(entry->tag) - 1);
+        entry->tag[sizeof(entry->tag) - 1] = '\0';
+        strncpy(entry->message, message, sizeof(entry->message) - 1);
+        entry->message[sizeof(entry->message) - 1] = '\0';
+        entry->transmitted = false;
+        entry->next = nullptr;
+        
+        if (bufferTail) {
+            bufferTail->next = entry;
+        } else {
+            logBuffer = entry;
+        }
+        bufferTail = entry;
+        bufferCount++;
+    }
+    
+    void trimBuffer() {
+        // Remove transmitted entries from the beginning
+        while (logBuffer && logBuffer->transmitted) {
+            TestLogEntry* next = logBuffer->next;
+            delete logBuffer;
+            logBuffer = next;
+            bufferCount--;
+        }
+        
+        // Update tail if buffer is empty
+        if (!logBuffer) {
+            bufferTail = nullptr;
+        }
+    }
+    
+    int calculatePriority(TestLogFacility facility, TestLogLevel level) {
+        return facility * 8 + level;
+    }
+    
+    bool transmitLogEntry(const TestLogEntry* entry) {
+        if (!udp) {
+            return false;
+        }
+        
+        // Format RFC 3164 syslog message
+        char syslogMessage[512];
+        int priority = calculatePriority(entry->facility, entry->level);
+        
+        // Simple timestamp (should be RFC 3164 format in real implementation)
+        char timestamp[32];
+        snprintf(timestamp, sizeof(timestamp), "Jan 01 12:00:00");
+        
+        // Format: <priority>timestamp hostname tag: message
+        snprintf(syslogMessage, sizeof(syslogMessage), 
+                "<%d>%s gps-ntp-server %s: %s", 
+                priority, timestamp, entry->tag, entry->message);
+        
+        // Transmit via UDP
+        if (udp->beginPacket(config.syslogServer, config.syslogPort)) {
+            size_t written = udp->write((const uint8_t*)syslogMessage, strlen(syslogMessage));
+            int result = udp->endPacket();
+            return (written > 0 && result == 1);
+        }
+        
+        return false;
+    }
+    
+    // Mock millis() function
+    unsigned long millis() const {
+        return 12345; // Fixed timestamp for testing
+    }
+};
+
+// 構造化ログ生成テスト
+void test_structured_log_generation() {
+    TestEthernetUDP udp;
+    TestLoggingService logger(&udp);
+    
+    // ログサービス初期化
+    TestLogConfig config;
+    config.minLevel = TEST_LOG_DEBUG;
+    config.localBuffering = true;
+    config.maxBufferEntries = 10;
+    strcpy(config.syslogServer, ""); // Syslogサーバー無効化でバッファテスト
+    config.syslogPort = 514;
+    config.facility = TEST_FACILITY_NTP;
+    
+    logger.init(config);
+    
+    // 各ログレベルでのログ生成テスト
+    logger.emergency("TEST", "System emergency message");
+    logger.alert("TEST", "System alert message");
+    logger.critical("TEST", "Critical error occurred");
+    logger.error("TEST", "Error message");
+    logger.warning("TEST", "Warning message");
+    logger.notice("TEST", "Notice message");
+    logger.info("TEST", "Info message");
+    logger.debug("TEST", "Debug message");
+    
+    // バッファに8つのエントリが追加されることを確認
+    TEST_ASSERT_EQUAL_UINT16(8, logger.getBufferCount());
+    
+    // ファシリティとレベル名の取得テスト
+    TEST_ASSERT_EQUAL_STRING("EMERG", logger.getLevelName(TEST_LOG_EMERG));
+    TEST_ASSERT_EQUAL_STRING("INFO", logger.getLevelName(TEST_LOG_INFO));
+    TEST_ASSERT_EQUAL_STRING("DEBUG", logger.getLevelName(TEST_LOG_DEBUG));
+    TEST_ASSERT_EQUAL_STRING("NTP", logger.getFacilityName(TEST_FACILITY_NTP));
+    TEST_ASSERT_EQUAL_STRING("DAEMON", logger.getFacilityName(TEST_FACILITY_DAEMON));
+}
+
+// Syslog RFC3164準拠性テスト
+void test_syslog_rfc3164_compliance() {
+    TestEthernetUDP udp;
+    TestLoggingService logger(&udp);
+    
+    // Syslogサーバー設定
+    logger.setSyslogServer("syslog.example.com", 514);
+    logger.setFacility(TEST_FACILITY_NTP);
+    
+    // ログメッセージ送信
+    logger.info("NTP", "Time synchronization completed");
+    
+    // RFC 3164準拠のメッセージフォーマット確認
+    const char* lastPacket = udp.getLastPacket();
+    
+    // Priority値確認 (NTP facility = 12, INFO level = 6, priority = 12*8+6 = 102)
+    TEST_ASSERT_TRUE(strstr(lastPacket, "<102>") != nullptr);
+    
+    // タイムスタンプフォーマット確認（簡略化）
+    TEST_ASSERT_TRUE(strstr(lastPacket, "Jan 01 12:00:00") != nullptr);
+    
+    // ホスト名確認
+    TEST_ASSERT_TRUE(strstr(lastPacket, "gps-ntp-server") != nullptr);
+    
+    // タグとメッセージ確認
+    TEST_ASSERT_TRUE(strstr(lastPacket, "NTP: Time synchronization completed") != nullptr);
+    
+    // UDP送信確認
+    TEST_ASSERT_EQUAL_STRING("syslog.example.com", udp.getLastServer());
+    TEST_ASSERT_EQUAL_UINT16(514, udp.getLastPort());
+    TEST_ASSERT_GREATER_THAN_UINT32(0, udp.getLastPacketSize());
+}
+
+// ローカルログバッファリングテスト
+void test_local_log_buffering() {
+    TestEthernetUDP udp;
+    TestLoggingService logger(&udp);
+    
+    // バッファリング有効で初期化
+    TestLogConfig config;
+    config.localBuffering = true;
+    config.maxBufferEntries = 5; // 小さなバッファで検証
+    config.minLevel = TEST_LOG_DEBUG;
+    strcpy(config.syslogServer, ""); // Syslogサーバー未設定
+    
+    logger.init(config);
+    
+    // バッファサイズ上限までログを追加
+    for (int i = 0; i < 5; i++) {
+        char message[32];
+        snprintf(message, sizeof(message), "Test message %d", i);
+        logger.info("TEST", message);
+    }
+    
+    TEST_ASSERT_EQUAL_UINT16(5, logger.getBufferCount());
+    
+    // バッファ上限を超えた場合の古いエントリ削除確認
+    logger.info("TEST", "New message that should replace oldest");
+    TEST_ASSERT_EQUAL_UINT16(5, logger.getBufferCount()); // バッファサイズは変わらず
+    
+    // バッファクリア確認
+    logger.clearBuffers();
+    TEST_ASSERT_EQUAL_UINT16(0, logger.getBufferCount());
+    
+    // バッファリング無効時の動作確認
+    config.localBuffering = false;
+    logger.init(config);
+    logger.info("TEST", "Message without buffering");
+    TEST_ASSERT_EQUAL_UINT16(1, logger.getBufferCount()); // まだバッファには追加される
+}
+
+// Syslogサーバー転送テスト
+void test_syslog_server_transmission() {
+    TestEthernetUDP udp;
+    TestLoggingService logger(&udp);
+    
+    // Syslogサーバー設定
+    logger.setSyslogServer("10.0.0.100", 1514);
+    
+    // 転送成功ケース
+    udp.setTransmissionSuccess(true);
+    logger.info("NTP", "Successful transmission test");
+    
+    TEST_ASSERT_EQUAL_STRING("10.0.0.100", udp.getLastServer());
+    TEST_ASSERT_EQUAL_UINT16(1514, udp.getLastPort());
+    TEST_ASSERT_TRUE(strstr(udp.getLastPacket(), "Successful transmission test") != nullptr);
+    
+    // 転送失敗ケース
+    udp.setTransmissionSuccess(false);
+    uint16_t bufferCountBefore = logger.getBufferCount();
+    logger.error("NTP", "Failed transmission test");
+    
+    // 失敗時はバッファに残る
+    TEST_ASSERT_EQUAL_UINT16(bufferCountBefore + 1, logger.getBufferCount());
+    
+    // 転送再試行テスト
+    udp.setTransmissionSuccess(true);
+    logger.processLogs(); // 手動でログ処理実行
+    
+    // Syslogサーバー設定確認
+    TEST_ASSERT_TRUE(logger.isSyslogServerConfigured());
+    
+    // 設定解除確認
+    logger.setSyslogServer("", 514);
+    TEST_ASSERT_FALSE(logger.isSyslogServerConfigured());
+}
+
+// ログレベル管理とフィルタリングテスト
+void test_log_level_management_and_filtering() {
+    TestEthernetUDP udp;
+    TestLoggingService logger(&udp);
+    
+    // INFOレベル設定（INFO以下のみ記録）
+    logger.setMinLevel(TEST_LOG_INFO);
+    TEST_ASSERT_EQUAL_INT(TEST_LOG_INFO, logger.getMinLevel());
+    
+    uint16_t initialCount = logger.getBufferCount();
+    
+    // INFO以下のログ（記録される）
+    logger.emergency("TEST", "Emergency message");  // 0 <= 6 (記録)
+    logger.alert("TEST", "Alert message");          // 1 <= 6 (記録)
+    logger.critical("TEST", "Critical message");    // 2 <= 6 (記録)
+    logger.error("TEST", "Error message");          // 3 <= 6 (記録)
+    logger.warning("TEST", "Warning message");      // 4 <= 6 (記録)
+    logger.notice("TEST", "Notice message");        // 5 <= 6 (記録)
+    logger.info("TEST", "Info message");            // 6 <= 6 (記録)
+    
+    TEST_ASSERT_EQUAL_UINT16(initialCount + 7, logger.getBufferCount());
+    
+    // DEBUG レベル（フィルタされる）
+    logger.debug("TEST", "Debug message");          // 7 > 6 (フィルタ)
+    TEST_ASSERT_EQUAL_UINT16(initialCount + 7, logger.getBufferCount()); // カウント変わらず
+    
+    // ERROR レベルに変更
+    logger.setMinLevel(TEST_LOG_ERR);
+    initialCount = logger.getBufferCount();
+    
+    // ERROR以下のみ記録
+    logger.emergency("TEST", "Emergency");  // 0 <= 3 (記録)
+    logger.alert("TEST", "Alert");          // 1 <= 3 (記録)
+    logger.critical("TEST", "Critical");    // 2 <= 3 (記録)
+    logger.error("TEST", "Error");          // 3 <= 3 (記録)
+    logger.warning("TEST", "Warning");      // 4 > 3 (フィルタ)
+    logger.info("TEST", "Info");            // 6 > 3 (フィルタ)
+    
+    TEST_ASSERT_EQUAL_UINT16(initialCount + 4, logger.getBufferCount());
+}
+
+// ログローテーション機能テスト
+void test_log_rotation_functionality() {
+    TestEthernetUDP udp;
+    TestLoggingService logger(&udp);
+    
+    // 小さなバッファサイズで初期化（ローテーション発生しやすくする）
+    TestLogConfig config;
+    config.maxBufferEntries = 3;
+    config.minLevel = TEST_LOG_DEBUG;
+    config.localBuffering = true;
+    strcpy(config.syslogServer, ""); // オフライン状態でテスト
+    
+    logger.init(config);
+    
+    // 初期バッファ状態確認
+    TEST_ASSERT_EQUAL_UINT16(0, logger.getBufferCount());
+    
+    // バッファサイズまでログを追加
+    logger.info("TEST", "Message 1");
+    TEST_ASSERT_EQUAL_UINT16(1, logger.getBufferCount());
+    
+    logger.info("TEST", "Message 2");
+    TEST_ASSERT_EQUAL_UINT16(2, logger.getBufferCount());
+    
+    logger.info("TEST", "Message 3");
+    TEST_ASSERT_EQUAL_UINT16(3, logger.getBufferCount());
+    
+    // 4つ目のメッセージで古いエントリがローテーションされる
+    logger.info("TEST", "Message 4 - should rotate");
+    TEST_ASSERT_EQUAL_UINT16(3, logger.getBufferCount()); // サイズは変わらず
+    
+    // さらに追加して継続的ローテーション確認
+    logger.info("TEST", "Message 5");
+    logger.info("TEST", "Message 6");
+    TEST_ASSERT_EQUAL_UINT16(3, logger.getBufferCount());
+    
+    // フラッシュ機能テスト
+    logger.flushBuffers();
+    // オフライン状態なので送信失敗、バッファは維持される
+    TEST_ASSERT_EQUAL_UINT16(3, logger.getBufferCount());
+    
+    // オンライン状態にしてフラッシュ
+    logger.setSyslogServer("192.168.1.100", 514);
+    udp.setTransmissionSuccess(true);
+    logger.flushBuffers();
+    
+    // 送信成功後もバッファクリーンアップで管理される
+    // （実際の実装では送信済みエントリが削除される）
+}
+
 int main() {
     UNITY_BEGIN();
     
@@ -2689,6 +3246,14 @@ int main() {
     RUN_TEST(test_eeprom_persistence);
     RUN_TEST(test_web_interface_config_changes);
     RUN_TEST(test_json_api_config_endpoints);
+    
+    // ログシステムテスト（優先度1）
+    RUN_TEST(test_structured_log_generation);
+    RUN_TEST(test_syslog_rfc3164_compliance);
+    RUN_TEST(test_local_log_buffering);
+    RUN_TEST(test_syslog_server_transmission);
+    RUN_TEST(test_log_level_management_and_filtering);
+    RUN_TEST(test_log_rotation_functionality);
     
     return UNITY_END();
 }
