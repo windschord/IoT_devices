@@ -74,17 +74,18 @@ pio lib update
 ### ピン設定
 ```cpp
 #define GPS_PPS_PIN 8        // PPS信号入力
-#define GPS_SDA_PIN 6        // GPS I2Cデータ（Wire1）
-#define GPS_SCL_PIN 7        // GPS I2Cクロック（Wire1）
+#define GPS_SDA_PIN 0        // GPS I2Cデータ（Wire0 共有）
+#define GPS_SCL_PIN 1        // GPS I2Cクロック（Wire0 共有）
 #define BTN_DISPLAY_PIN 11   // ディスプレイ切替ボタン
 #define LED_ERROR_PIN 14     // エラーステータスLED
 #define LED_PPS_PIN 15       // PPSパルスLED
 #define LED_ONBOARD_PIN 25   // オンボードLED
 
-// I2Cアドレス
+// I2Cアドレス（Wire0 共有バス）
 #define SCREEN_ADDRESS 0x3C  // SH1106 OLED
 // GPSモジュール: 0x42（u-bloxデフォルト）
 // RTC: 0x68（DS3231）
+// 注意: 全てのデバイスがWire0（GPIO 0/1）を共有
 ```
 
 ### ライブラリ依存関係
@@ -113,8 +114,8 @@ pio lib update
 - `WebServer`: HTTPサーバーとメトリクス
 - `GpsSummaryData`（Gps_model.h）: GPSデータ構造
 
-### ハードウェア抽象化
-- I2Cバス: Wire（OLED/RTC）とWire1（GPS）
+### ハードウェア拽象化
+- I2Cバス: Wire0（OLED/RTC/GPS 共有）
 - SPI: W5500イーサネットコントローラー
 - GPIO: PPS入力、ステータスLED、ディスプレイボタン
 

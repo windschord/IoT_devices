@@ -106,16 +106,15 @@ void setupGps()
   Serial.print("GPS SDA Pin: "); Serial.println(GPS_SDA_PIN);
   Serial.print("GPS SCL Pin: "); Serial.println(GPS_SCL_PIN);
   
-  Wire1.setSDA(GPS_SDA_PIN);
-  Wire1.setSCL(GPS_SCL_PIN);
-  Wire1.begin();
-  Serial.println("Wire1 initialized");
+  // GPS module now shares I2C0 bus with OLED and RTC
+  // Wire.begin() is already called in setup() for shared devices
+  Serial.println("GPS using shared I2C0 bus (Wire)");
 
   Serial.println("Attempting to connect to u-blox GNSS module...");
-  if (myGNSS.begin(Wire1) == false) // Connect to the u-blox module using Wire port
+  if (myGNSS.begin(Wire) == false) // Connect to the u-blox module using shared Wire port
   {
     Serial.println(F("❌ FAILED: u-blox GNSS not detected at default I2C address (0x42)"));
-    Serial.println(F("   Check I2C wiring: SDA=GPIO6, SCL=GPIO7"));
+    Serial.println(F("   Check I2C wiring: SDA=GPIO0, SCL=GPIO1 (shared bus)"));
     Serial.println(F("   Check power supply to GPS module"));
     Serial.println(F("❌ GPS initialization FAILED - continuing without GPS"));
     
@@ -123,7 +122,7 @@ void setupGps()
     REPORT_HW_ERROR("GPS", "u-blox GNSS not detected at I2C address 0x42");
     
     LOG_ERR_MSG("GPS", "u-blox GNSS not detected at I2C address 0x42");
-    LOG_ERR_MSG("GPS", "Check wiring - SDA=GPIO6, SCL=GPIO7 and power supply");
+    LOG_ERR_MSG("GPS", "Check wiring - SDA=GPIO0, SCL=GPIO1 (shared I2C bus) and power supply");
     analogWrite(LED_ERROR_PIN, 255);
     displayManager.displayError("GPS Module not detected. Check wiring.");
     gpsConnected = false;

@@ -3,8 +3,8 @@
 
 // GPIO Pin Assignments
 #define GPS_PPS_PIN 8
-#define GPS_SDA_PIN 6
-#define GPS_SCL_PIN 7
+#define GPS_SDA_PIN 0  // Shared I2C0 bus with OLED and RTC
+#define GPS_SCL_PIN 1  // Shared I2C0 bus with OLED and RTC
 #define BTN_DISPLAY_PIN 11
 #define LED_ERROR_PIN 14
 #define LED_PPS_PIN 15

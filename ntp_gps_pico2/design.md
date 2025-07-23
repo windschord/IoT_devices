@@ -76,10 +76,10 @@ graph TB
 Raspberry Pi Pico 2 Pin Assignments:
 
 GPIO Pins:
-- GPIO 0 (I2C0 SDA)  → SH1106 SDA (OLED/RTC I2C bus)
-- GPIO 1 (I2C0 SCL)  → SH1106 SCL (OLED/RTC I2C bus)
-- GPIO 6 (I2C1 SDA)  → ZED-F9T SDA (GPS I2C bus)
-- GPIO 7 (I2C1 SCL)  → ZED-F9T SCL (GPS I2C bus)
+- GPIO 0 (I2C0 SDA)  → SH1106 SDA, ZED-F9T SDA (Shared I2C bus)
+- GPIO 1 (I2C0 SCL)  → SH1106 SCL, ZED-F9T SCL (Shared I2C bus)
+- GPIO 6             → (Reserved for future use)
+- GPIO 7             → (Reserved for future use)
 - GPIO 8             → PPS Input (ZED-F9T PPS)
 - GPIO 3             → ZED-F9T SAFEBOOT (optional, for firmware updates)
 - GPIO 4             → Status LED 1 (GNSS Fix Status) - Green
@@ -93,9 +93,10 @@ GPIO Pins:
 - GPIO 20            → W5500 RST
 - GPIO 21            → W5500 INT
 
-I2C Device Addresses:
+I2C Device Addresses (Single I2C Bus - I2C0):
 - ZED-F9T GNSS Module: 0x42 (default u-blox address)
 - SH1106 OLED Display: 0x3C (default OLED address)
+- DS3231 RTC (if installed): 0x68 (default RTC address)
 
 Power Connections:
 - 3V3 (OUT) → ZED-F9T VCC, SH1106 VCC, W5500 VCC, LED anodes (via current limiting resistors)
@@ -119,12 +120,13 @@ GNSS Antenna:
                     Raspberry Pi Pico 2
                    ┌─────────────────────┐
                    │                     │
-    SH1106 ────────┤ GPIO 0 (SDA)        │ ← I2C0 Bus (OLED/RTC)
-    RTC ───────────┤ GPIO 1 (SCL)        │   (4.7kΩ pull-up resistors)
-    (I2C 0x3C/0x68)│                     │
+    SH1106 ────────┤ GPIO 0 (SDA)        │ ← I2C0 Bus (Shared)
+    ZED-F9T ───────┤ GPIO 1 (SCL)        │   (4.7kΩ pull-up resistors)
+    RTC ───────────┤                     │   (All devices on same bus)
+    (I2C 0x3C/0x42/0x68)                 │
                    │                     │
-    ZED-F9T ───────┤ GPIO 6 (SDA)        │ ← I2C1 Bus (GPS)
-    (I2C 0x42)     │ GPIO 7 (SCL)        │   (4.7kΩ pull-up resistors)
+    (Reserved) ────┤ GPIO 6              │
+    (Reserved) ────┤ GPIO 7              │
     PPS ───────────┤ GPIO 8              │
                    │                     │
     LED1 (Green)───┤ GPIO 4              │ ← GNSS Fix Status
@@ -142,9 +144,9 @@ GNSS Antenna:
     Power ─────────┤ 3V3, GND           │
                    └─────────────────────┘
 
-Note: Both I2C buses require 4.7kΩ pull-up resistors on SDA and SCL lines
-      I2C0 (GPIO 0/1): OLED Display and RTC
-      I2C1 (GPIO 6/7): GPS Module  
+Note: Single I2C bus (I2C0) requires 4.7kΩ pull-up resistors on SDA and SCL lines
+      I2C0 (GPIO 0/1): OLED Display, GPS Module, and RTC (shared bus)
+      GPIO 6/7: Reserved for future expansion
       LEDs require 330Ω current limiting resistors
 ```
 
@@ -191,7 +193,7 @@ Note: Both I2C buses require 4.7kΩ pull-up resistors on SDA and SCL lines
   - UBX-NAV-PVT メッセージによる高精度位置・時刻取得
   - PPS信号エッジ検出と時刻補正
   - 衛星信号品質監視（C/N0, 衛星数）
-  - I2Cバス分離管理（Wire1使用でOLEDディスプレイとRTCから独立）
+  - I2Cバス統合管理（Wire0使用でOLEDディスプレイとRTCと共有）
   - QZSS L1S災害情報の解析と表示
 
 ### NTP Server Service
