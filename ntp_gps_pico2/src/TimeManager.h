@@ -3,13 +3,13 @@
 
 #include <Arduino.h>
 #include <time.h>
-#include <uRTCLib.h>
+#include "RTClib.h"
 #include "SystemTypes.h"
 #include "Gps_model.h"
 
 class TimeManager {
 private:
-    uRTCLib* rtc;
+    RTC_DS3231* rtc;
     TimeSync* timeSync;
     const GpsMonitor* gpsMonitor;
     volatile bool ppsReceived;
@@ -17,7 +17,7 @@ private:
     volatile unsigned long ppsCount;
 
 public:
-    TimeManager(uRTCLib* rtcInstance, TimeSync* timeSyncInstance, const GpsMonitor* gpsMonitorInstance);
+    TimeManager(RTC_DS3231* rtcInstance, TimeSync* timeSyncInstance, const GpsMonitor* gpsMonitorInstance);
     
     void init();
     void processPpsSync(const GpsSummaryData& gpsData);

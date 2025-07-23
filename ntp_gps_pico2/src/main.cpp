@@ -2,7 +2,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
-#include <uRTCLib.h>
+#include "RTClib.h"
 #include <WebServer.h>
 #include <time.h>
 #include <EthernetUdp.h>
@@ -31,8 +31,7 @@ EthernetUDP ntpUdp;
 WebServer webServer;
 GpsClient gpsClient(Serial);
 Adafruit_SH1106 display(OLED_RESET);
-uRTCLib rtc;
-byte rtcModel = RTC_MODEL;
+RTC_DS3231 rtc;
 
 // Global system instances
 ConfigManager configManager;
@@ -151,51 +150,80 @@ void setupGps()
 
 void setupRtc()
 {
-  URTCLIB_WIRE.begin();
-  rtc.set_rtc_address(0x68);
-  rtc.set_model(rtcModel);
-  // refresh data from RTC HW in RTC class object so flags like rtc.lostPower(), rtc.getEOSCFlag(), etc, can get populated
-  rtc.refresh();
+  // Note: Wire1 is already initialized by GPS setup
+  Serial.println("Initializing RTClib DS3231 on Wire1 bus (shared with GPS)");
+  
+  // I2C scan on Wire1 bus to verify device presence
+  Serial.println("Scanning I2C devices on Wire1 bus:");
+  int deviceCount = 0;
+  for (byte address = 1; address < 127; address++) {
+    Wire1.beginTransmission(address);
+    byte error = Wire1.endTransmission();
+    if (error == 0) {
+      Serial.printf("  Device found at address 0x%02X\n", address);
+      deviceCount++;
+    }
+  }
+  Serial.printf("Total I2C devices found: %d\n", deviceCount);
+  
+  // Initialize RTClib with Wire1
+  if (!rtc.begin(&Wire1)) {
+    Serial.println("ERROR: Could not find RTC DS3231!");
+    return;
+  }
+  
+  Serial.println("RTClib DS3231 initialization: SUCCESS");
   
   // Check if RTC lost power and needs initialization
   if (rtc.lostPower()) {
-    Serial.println("RTC lost power - setting to current time (2025-01-21 12:00:00)");
-    // RTCLib::set(byte second, byte minute, byte hour (0-23:24-hr mode only), byte dayOfWeek (Tue = 3), byte dayOfMonth (1-31), byte month (1-12), byte year (25))
-    rtc.set(0, 0, 12, 3, 21, 1, 25);  // 2025-01-21 12:00:00 Tuesday
+    Serial.println("RTC lost power - setting to compile time");
+    // Set to compile time as initial value
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
+  
+  // Display current RTC time
+  DateTime now = rtc.now();
+  Serial.printf("Current RTC time: %04d/%02d/%02d %02d:%02d:%02d\n",
+                now.year(), now.month(), now.day(),
+                now.hour(), now.minute(), now.second());
+  
+  // Display temperature from DS3231
+  Serial.printf("DS3231 temperature: %.2f°C\n", rtc.getTemperature());
+  
+  // Manual DS3231 register verification
+  Serial.println("Manual DS3231 register read test:");
+  Wire1.beginTransmission(0x68);
+  Wire1.write(0x00); // Point to seconds register
+  byte ds3231Error = Wire1.endTransmission();
+  if (ds3231Error == 0) {
+    Wire1.requestFrom(0x68, 7); // Request 7 bytes
+    if (Wire1.available() >= 7) {
+      byte seconds = Wire1.read();
+      byte minutes = Wire1.read();
+      byte hours = Wire1.read();
+      byte dayOfWeek = Wire1.read();
+      byte date = Wire1.read();
+      byte month = Wire1.read();
+      byte year = Wire1.read();
+      
+      Serial.printf("Raw DS3231 registers: %02X %02X %02X %02X %02X %02X %02X\n",
+                   seconds, minutes, hours, dayOfWeek, date, month, year);
+      
+      // Convert BCD to decimal
+      byte secDec = ((seconds >> 4) * 10) + (seconds & 0x0F);
+      byte minDec = ((minutes >> 4) * 10) + (minutes & 0x0F);
+      byte hourDec = ((hours >> 4) * 10) + (hours & 0x0F);
+      byte dateDec = ((date >> 4) * 10) + (date & 0x0F);
+      byte monthDec = ((month >> 4) * 10) + (month & 0x0F);
+      byte yearDec = ((year >> 4) * 10) + (year & 0x0F);
+      
+      Serial.printf("Manual BCD decode: 20%02d/%02d/%02d %02d:%02d:%02d\n",
+                   yearDec, monthDec, dateDec, hourDec, minDec, secDec);
+    } else {
+      Serial.println("DS3231 register read: No data available");
+    }
   } else {
-    Serial.print("RTC time: ");
-    Serial.printf("20%02d/%02d/%02d %02d:%02d:%02d\n", 
-                  rtc.year(), rtc.month(), rtc.day(), 
-                  rtc.hour(), rtc.minute(), rtc.second());
-  }
-
-  // use the following if you want to set main clock in 24 hour mode
-  rtc.set_12hour_mode(false);
-
-  if (rtc.enableBattery())
-  {
-    Serial.println("Battery activated correctly.");
-  }
-  else
-  {
-    Serial.println("ERROR activating battery.");
-  }
-  // Check whether OSC is set to use VBAT or not
-  if (rtc.getEOSCFlag())
-    Serial.println(F("Oscillator will not use VBAT when VCC cuts off. Time will not increment without VCC!"));
-  else
-    Serial.println(F("Oscillator will use VBAT when VCC cuts off."));
-
-  Serial.print("Lost power status: ");
-  if (rtc.lostPower())
-  {
-    Serial.print("POWER FAILED. Clearing flag...");
-    rtc.lostPowerClear();
-    Serial.println(" done.");
-  }
-  else
-  {
-    Serial.println("POWER OK");
+    Serial.printf("DS3231 register read failed: error %d\n", ds3231Error);
   }
 }
 
@@ -222,9 +250,6 @@ void setup()
   
   // Initialize configuration manager
   configManager.init();
-
-  // RTC setup
-  setupRtc();
 
   // Initialize system modules  
   networkManager.init();
@@ -291,6 +316,10 @@ void setup()
   // setup GPS
   LOG_INFO_MSG("GPS", "Starting GPS initialization");
   setupGps();
+
+  // Setup RTC after GPS initialization (they share Wire1 bus)
+  LOG_INFO_MSG("RTC", "Starting RTC initialization on Wire1 bus");
+  setupRtc();
 
   // GPS PPS interrupt
   attachInterrupt(digitalPinToInterrupt(GPS_PPS_PIN), trigerPps, FALLING);
@@ -444,16 +473,28 @@ void loop()
   }
 
 #if defined(DEBUG_CONSOLE_GPS)
-  rtc.refresh();
+  // Get current RTC time using RTClib
+  DateTime now = rtc.now();
   Serial.print("RTC DateTime: ");
 
   char dateTimechr[20];
-  sprintf(dateTimechr, "20%02d/%02d/%02d %02d:%02d:%02d",
-          rtc.year(), rtc.month(), rtc.day(),
-          rtc.hour(), rtc.minute(), rtc.second());
+  sprintf(dateTimechr, "%04d/%02d/%02d %02d:%02d:%02d",
+          now.year(), now.month(), now.day(),
+          now.hour(), now.minute(), now.second());
   Serial.print(dateTimechr);
+  
+  // Additional RTC debug info
+  static unsigned long lastRtcDetailDebug = 0;
+  if (millis() - lastRtcDetailDebug > 10000) { // Every 10 seconds
+    Serial.print(" [I2C Address: 0x68, Wire1 Bus]");
+    if (rtc.lostPower()) {
+      Serial.print(" [POWER_LOST]");
+    }
+    Serial.printf(" Temp: %.2f°C", rtc.getTemperature());
+    lastRtcDetailDebug = millis();
+  }
 
-  switch (rtc.dayOfWeek())
+  switch (now.dayOfTheWeek())
   {
   case 1:
     Serial.print(" Sun");
@@ -482,7 +523,7 @@ void loop()
   }
 
   Serial.print(" - Temp: ");
-  Serial.print((float)rtc.temp() / 100);
+  Serial.print(rtc.getTemperature());
 
   Serial.println();
   delay(1000);

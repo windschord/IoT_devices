@@ -46,7 +46,7 @@ time_t gpsTimeToUnixTimestamp(uint16_t year, uint8_t month, uint8_t day,
     return timestamp;
 }
 
-TimeManager::TimeManager(uRTCLib* rtcInstance, TimeSync* timeSyncInstance, const GpsMonitor* gpsMonitorInstance)
+TimeManager::TimeManager(RTC_DS3231* rtcInstance, TimeSync* timeSyncInstance, const GpsMonitor* gpsMonitorInstance)
     : rtc(rtcInstance), timeSync(timeSyncInstance), gpsMonitor(gpsMonitorInstance),
       ppsReceived(false), ppsTimestamp(0), ppsCount(0) {
 }
@@ -165,14 +165,14 @@ unsigned long TimeManager::getHighPrecisionTime() {
             lastFallbackDebug = millis();
         }
         
-        rtc->refresh();
+        DateTime now = rtc->now();
         struct tm timeinfo = {0};
-        timeinfo.tm_year = rtc->year() + 100; // RTC is 2-digit year
-        timeinfo.tm_mon = rtc->month() - 1;
-        timeinfo.tm_mday = rtc->day();
-        timeinfo.tm_hour = rtc->hour();
-        timeinfo.tm_min = rtc->minute();
-        timeinfo.tm_sec = rtc->second();
+        timeinfo.tm_year = now.year() - 1900; // Convert to years since 1900
+        timeinfo.tm_mon = now.month() - 1;    // Convert to 0-11 range
+        timeinfo.tm_mday = now.day();
+        timeinfo.tm_hour = now.hour();
+        timeinfo.tm_min = now.minute();
+        timeinfo.tm_sec = now.second();
         
         // Check if RTC time is reasonable (after 2020)
         time_t rtcTime = mktime(&timeinfo);
@@ -214,14 +214,14 @@ time_t TimeManager::getUnixTimestamp() {
         return result;
     } else {
         // RTC fallback
-        rtc->refresh();
+        DateTime now = rtc->now();
         struct tm timeinfo = {0};
-        timeinfo.tm_year = rtc->year() + 100;
-        timeinfo.tm_mon = rtc->month() - 1;
-        timeinfo.tm_mday = rtc->day();
-        timeinfo.tm_hour = rtc->hour();
-        timeinfo.tm_min = rtc->minute();
-        timeinfo.tm_sec = rtc->second();
+        timeinfo.tm_year = now.year() - 1900;
+        timeinfo.tm_mon = now.month() - 1;
+        timeinfo.tm_mday = now.day();
+        timeinfo.tm_hour = now.hour();
+        timeinfo.tm_min = now.minute();
+        timeinfo.tm_sec = now.second();
         
         time_t rtcTime = mktime(&timeinfo);
         time_t year2020 = 1577836800;
@@ -328,9 +328,100 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
             Serial.printf("GPS Time Sync - Set timeSync->gpsTime to: %lu (UTC timestamp)\n", utc_result);
             
             // Synchronize with RTC
-            rtc->set(gpsData.sec, gpsData.min, gpsData.hour, 1, 
-                    gpsData.day, gpsData.month, gpsData.year % 100);
+            Serial.printf("RTC Update - Setting RTC to GPS time: 20%02d/%02d/%02d %02d:%02d:%02d\n",
+                         gpsData.year % 100, gpsData.month, gpsData.day,
+                         gpsData.hour, gpsData.min, gpsData.sec);
+            
+            // Test I2C communication before setting RTC
+            extern TwoWire Wire1;
+            Wire1.beginTransmission(0x68);
+            byte preCommError = Wire1.endTransmission();
+            Serial.printf("RTC I2C Pre-write test: %s (error: %d)\n", 
+                         preCommError == 0 ? "SUCCESS" : "FAILED", preCommError);
+            
+            // Manual DS3231 time setting (bypassing uRTCLib)
+            Serial.println("Manual DS3231 time setting:");
+            
+            // Convert decimal to BCD
+            byte secBCD = ((gpsData.sec / 10) << 4) | (gpsData.sec % 10);
+            byte minBCD = ((gpsData.min / 10) << 4) | (gpsData.min % 10);
+            byte hourBCD = ((gpsData.hour / 10) << 4) | (gpsData.hour % 10);
+            byte dayBCD = ((gpsData.day / 10) << 4) | (gpsData.day % 10);
+            byte monthBCD = ((gpsData.month / 10) << 4) | (gpsData.month % 10);
+            byte yearBCD = (((gpsData.year % 100) / 10) << 4) | ((gpsData.year % 100) % 10);
+            
+            Serial.printf("BCD values: sec=%02X min=%02X hour=%02X day=%02X month=%02X year=%02X\n",
+                         secBCD, minBCD, hourBCD, dayBCD, monthBCD, yearBCD);
+            
+            // Write to DS3231 registers directly
+            extern TwoWire Wire1;
+            Wire1.beginTransmission(0x68);
+            Wire1.write(0x00); // Start at seconds register
+            Wire1.write(secBCD);
+            Wire1.write(minBCD);
+            Wire1.write(hourBCD);
+            Wire1.write(0x01); // Day of week (Monday)
+            Wire1.write(dayBCD);
+            Wire1.write(monthBCD);
+            Wire1.write(yearBCD);
+            byte manualWriteError = Wire1.endTransmission();
+            
+            Serial.printf("Manual DS3231 write result: %s (error: %d)\n",
+                         manualWriteError == 0 ? "SUCCESS" : "FAILED", manualWriteError);
+            
+            // RTClib method - create DateTime object and adjust RTC
+            DateTime gpsDateTime(gpsData.year, gpsData.month, gpsData.day,
+                                gpsData.hour, gpsData.min, gpsData.sec);
+            rtc->adjust(gpsDateTime);
+            Serial.printf("RTClib adjust() operation completed\n");
             timeSync->rtcTime = timeSync->gpsTime;
+            
+            // Small delay to ensure write completes
+            delay(10);
+            
+            // Manual verification - read DS3231 registers directly
+            Serial.println("Manual DS3231 verification:");
+            Wire1.beginTransmission(0x68);
+            Wire1.write(0x00); // Point to seconds register
+            byte verifyError = Wire1.endTransmission();
+            if (verifyError == 0) {
+                Wire1.requestFrom(0x68, 7);
+                if (Wire1.available() >= 7) {
+                    byte seconds = Wire1.read();
+                    byte minutes = Wire1.read();
+                    byte hours = Wire1.read();
+                    byte dayOfWeek = Wire1.read();
+                    byte date = Wire1.read();
+                    byte month = Wire1.read();
+                    byte year = Wire1.read();
+                    
+                    Serial.printf("Manual read after write: %02X %02X %02X %02X %02X %02X %02X\n",
+                                 seconds, minutes, hours, dayOfWeek, date, month, year);
+                    
+                    // Convert BCD to decimal
+                    byte secDec = ((seconds >> 4) * 10) + (seconds & 0x0F);
+                    byte minDec = ((minutes >> 4) * 10) + (minutes & 0x0F);
+                    byte hourDec = ((hours >> 4) * 10) + (hours & 0x0F);
+                    byte dateDec = ((date >> 4) * 10) + (date & 0x0F);
+                    byte monthDec = ((month >> 4) * 10) + (month & 0x0F);
+                    byte yearDec = ((year >> 4) * 10) + (year & 0x0F);
+                    
+                    Serial.printf("Manual verification: 20%02d/%02d/%02d %02d:%02d:%02d\n",
+                                 yearDec, monthDec, dateDec, hourDec, minDec, secDec);
+                }
+            }
+            
+            // Verify RTC was updated correctly using RTClib
+            DateTime afterUpdate = rtc->now();
+            Serial.printf("RTClib verification: %04d/%02d/%02d %02d:%02d:%02d\n",
+                         afterUpdate.year(), afterUpdate.month(), afterUpdate.day(),
+                         afterUpdate.hour(), afterUpdate.minute(), afterUpdate.second());
+            
+            // Test I2C communication after setting RTC
+            Wire1.beginTransmission(0x68);
+            byte postCommError = Wire1.endTransmission();
+            Serial.printf("RTC I2C Post-write test: %s (error: %d)\n", 
+                         postCommError == 0 ? "SUCCESS" : "FAILED", postCommError);
             
             // Accuracy calculation (high precision with PPS signal)
             timeSync->accuracy = 0.001; // 1ms accuracy

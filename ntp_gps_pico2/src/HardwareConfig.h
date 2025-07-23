@@ -32,7 +32,6 @@
 // Generated from: https://www.hellion.org.uk/cgi-bin/randmac.pl?scope=local&type=unicast
 #define DEFAULT_MAC_ADDRESS {0x6e, 0xc9, 0x4c, 0x32, 0x3a, 0xf6}
 
-// RTC Configuration
-#define RTC_MODEL URTCLIB_MODEL_DS3231
+// RTC Configuration (using RTClib DS3231 class directly)
 
 #endif // HARDWARE_CONFIG_H
