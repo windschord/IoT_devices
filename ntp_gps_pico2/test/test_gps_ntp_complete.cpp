@@ -3168,6 +3168,402 @@ void test_log_rotation_functionality() {
     // （実際の実装では送信済みエントリが削除される）
 }
 
+// ========================================
+// W5500イーサネット通信テストクラス
+// ========================================
+
+class TestW5500Controller {
+private:
+    struct MockW5500State {
+        bool spiInitialized;
+        bool hardwareDetected;
+        bool linkUp;
+        bool dhcpActive;
+        uint32_t localIP;
+        uint32_t gateway;
+        uint32_t dnsServer;
+        byte macAddress[6];
+        bool socketOpen[8];  // W5500 has 8 sockets
+        int lastError;
+    };
+    
+    MockW5500State state;
+    
+public:
+    TestW5500Controller() {
+        resetState();
+    }
+    
+    void resetState() {
+        memset(&state, 0, sizeof(state));
+        // Default MAC address
+        state.macAddress[0] = 0x02; state.macAddress[1] = 0x00;
+        state.macAddress[2] = 0x00; state.macAddress[3] = 0x00;
+        state.macAddress[4] = 0x00; state.macAddress[5] = 0x01;
+    }
+    
+    // SPI Initialization simulation
+    bool initializeSPI() {
+        state.spiInitialized = true;
+        return true;
+    }
+    
+    // Hardware detection simulation
+    bool detectHardware() {
+        if (!state.spiInitialized) return false;
+        state.hardwareDetected = true;
+        return true;
+    }
+    
+    // Link status simulation
+    bool isLinkUp() const {
+        return state.hardwareDetected && state.linkUp;
+    }
+    
+    void setLinkStatus(bool up) {
+        state.linkUp = up;
+    }
+    
+    // DHCP simulation
+    bool attemptDHCP() {
+        if (!isLinkUp()) return false;
+        
+        state.dhcpActive = true;
+        // Simulate assigned IP
+        state.localIP = (192 << 24) | (168 << 16) | (1 << 8) | 100;  // 192.168.1.100
+        state.gateway = (192 << 24) | (168 << 16) | (1 << 8) | 1;    // 192.168.1.1
+        state.dnsServer = (8 << 24) | (8 << 16) | (8 << 8) | 8;      // 8.8.8.8
+        return true;
+    }
+    
+    // Static IP configuration
+    bool setStaticIP(uint32_t ip, uint32_t gateway, uint32_t dns) {
+        if (!isLinkUp()) return false;
+        
+        state.dhcpActive = false;
+        state.localIP = ip;
+        state.gateway = gateway;
+        state.dnsServer = dns;
+        return true;
+    }
+    
+    // Socket management
+    bool openSocket(int socketNum, int protocol, int port) {
+        if (socketNum < 0 || socketNum >= 8) return false;
+        if (!isLinkUp()) return false;
+        
+        state.socketOpen[socketNum] = true;
+        return true;
+    }
+    
+    bool closeSocket(int socketNum) {
+        if (socketNum < 0 || socketNum >= 8) return false;
+        state.socketOpen[socketNum] = false;
+        return true;
+    }
+    
+    bool isSocketOpen(int socketNum) const {
+        if (socketNum < 0 || socketNum >= 8) return false;
+        return state.socketOpen[socketNum];
+    }
+    
+    // Network disconnection simulation
+    void simulateDisconnection() {
+        state.linkUp = false;
+        state.dhcpActive = false;
+        state.localIP = 0;
+        for (int i = 0; i < 8; i++) {
+            state.socketOpen[i] = false;
+        }
+    }
+    
+    // Reconnection simulation
+    bool attemptReconnection() {
+        if (state.hardwareDetected) {
+            state.linkUp = true;
+            return attemptDHCP();
+        }
+        return false;
+    }
+    
+    // Status getters
+    uint32_t getLocalIP() const { return state.localIP; }
+    uint32_t getGateway() const { return state.gateway; }
+    uint32_t getDNS() const { return state.dnsServer; }
+    bool isDHCPActive() const { return state.dhcpActive; }
+    const byte* getMACAddress() const { return state.macAddress; }
+    bool isSPIInitialized() const { return state.spiInitialized; }
+    bool isHardwareDetected() const { return state.hardwareDetected; }
+};
+
+class TestNetworkManager {
+private:
+    TestW5500Controller* w5500;
+    struct MockNetworkMonitor {
+        bool isConnected;
+        bool dhcpActive;
+        unsigned long lastLinkCheck;
+        unsigned long linkCheckInterval;
+        int reconnectAttempts;
+        int maxReconnectAttempts;
+        unsigned long lastReconnectTime;
+        unsigned long reconnectInterval;
+        uint32_t localIP;
+        uint32_t gateway;
+        uint32_t dnsServer;
+        bool ntpServerActive;
+    } monitor;
+    
+    struct MockUdpSocketManager {
+        bool ntpSocketOpen;
+        unsigned long lastSocketCheck;
+        unsigned long socketCheckInterval;
+        int socketErrors;
+    } udpManager;
+    
+public:
+    TestNetworkManager(TestW5500Controller* w5500Controller) : w5500(w5500Controller) {
+        resetNetworkMonitor();
+        resetUdpManager();
+    }
+    
+    void resetNetworkMonitor() {
+        memset(&monitor, 0, sizeof(monitor));
+        monitor.linkCheckInterval = 5000;  // 5 seconds
+        monitor.maxReconnectAttempts = 5;
+        monitor.reconnectInterval = 30000;  // 30 seconds
+    }
+    
+    void resetUdpManager() {
+        memset(&udpManager, 0, sizeof(udpManager));
+        udpManager.socketCheckInterval = 10000;  // 10 seconds
+    }
+    
+    // Network initialization
+    bool initialize() {
+        if (!w5500->initializeSPI()) return false;
+        if (!w5500->detectHardware()) return false;
+        
+        w5500->setLinkStatus(true);  // Simulate link up
+        
+        monitor.isConnected = true;
+        return true;
+    }
+    
+    // Connection monitoring
+    void monitorConnection() {
+        unsigned long now = 1000;  // Mock time
+        if (now - monitor.lastLinkCheck >= monitor.linkCheckInterval) {
+            monitor.lastLinkCheck = now;
+            monitor.isConnected = w5500->isLinkUp();
+            
+            if (!monitor.isConnected && monitor.reconnectAttempts < monitor.maxReconnectAttempts) {
+                attemptReconnection();
+            }
+        }
+    }
+    
+    // Reconnection logic
+    bool attemptReconnection() {
+        monitor.reconnectAttempts++;
+        monitor.lastReconnectTime = 1000;  // Mock time
+        
+        if (w5500->attemptReconnection()) {
+            monitor.isConnected = true;
+            monitor.dhcpActive = w5500->isDHCPActive();
+            monitor.localIP = w5500->getLocalIP();
+            monitor.gateway = w5500->getGateway();
+            monitor.dnsServer = w5500->getDNS();
+            monitor.reconnectAttempts = 0;
+            return true;
+        }
+        return false;
+    }
+    
+    // UDP socket management
+    bool manageUdpSockets() {
+        if (!monitor.isConnected) return false;
+        
+        if (!udpManager.ntpSocketOpen) {
+            if (w5500->openSocket(0, 17, 123)) {  // UDP protocol 17, NTP port 123
+                udpManager.ntpSocketOpen = true;
+                monitor.ntpServerActive = true;
+                return true;
+            } else {
+                udpManager.socketErrors++;
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    // Status getters
+    bool isConnected() const { return monitor.isConnected; }
+    bool isNtpServerActive() const { return monitor.ntpServerActive; }
+    bool isUdpSocketOpen() const { return udpManager.ntpSocketOpen; }
+    const MockNetworkMonitor& getNetworkStatus() const { return monitor; }
+    const MockUdpSocketManager& getUdpStatus() const { return udpManager; }
+    
+    // Simulate network failure
+    void simulateNetworkFailure() {
+        w5500->simulateDisconnection();
+        monitor.isConnected = false;
+        monitor.dhcpActive = false;
+        monitor.localIP = 0;
+        udpManager.ntpSocketOpen = false;
+        monitor.ntpServerActive = false;
+    }
+};
+
+// ========================================
+// W5500イーサネット通信テスト
+// ========================================
+
+void test_w5500_spi_initialization() {
+    TestW5500Controller w5500;
+    
+    // Test SPI initialization
+    TEST_ASSERT_FALSE(w5500.isSPIInitialized());
+    TEST_ASSERT_TRUE(w5500.initializeSPI());
+    TEST_ASSERT_TRUE(w5500.isSPIInitialized());
+    
+    // Test hardware detection after SPI init
+    TEST_ASSERT_FALSE(w5500.isHardwareDetected());
+    TEST_ASSERT_TRUE(w5500.detectHardware());
+    TEST_ASSERT_TRUE(w5500.isHardwareDetected());
+    
+    // Test hardware detection without SPI init
+    w5500.resetState();
+    TEST_ASSERT_FALSE(w5500.detectHardware());
+    TEST_ASSERT_FALSE(w5500.isHardwareDetected());
+}
+
+void test_ethernet_link_detection() {
+    TestW5500Controller w5500;
+    TestNetworkManager network(&w5500);
+    
+    // Initialize hardware
+    TEST_ASSERT_TRUE(network.initialize());
+    TEST_ASSERT_TRUE(network.isConnected());
+    
+    // Test link status monitoring
+    w5500.setLinkStatus(false);
+    network.monitorConnection();
+    TEST_ASSERT_FALSE(network.isConnected());
+    
+    // Test link recovery
+    w5500.setLinkStatus(true);
+    network.monitorConnection();
+    TEST_ASSERT_TRUE(network.isConnected());
+}
+
+void test_dhcp_ip_acquisition() {
+    TestW5500Controller w5500;
+    TestNetworkManager network(&w5500);
+    
+    // Initialize and test DHCP
+    TEST_ASSERT_TRUE(network.initialize());
+    TEST_ASSERT_TRUE(w5500.attemptDHCP());
+    
+    // Verify DHCP assigned values
+    TEST_ASSERT_TRUE(w5500.isDHCPActive());
+    TEST_ASSERT_EQUAL_UINT32((192 << 24) | (168 << 16) | (1 << 8) | 100, w5500.getLocalIP());
+    TEST_ASSERT_EQUAL_UINT32((192 << 24) | (168 << 16) | (1 << 8) | 1, w5500.getGateway());
+    TEST_ASSERT_EQUAL_UINT32((8 << 24) | (8 << 16) | (8 << 8) | 8, w5500.getDNS());
+    
+    // Test DHCP failure when link is down
+    w5500.setLinkStatus(false);
+    TEST_ASSERT_FALSE(w5500.attemptDHCP());
+}
+
+void test_static_ip_configuration() {
+    TestW5500Controller w5500;
+    
+    // Initialize hardware
+    TEST_ASSERT_TRUE(w5500.initializeSPI());
+    TEST_ASSERT_TRUE(w5500.detectHardware());
+    w5500.setLinkStatus(true);
+    
+    // Configure static IP
+    uint32_t staticIP = (10 << 24) | (0 << 16) | (0 << 8) | 50;      // 10.0.0.50
+    uint32_t gateway = (10 << 24) | (0 << 16) | (0 << 8) | 1;       // 10.0.0.1
+    uint32_t dns = (1 << 24) | (1 << 16) | (1 << 8) | 1;           // 1.1.1.1
+    
+    TEST_ASSERT_TRUE(w5500.setStaticIP(staticIP, gateway, dns));
+    TEST_ASSERT_FALSE(w5500.isDHCPActive());
+    TEST_ASSERT_EQUAL_UINT32(staticIP, w5500.getLocalIP());
+    TEST_ASSERT_EQUAL_UINT32(gateway, w5500.getGateway());
+    TEST_ASSERT_EQUAL_UINT32(dns, w5500.getDNS());
+    
+    // Test static IP failure when link is down
+    w5500.setLinkStatus(false);
+    TEST_ASSERT_FALSE(w5500.setStaticIP(staticIP, gateway, dns));
+}
+
+void test_network_disconnection_reconnection() {
+    TestW5500Controller w5500;
+    TestNetworkManager network(&w5500);
+    
+    // Initialize and establish connection
+    TEST_ASSERT_TRUE(network.initialize());
+    TEST_ASSERT_TRUE(w5500.attemptDHCP());
+    TEST_ASSERT_TRUE(network.manageUdpSockets());
+    TEST_ASSERT_TRUE(network.isConnected());
+    TEST_ASSERT_TRUE(network.isNtpServerActive());
+    
+    // Simulate network disconnection
+    network.simulateNetworkFailure();
+    TEST_ASSERT_FALSE(network.isConnected());
+    TEST_ASSERT_FALSE(network.isNtpServerActive());
+    TEST_ASSERT_FALSE(network.isUdpSocketOpen());
+    
+    // Test automatic reconnection
+    TEST_ASSERT_TRUE(network.attemptReconnection());
+    TEST_ASSERT_TRUE(network.isConnected());
+    
+    // Re-establish services
+    TEST_ASSERT_TRUE(network.manageUdpSockets());
+    TEST_ASSERT_TRUE(network.isNtpServerActive());
+    TEST_ASSERT_TRUE(network.isUdpSocketOpen());
+}
+
+void test_socket_management_udp_communication() {
+    TestW5500Controller w5500;
+    TestNetworkManager network(&w5500);
+    
+    // Initialize network
+    TEST_ASSERT_TRUE(network.initialize());
+    TEST_ASSERT_TRUE(w5500.attemptDHCP());
+    
+    // Test socket opening
+    TEST_ASSERT_FALSE(w5500.isSocketOpen(0));
+    TEST_ASSERT_TRUE(w5500.openSocket(0, 17, 123));  // UDP NTP socket
+    TEST_ASSERT_TRUE(w5500.isSocketOpen(0));
+    
+    // Test multiple sockets
+    TEST_ASSERT_TRUE(w5500.openSocket(1, 6, 80));   // TCP HTTP socket
+    TEST_ASSERT_TRUE(w5500.isSocketOpen(1));
+    
+    // Test socket management through NetworkManager
+    TEST_ASSERT_TRUE(network.manageUdpSockets());
+    TEST_ASSERT_TRUE(network.isUdpSocketOpen());
+    TEST_ASSERT_TRUE(network.isNtpServerActive());
+    
+    // Test socket closing
+    TEST_ASSERT_TRUE(w5500.closeSocket(0));
+    TEST_ASSERT_FALSE(w5500.isSocketOpen(0));
+    
+    // Test invalid socket numbers
+    TEST_ASSERT_FALSE(w5500.openSocket(-1, 17, 123));
+    TEST_ASSERT_FALSE(w5500.openSocket(8, 17, 123));
+    TEST_ASSERT_FALSE(w5500.isSocketOpen(-1));
+    TEST_ASSERT_FALSE(w5500.isSocketOpen(8));
+    
+    // Test socket operations without link
+    w5500.setLinkStatus(false);
+    TEST_ASSERT_FALSE(w5500.openSocket(2, 17, 456));
+}
+
 int main() {
     UNITY_BEGIN();
     
@@ -3254,6 +3650,14 @@ int main() {
     RUN_TEST(test_syslog_server_transmission);
     RUN_TEST(test_log_level_management_and_filtering);
     RUN_TEST(test_log_rotation_functionality);
+    
+    // W5500イーサネット通信テスト（優先度2）
+    RUN_TEST(test_w5500_spi_initialization);
+    RUN_TEST(test_ethernet_link_detection);
+    RUN_TEST(test_dhcp_ip_acquisition);
+    RUN_TEST(test_static_ip_configuration);
+    RUN_TEST(test_network_disconnection_reconnection);
+    RUN_TEST(test_socket_management_udp_communication);
     
     return UNITY_END();
 }
