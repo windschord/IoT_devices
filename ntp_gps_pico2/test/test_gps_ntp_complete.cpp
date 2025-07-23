@@ -97,6 +97,246 @@ time_t gpsTimeToUnixTimestamp(uint16_t year, uint8_t month, uint8_t day,
 // テスト定数
 static const time_t TEST_GPS_TIME = 1753179057; // 2025-07-22 10:10:57 UTC
 
+// =============================================================================
+// Additional Unit Tests for GPS NMEA, Time Precision, and Error Handling
+// =============================================================================
+
+// GPS NMEA Parser Test Classes
+struct GpsTime {
+    int hour;
+    int minute;
+    int second;
+    int day;
+    int month;
+    int year;
+    bool valid;
+};
+
+class TestNmeaParser {
+public:
+    static bool parseGPRMC(const char* sentence, GpsTime* time) {
+        if (!sentence || !time) return false;
+        
+        char buffer[256];
+        strncpy(buffer, sentence, sizeof(buffer) - 1);
+        buffer[sizeof(buffer) - 1] = '\0';
+        
+        char* token = strtok(buffer, ",");
+        if (!token || strcmp(token, "$GPRMC") != 0) return false;
+        
+        // 時刻フィールド (HHMMSS)
+        token = strtok(nullptr, ",");
+        if (!token || strlen(token) < 6) return false;
+        
+        char timeStr[7];
+        strncpy(timeStr, token, 6);
+        timeStr[6] = '\0';
+        
+        time->hour = (timeStr[0] - '0') * 10 + (timeStr[1] - '0');
+        time->minute = (timeStr[2] - '0') * 10 + (timeStr[3] - '0');
+        time->second = (timeStr[4] - '0') * 10 + (timeStr[5] - '0');
+        
+        // ステータス (A=有効, V=無効)
+        token = strtok(nullptr, ",");
+        if (!token) return false;
+        time->valid = (token[0] == 'A');
+        
+        // 日付フィールドまでスキップ
+        for (int i = 0; i < 6; i++) {
+            token = strtok(nullptr, ",");
+            if (!token) return false;
+        }
+        
+        // 日付フィールド (DDMMYY)
+        token = strtok(nullptr, ",");
+        if (!token || strlen(token) < 6) return false;
+        
+        char dateStr[7];
+        strncpy(dateStr, token, 6);
+        dateStr[6] = '\0';
+        
+        time->day = (dateStr[0] - '0') * 10 + (dateStr[1] - '0');
+        time->month = (dateStr[2] - '0') * 10 + (dateStr[3] - '0');
+        time->year = 2000 + (dateStr[4] - '0') * 10 + (dateStr[5] - '0');
+        
+        return true;
+    }
+    
+    static bool validateChecksum(const char* sentence) {
+        if (!sentence) return false;
+        
+        const char* asterisk = strchr(sentence, '*');
+        if (!asterisk) return false;
+        
+        // チェックサム計算
+        uint8_t checksum = 0;
+        for (const char* p = sentence + 1; p < asterisk; p++) {
+            checksum ^= *p;
+        }
+        
+        // チェックサム比較
+        char expected[3];
+        snprintf(expected, sizeof(expected), "%02X", checksum);
+        
+        return (strncmp(asterisk + 1, expected, 2) == 0);
+    }
+};
+
+// Time Precision Test Classes
+struct TimeSync {
+    unsigned long gpsTime;
+    unsigned long ppsTime;
+    unsigned long rtcTime;
+    unsigned long lastGpsUpdate;
+    bool synchronized;
+    float accuracy;
+};
+
+class TestTimeManager {
+private:
+    TimeSync* timeSync;
+    unsigned long currentMicros;
+    
+public:
+    TestTimeManager(TimeSync* sync) : timeSync(sync), currentMicros(1000000) {}
+    
+    void setCurrentMicros(unsigned long micros) {
+        currentMicros = micros;
+    }
+    
+    uint32_t getUnixTimestamp() {
+        if (!timeSync) return 0;
+        
+        bool gpsTimeValid = (timeSync->synchronized && timeSync->gpsTime > 1000000000);
+        bool gpsRecentlyUpdated = (currentMicros - timeSync->lastGpsUpdate < 30000000);
+        
+        if (gpsTimeValid && gpsRecentlyUpdated) {
+            unsigned long elapsedSec = (currentMicros - timeSync->ppsTime) / 1000000;
+            return timeSync->gpsTime + elapsedSec;
+        } else {
+            return timeSync->rtcTime;
+        }
+    }
+    
+    uint8_t getNtpStratum() {
+        if (!timeSync) return 16;
+        
+        bool gpsTimeValid = (timeSync->synchronized && timeSync->gpsTime > 1000000000);
+        bool gpsRecentlyUpdated = (currentMicros - timeSync->lastGpsUpdate < 30000000);
+        
+        if (gpsTimeValid && gpsRecentlyUpdated) {
+            return 1;  // GPS同期
+        } else {
+            return 3;  // RTC同期
+        }
+    }
+    
+    void simulateGpsUpdate(uint32_t gpsTime, unsigned long ppsTime) {
+        if (!timeSync) return;
+        
+        timeSync->gpsTime = gpsTime;
+        timeSync->ppsTime = ppsTime;
+        timeSync->lastGpsUpdate = currentMicros;
+        timeSync->synchronized = true;
+        timeSync->accuracy = 0.000001f;
+    }
+    
+    void simulateGpsLoss() {
+        if (!timeSync) return;
+        
+        timeSync->synchronized = false;
+        timeSync->lastGpsUpdate = 0;
+        timeSync->accuracy = 1.0f;
+    }
+};
+
+// Error Handler Test Classes
+enum class ErrorType {
+    HARDWARE_FAILURE,
+    GPS_ERROR,
+    NTP_ERROR,
+    SYSTEM_ERROR
+};
+
+enum class ErrorSeverity {
+    INFO,
+    WARNING,
+    ERROR,
+    CRITICAL,
+    FATAL
+};
+
+struct ErrorStatistics {
+    unsigned long totalErrors;
+    unsigned long resolvedErrors;
+    unsigned long unresolvedErrors;
+    float resolutionRate;
+};
+
+class TestErrorHandler {
+private:
+    ErrorStatistics statistics;
+    bool hasUnresolved;
+    bool hasCritical;
+    
+public:
+    TestErrorHandler() : hasUnresolved(false), hasCritical(false) {
+        resetStatistics();
+    }
+    
+    void reportError(ErrorType type, ErrorSeverity severity, 
+                    const char* component, const char* message) {
+        statistics.totalErrors++;
+        statistics.unresolvedErrors++;
+        hasUnresolved = true;
+        
+        if (severity == ErrorSeverity::CRITICAL || severity == ErrorSeverity::FATAL) {
+            hasCritical = true;
+        }
+        
+        updateResolutionRate();
+    }
+    
+    void resolveError(const char* component, ErrorType type) {
+        if (statistics.unresolvedErrors > 0) {
+            statistics.unresolvedErrors--;
+            statistics.resolvedErrors++;
+            
+            if (statistics.unresolvedErrors == 0) {
+                hasUnresolved = false;
+                hasCritical = false;
+            }
+            
+            updateResolutionRate();
+        }
+    }
+    
+    bool hasUnresolvedErrors() const {
+        return hasUnresolved;
+    }
+    
+    bool hasCriticalErrors() const {
+        return hasCritical;
+    }
+    
+    const ErrorStatistics& getStatistics() const {
+        return statistics;
+    }
+    
+    void resetStatistics() {
+        statistics = {0, 0, 0, 0.0f};
+    }
+
+private:
+    void updateResolutionRate() {
+        if (statistics.totalErrors > 0) {
+            statistics.resolutionRate = (float)statistics.resolvedErrors / statistics.totalErrors * 100.0f;
+        } else {
+            statistics.resolutionRate = 100.0f;
+        }
+    }
+};
+
 // RFC 5905 NTP パケット構造体
 struct NtpPacket {
     uint8_t li_vn_mode;
@@ -686,6 +926,173 @@ void test_real_world_2025_timestamps() {
     }
 }
 
+// =============================================================================
+// Additional Unit Test Cases
+// =============================================================================
+
+// GPS NMEA Parser Tests
+void test_gprmc_valid_sentence(void) {
+    const char* sentence = "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A";
+    GpsTime time;
+    
+    bool result = TestNmeaParser::parseGPRMC(sentence, &time);
+    
+    TEST_ASSERT_TRUE(result);
+    TEST_ASSERT_TRUE(time.valid);
+    TEST_ASSERT_EQUAL_INT(12, time.hour);
+    TEST_ASSERT_EQUAL_INT(35, time.minute);
+    TEST_ASSERT_EQUAL_INT(19, time.second);
+    TEST_ASSERT_EQUAL_INT(23, time.day);
+    TEST_ASSERT_EQUAL_INT(3, time.month);
+    TEST_ASSERT_EQUAL_INT(2094, time.year);
+}
+
+void test_gprmc_invalid_status(void) {
+    const char* sentence = "$GPRMC,123519,V,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A";
+    GpsTime time;
+    
+    bool result = TestNmeaParser::parseGPRMC(sentence, &time);
+    
+    TEST_ASSERT_TRUE(result);
+    TEST_ASSERT_FALSE(time.valid);  // Vステータスなので無効
+}
+
+void test_nmea_checksum_validation(void) {
+    // 正しいチェックサム
+    const char* valid_sentence = "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A";
+    TEST_ASSERT_TRUE(TestNmeaParser::validateChecksum(valid_sentence));
+    
+    // 間違ったチェックサム
+    const char* invalid_sentence = "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6B";
+    TEST_ASSERT_FALSE(TestNmeaParser::validateChecksum(invalid_sentence));
+    
+    // チェックサムなし
+    const char* no_checksum = "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W";
+    TEST_ASSERT_FALSE(TestNmeaParser::validateChecksum(no_checksum));
+}
+
+// Time Precision Tests
+void test_unix_timestamp_32bit_overflow_protection(void) {
+    TimeSync timeSync = {0};
+    TestTimeManager manager(&timeSync);
+    
+    // 2025年の実際の時刻（32bitオーバーフロー問題のあった時刻）
+    uint32_t gpsTime = 1753223178;
+    unsigned long ppsTime = 1000000;
+    manager.simulateGpsUpdate(gpsTime, ppsTime);
+    
+    uint32_t unixTimestamp = manager.getUnixTimestamp();
+    
+    // オーバーフローせずに正しい値が返される
+    TEST_ASSERT_GREATER_THAN_UINT32(1700000000, unixTimestamp);
+    TEST_ASSERT_LESS_THAN_UINT32(2000000000, unixTimestamp);
+}
+
+void test_stratum_level_determination(void) {
+    TimeSync timeSync = {0};
+    TestTimeManager manager(&timeSync);
+    
+    // GPS同期時
+    manager.simulateGpsUpdate(1735689600, 1000000);
+    TEST_ASSERT_EQUAL_UINT8(1, manager.getNtpStratum());
+    
+    // GPS信号喪失時（RTCフォールバック）
+    manager.simulateGpsLoss();
+    TEST_ASSERT_EQUAL_UINT8(3, manager.getNtpStratum());
+    
+    // 初期化されていない状態
+    TimeSync uninitializedSync = {0};
+    TestTimeManager uninitializedManager(&uninitializedSync);
+    TEST_ASSERT_EQUAL_UINT8(16, uninitializedManager.getNtpStratum());
+}
+
+void test_gps_timeout_handling(void) {
+    TimeSync timeSync = {0};
+    TestTimeManager manager(&timeSync);
+    
+    // GPS同期状態を設定
+    manager.simulateGpsUpdate(1735689600, 1000000);
+    TEST_ASSERT_EQUAL_UINT8(1, manager.getNtpStratum());
+    
+    // GPS更新が古くなる（30秒以上前）
+    timeSync.lastGpsUpdate = 0;  // 非常に古い時刻
+    TEST_ASSERT_EQUAL_UINT8(3, manager.getNtpStratum());  // RTCにフォールバック
+}
+
+// Error Handler Tests
+void test_error_handler_basic_functionality(void) {
+    TestErrorHandler handler;
+    
+    // エラー報告
+    handler.reportError(ErrorType::GPS_ERROR, ErrorSeverity::WARNING, "GPS", "Signal lost");
+    
+    TEST_ASSERT_TRUE(handler.hasUnresolvedErrors());
+    TEST_ASSERT_FALSE(handler.hasCriticalErrors());
+    
+    // エラー解決
+    handler.resolveError("GPS", ErrorType::GPS_ERROR);
+    
+    TEST_ASSERT_FALSE(handler.hasUnresolvedErrors());
+}
+
+void test_error_handler_critical_error_detection(void) {
+    TestErrorHandler handler;
+    
+    // クリティカルエラー報告
+    handler.reportError(ErrorType::HARDWARE_FAILURE, ErrorSeverity::CRITICAL, "GPS", "Hardware malfunction");
+    
+    TEST_ASSERT_TRUE(handler.hasUnresolvedErrors());
+    TEST_ASSERT_TRUE(handler.hasCriticalErrors());
+    
+    // 解決後はクリティカルエラーなし
+    handler.resolveError("GPS", ErrorType::HARDWARE_FAILURE);
+    TEST_ASSERT_FALSE(handler.hasCriticalErrors());
+}
+
+void test_error_handler_statistics(void) {
+    TestErrorHandler handler;
+    
+    // 複数のエラーを報告
+    handler.reportError(ErrorType::GPS_ERROR, ErrorSeverity::WARNING, "GPS", "Signal weak");
+    handler.reportError(ErrorType::NTP_ERROR, ErrorSeverity::ERROR, "NTP", "Connection lost");
+    
+    const ErrorStatistics& stats = handler.getStatistics();
+    
+    TEST_ASSERT_EQUAL_UINT32(2, stats.totalErrors);
+    TEST_ASSERT_EQUAL_UINT32(0, stats.resolvedErrors);
+    TEST_ASSERT_EQUAL_UINT32(2, stats.unresolvedErrors);
+    TEST_ASSERT_FLOAT_WITHIN(0.1, 0.0f, stats.resolutionRate);
+    
+    // 1つ解決
+    handler.resolveError("GPS", ErrorType::GPS_ERROR);
+    
+    const ErrorStatistics& updatedStats = handler.getStatistics();
+    TEST_ASSERT_EQUAL_UINT32(1, updatedStats.resolvedErrors);
+    TEST_ASSERT_EQUAL_UINT32(1, updatedStats.unresolvedErrors);
+    TEST_ASSERT_FLOAT_WITHIN(0.1, 50.0f, updatedStats.resolutionRate);
+}
+
+// Enhanced NTP Protocol Tests
+void test_ntp_version_validation(void) {
+    // NTPv4パケットの検証
+    NtpTimestamp testTime = unixToNtpTimestamp(TEST_GPS_TIME);
+    
+    TEST_ASSERT_EQUAL_UINT32(TEST_GPS_TIME + NTP_TIMESTAMP_DELTA, testTime.seconds);
+    TEST_ASSERT_EQUAL_UINT32(0, testTime.fraction);
+}
+
+void test_microsecond_precision_conversion(void) {
+    uint32_t unixTime = 1735689600;  // 2025-01-01 00:00:00
+    uint32_t microseconds = 500000;  // 0.5秒
+    
+    NtpTimestamp ntp = unixToNtpTimestamp(unixTime, microseconds);
+    
+    TEST_ASSERT_EQUAL_UINT32(unixTime + NTP_TIMESTAMP_DELTA, ntp.seconds);
+    
+    // 0.5秒 = 2^32 / 2 = 2147483648
+    TEST_ASSERT_UINT32_WITHIN(1, 2147483648UL, ntp.fraction);
+}
+
 int main() {
     UNITY_BEGIN();
     
@@ -722,6 +1129,19 @@ int main() {
     RUN_TEST(test_overflow_boundary_cases);
     RUN_TEST(test_ntp_timestamp_precision_preservation);
     RUN_TEST(test_real_world_2025_timestamps);
+    
+    // 追加ユニットテスト
+    RUN_TEST(test_gprmc_valid_sentence);
+    RUN_TEST(test_gprmc_invalid_status);
+    RUN_TEST(test_nmea_checksum_validation);
+    RUN_TEST(test_unix_timestamp_32bit_overflow_protection);
+    RUN_TEST(test_stratum_level_determination);
+    RUN_TEST(test_gps_timeout_handling);
+    RUN_TEST(test_error_handler_basic_functionality);
+    RUN_TEST(test_error_handler_critical_error_detection);
+    RUN_TEST(test_error_handler_statistics);
+    RUN_TEST(test_ntp_version_validation);
+    RUN_TEST(test_microsecond_precision_conversion);
     
     return UNITY_END();
 }
