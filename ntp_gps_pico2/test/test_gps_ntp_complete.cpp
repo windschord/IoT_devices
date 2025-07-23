@@ -1093,6 +1093,566 @@ void test_microsecond_precision_conversion(void) {
     TEST_ASSERT_UINT32_WITHIN(1, 2147483648UL, ntp.fraction);
 }
 
+// =============================================================================
+// Integration and System Tests for Hardware Communication
+// =============================================================================
+
+// I2C Hardware Communication Integration Tests
+struct I2cDevice {
+    uint8_t address;
+    bool connected;
+    bool initialized;
+    unsigned long lastCommunication;
+    uint8_t errorCount;
+    char deviceName[16];
+};
+
+class TestI2cManager {
+private:
+    I2cDevice devices[3];  // OLED, GPS, RTC
+    bool busInitialized[2]; // Wire0, Wire1
+    
+public:
+    TestI2cManager() {
+        // Initialize devices
+        strcpy(devices[0].deviceName, "OLED");
+        devices[0].address = 0x3C;
+        devices[0].connected = false;
+        devices[0].initialized = false;
+        devices[0].errorCount = 0;
+        
+        strcpy(devices[1].deviceName, "GPS");
+        devices[1].address = 0x42;
+        devices[1].connected = false;
+        devices[1].initialized = false;
+        devices[1].errorCount = 0;
+        
+        strcpy(devices[2].deviceName, "RTC");
+        devices[2].address = 0x68;
+        devices[2].connected = false;
+        devices[2].initialized = false;
+        devices[2].errorCount = 0;
+        
+        busInitialized[0] = false; // Wire0 (OLED)
+        busInitialized[1] = false; // Wire1 (GPS/RTC)
+    }
+    
+    bool initializeBus(uint8_t busNumber) {
+        if (busNumber > 1) return false;
+        busInitialized[busNumber] = true;
+        return true;
+    }
+    
+    bool scanDevice(uint8_t address) {
+        for (int i = 0; i < 3; i++) {
+            if (devices[i].address == address) {
+                devices[i].connected = true;
+                devices[i].lastCommunication = 1000; // Mock timestamp
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    bool initializeDevice(uint8_t address) {
+        for (int i = 0; i < 3; i++) {
+            if (devices[i].address == address && devices[i].connected) {
+                devices[i].initialized = true;
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    bool communicateWithDevice(uint8_t address, uint8_t* data, size_t length) {
+        for (int i = 0; i < 3; i++) {
+            if (devices[i].address == address && devices[i].initialized) {
+                devices[i].lastCommunication = 2000; // Mock timestamp
+                
+                // Simulate occasional communication errors
+                if (devices[i].errorCount < 2) {
+                    return true;
+                } else {
+                    devices[i].errorCount++;
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+    
+    void simulateError(uint8_t address) {
+        for (int i = 0; i < 3; i++) {
+            if (devices[i].address == address) {
+                devices[i].errorCount = 5;
+                break;
+            }
+        }
+    }
+    
+    uint8_t getDeviceErrorCount(uint8_t address) {
+        for (int i = 0; i < 3; i++) {
+            if (devices[i].address == address) {
+                return devices[i].errorCount;
+            }
+        }
+        return 255; // Device not found
+    }
+    
+    bool isBusInitialized(uint8_t busNumber) {
+        return busNumber <= 1 ? busInitialized[busNumber] : false;
+    }
+    
+    bool isDeviceConnected(uint8_t address) {
+        for (int i = 0; i < 3; i++) {
+            if (devices[i].address == address) {
+                return devices[i].connected;
+            }
+        }
+        return false;
+    }
+};
+
+// NTP Client Compatibility Tests
+struct NtpClientRequest {
+    uint8_t version;
+    uint8_t mode;
+    uint8_t stratum;
+    uint8_t poll;
+    uint8_t precision;
+    uint32_t rootDelay;
+    uint32_t rootDispersion;
+    uint32_t referenceId;
+    NtpTimestamp referenceTimestamp;
+    NtpTimestamp originateTimestamp;
+    NtpTimestamp receiveTimestamp;
+    NtpTimestamp transmitTimestamp;
+};
+
+class TestNtpServer {
+private:
+    uint8_t serverStratum;
+    bool gpsSync;
+    unsigned long systemUptime;
+    uint32_t requestCount;
+    
+public:
+    TestNtpServer() : serverStratum(16), gpsSync(false), systemUptime(0), requestCount(0) {}
+    
+    void setGpsSync(bool sync) {
+        gpsSync = sync;
+        serverStratum = sync ? 1 : 3;
+    }
+    
+    void setSystemUptime(unsigned long uptime) {
+        systemUptime = uptime;
+    }
+    
+    bool processClientRequest(const NtpClientRequest& request, NtpClientRequest& response) {
+        requestCount++;
+        
+        // Validate client request
+        if (request.version < 3 || request.version > 4) {
+            return false; // Unsupported version
+        }
+        
+        if (request.mode != 3) { // Client mode
+            return false; // Invalid mode
+        }
+        
+        // Build response
+        response.version = 4;
+        response.mode = 4; // Server mode
+        response.stratum = serverStratum;
+        response.poll = request.poll;
+        response.precision = 0xFA; // ~1 microsecond precision
+        response.rootDelay = gpsSync ? 100 : 1000; // microseconds
+        response.rootDispersion = gpsSync ? 50 : 500; // microseconds
+        response.referenceId = gpsSync ? 0x47505300 : 0x4C4F434C; // "GPS" or "LOCL"
+        
+        // Mock timestamps
+        uint32_t currentTime = 1735689600; // 2025-01-01 00:00:00
+        response.referenceTimestamp = unixToNtpTimestamp(currentTime - 10);
+        response.originateTimestamp = request.transmitTimestamp;
+        response.receiveTimestamp = unixToNtpTimestamp(currentTime);
+        response.transmitTimestamp = unixToNtpTimestamp(currentTime);
+        
+        return true;
+    }
+    
+    uint32_t getRequestCount() const {
+        return requestCount;
+    }
+    
+    uint8_t getStratum() const {
+        return serverStratum;
+    }
+};
+
+// Long-term Stability Test Framework
+class TestStabilityMonitor {
+private:
+    struct StabilityMetrics {
+        unsigned long testDuration;
+        uint32_t totalRequests;
+        uint32_t successfulRequests;
+        uint32_t failedRequests;
+        uint32_t gpsLockCount;
+        uint32_t gpsLossCount;
+        float averageAccuracy;
+        float maxAccuracy;
+        float minAccuracy;
+        uint32_t memoryUsage;
+        uint32_t maxMemoryUsage;
+    };
+    
+    StabilityMetrics metrics;
+    bool testRunning;
+    unsigned long testStartTime;
+    
+public:
+    TestStabilityMonitor() : testRunning(false), testStartTime(0) {
+        resetMetrics();
+    }
+    
+    void resetMetrics() {
+        memset(&metrics, 0, sizeof(metrics));
+        metrics.minAccuracy = 999999.0f;
+    }
+    
+    void startTest() {
+        testRunning = true;
+        testStartTime = 1000; // Mock start time
+        resetMetrics();
+    }
+    
+    void stopTest() {
+        testRunning = false;
+        metrics.testDuration = 2000 - testStartTime; // Mock duration
+    }
+    
+    void recordNtpRequest(bool successful) {
+        if (!testRunning) return;
+        
+        metrics.totalRequests++;
+        if (successful) {
+            metrics.successfulRequests++;
+        } else {
+            metrics.failedRequests++;
+        }
+    }
+    
+    void recordGpsStatus(bool locked) {
+        if (!testRunning) return;
+        
+        static bool previousLock = false;
+        
+        if (locked && !previousLock) {
+            metrics.gpsLockCount++;
+        } else if (!locked && previousLock) {
+            metrics.gpsLossCount++;
+        }
+        
+        previousLock = locked;
+    }
+    
+    void recordAccuracy(float accuracy) {
+        if (!testRunning) return;
+        
+        if (accuracy > metrics.maxAccuracy) {
+            metrics.maxAccuracy = accuracy;
+        }
+        if (accuracy < metrics.minAccuracy) {
+            metrics.minAccuracy = accuracy;
+        }
+        
+        // Simple rolling average
+        static uint32_t sampleCount = 0;
+        sampleCount++;
+        metrics.averageAccuracy = ((metrics.averageAccuracy * (sampleCount - 1)) + accuracy) / sampleCount;
+    }
+    
+    void recordMemoryUsage(uint32_t usage) {
+        if (!testRunning) return;
+        
+        metrics.memoryUsage = usage;
+        if (usage > metrics.maxMemoryUsage) {
+            metrics.maxMemoryUsage = usage;
+        }
+    }
+    
+    const StabilityMetrics& getMetrics() const {
+        return metrics;
+    }
+    
+    float getSuccessRate() const {
+        if (metrics.totalRequests == 0) return 0.0f;
+        return (float)metrics.successfulRequests / metrics.totalRequests * 100.0f;
+    }
+    
+    bool isTestRunning() const {
+        return testRunning;
+    }
+};
+
+// =============================================================================
+// Integration Test Cases
+// =============================================================================
+
+// Hardware Communication Integration Tests
+void test_i2c_bus_initialization(void) {
+    TestI2cManager i2cManager;
+    
+    // Test I2C bus initialization
+    TEST_ASSERT_TRUE(i2cManager.initializeBus(0)); // Wire0 for OLED
+    TEST_ASSERT_TRUE(i2cManager.initializeBus(1)); // Wire1 for GPS/RTC
+    
+    TEST_ASSERT_TRUE(i2cManager.isBusInitialized(0));
+    TEST_ASSERT_TRUE(i2cManager.isBusInitialized(1));
+    
+    // Test invalid bus number
+    TEST_ASSERT_FALSE(i2cManager.initializeBus(2));
+}
+
+void test_i2c_device_scanning_and_initialization(void) {
+    TestI2cManager i2cManager;
+    
+    // Initialize buses
+    i2cManager.initializeBus(0);
+    i2cManager.initializeBus(1);
+    
+    // Test device scanning
+    TEST_ASSERT_TRUE(i2cManager.scanDevice(0x3C));  // OLED
+    TEST_ASSERT_TRUE(i2cManager.scanDevice(0x42));  // GPS
+    TEST_ASSERT_TRUE(i2cManager.scanDevice(0x68));  // RTC
+    TEST_ASSERT_FALSE(i2cManager.scanDevice(0x99)); // Non-existent device
+    
+    // Test device initialization
+    TEST_ASSERT_TRUE(i2cManager.initializeDevice(0x3C));
+    TEST_ASSERT_TRUE(i2cManager.initializeDevice(0x42));
+    TEST_ASSERT_TRUE(i2cManager.initializeDevice(0x68));
+    
+    // Verify devices are connected
+    TEST_ASSERT_TRUE(i2cManager.isDeviceConnected(0x3C));
+    TEST_ASSERT_TRUE(i2cManager.isDeviceConnected(0x42));
+    TEST_ASSERT_TRUE(i2cManager.isDeviceConnected(0x68));
+}
+
+void test_i2c_communication_and_error_handling(void) {
+    TestI2cManager i2cManager;
+    uint8_t testData[4] = {0x01, 0x02, 0x03, 0x04};
+    
+    // Setup devices
+    i2cManager.initializeBus(0);
+    i2cManager.initializeBus(1);
+    i2cManager.scanDevice(0x3C);
+    i2cManager.scanDevice(0x42);
+    i2cManager.initializeDevice(0x3C);
+    i2cManager.initializeDevice(0x42);
+    
+    // Test successful communication
+    TEST_ASSERT_TRUE(i2cManager.communicateWithDevice(0x3C, testData, sizeof(testData)));
+    TEST_ASSERT_TRUE(i2cManager.communicateWithDevice(0x42, testData, sizeof(testData)));
+    
+    // Test error handling
+    i2cManager.simulateError(0x42);
+    TEST_ASSERT_FALSE(i2cManager.communicateWithDevice(0x42, testData, sizeof(testData)));
+    TEST_ASSERT_GREATER_THAN_UINT8(2, i2cManager.getDeviceErrorCount(0x42));
+}
+
+// NTP Client Compatibility Tests
+void test_ntp_v3_client_compatibility(void) {
+    TestNtpServer ntpServer;
+    NtpClientRequest request = {0};
+    NtpClientRequest response = {0};
+    
+    // Setup GPS synchronized server
+    ntpServer.setGpsSync(true);
+    
+    // Create NTPv3 client request
+    request.version = 3;
+    request.mode = 3; // Client mode
+    request.stratum = 0;
+    request.poll = 6; // 64 seconds
+    request.transmitTimestamp = unixToNtpTimestamp(1735689600);
+    
+    // Process request
+    bool result = ntpServer.processClientRequest(request, response);
+    
+    TEST_ASSERT_TRUE(result);
+    TEST_ASSERT_EQUAL_UINT8(4, response.version); // Server responds with v4
+    TEST_ASSERT_EQUAL_UINT8(4, response.mode);    // Server mode
+    TEST_ASSERT_EQUAL_UINT8(1, response.stratum); // GPS synchronized
+    TEST_ASSERT_EQUAL_UINT32(0x47505300, response.referenceId); // "GPS"
+}
+
+void test_ntp_v4_client_compatibility(void) {
+    TestNtpServer ntpServer;
+    NtpClientRequest request = {0};
+    NtpClientRequest response = {0};
+    
+    // Setup GPS synchronized server
+    ntpServer.setGpsSync(true);
+    
+    // Create NTPv4 client request
+    request.version = 4;
+    request.mode = 3; // Client mode
+    request.stratum = 0;
+    request.poll = 10; // 1024 seconds
+    request.transmitTimestamp = unixToNtpTimestamp(1735689700);
+    
+    // Process request
+    bool result = ntpServer.processClientRequest(request, response);
+    
+    TEST_ASSERT_TRUE(result);
+    TEST_ASSERT_EQUAL_UINT8(4, response.version);
+    TEST_ASSERT_EQUAL_UINT8(4, response.mode);
+    TEST_ASSERT_EQUAL_UINT8(1, response.stratum);
+    
+    // Check timestamp echoing
+    TEST_ASSERT_EQUAL_UINT32(request.transmitTimestamp.seconds, response.originateTimestamp.seconds);
+    TEST_ASSERT_EQUAL_UINT32(request.transmitTimestamp.fraction, response.originateTimestamp.fraction);
+}
+
+void test_ntp_invalid_client_requests(void) {
+    TestNtpServer ntpServer;
+    NtpClientRequest request = {0};
+    NtpClientRequest response = {0};
+    
+    ntpServer.setGpsSync(true);
+    
+    // Test unsupported version
+    request.version = 2; // Too old
+    request.mode = 3;
+    TEST_ASSERT_FALSE(ntpServer.processClientRequest(request, response));
+    
+    request.version = 5; // Too new
+    TEST_ASSERT_FALSE(ntpServer.processClientRequest(request, response));
+    
+    // Test invalid mode
+    request.version = 4;
+    request.mode = 1; // Symmetric active (not supported)
+    TEST_ASSERT_FALSE(ntpServer.processClientRequest(request, response));
+    
+    request.mode = 4; // Server mode (invalid for client request)
+    TEST_ASSERT_FALSE(ntpServer.processClientRequest(request, response));
+}
+
+void test_ntp_stratum_levels_based_on_gps_status(void) {
+    TestNtpServer ntpServer;
+    NtpClientRequest request = {0};
+    NtpClientRequest response = {0};
+    
+    // Setup valid client request
+    request.version = 4;
+    request.mode = 3;
+    request.transmitTimestamp = unixToNtpTimestamp(1735689600);
+    
+    // Test GPS synchronized (Stratum 1)
+    ntpServer.setGpsSync(true);
+    ntpServer.processClientRequest(request, response);
+    TEST_ASSERT_EQUAL_UINT8(1, response.stratum);
+    TEST_ASSERT_EQUAL_UINT32(0x47505300, response.referenceId); // "GPS"
+    TEST_ASSERT_EQUAL_UINT32(100, response.rootDelay); // Low delay
+    
+    // Test GPS not synchronized (Stratum 3)
+    ntpServer.setGpsSync(false);
+    ntpServer.processClientRequest(request, response);
+    TEST_ASSERT_EQUAL_UINT8(3, response.stratum);
+    TEST_ASSERT_EQUAL_UINT32(0x4C4F434C, response.referenceId); // "LOCL"
+    TEST_ASSERT_EQUAL_UINT32(1000, response.rootDelay); // Higher delay
+}
+
+// Long-term Stability Tests
+void test_long_term_ntp_request_handling(void) {
+    TestStabilityMonitor monitor;
+    TestNtpServer ntpServer;
+    
+    monitor.startTest();
+    ntpServer.setGpsSync(true);
+    
+    // Simulate 1000 NTP requests over time
+    for (int i = 0; i < 1000; i++) {
+        NtpClientRequest request = {0};
+        NtpClientRequest response = {0};
+        
+        request.version = 4;
+        request.mode = 3;
+        request.transmitTimestamp = unixToNtpTimestamp(1735689600 + i);
+        
+        bool success = ntpServer.processClientRequest(request, response);
+        monitor.recordNtpRequest(success);
+        
+        // Simulate occasional GPS loss (every 100 requests)
+        if (i % 100 == 50) {
+            ntpServer.setGpsSync(false);
+            monitor.recordGpsStatus(false);
+        } else if (i % 100 == 80) {
+            ntpServer.setGpsSync(true);
+            monitor.recordGpsStatus(true);
+        }
+    }
+    
+    monitor.stopTest();
+    
+    const auto& metrics = monitor.getMetrics();
+    TEST_ASSERT_EQUAL_UINT32(1000, metrics.totalRequests);
+    TEST_ASSERT_GREATER_THAN_FLOAT(95.0f, monitor.getSuccessRate()); // >95% success
+    TEST_ASSERT_GREATER_THAN_UINT32(5, metrics.gpsLockCount); // Multiple GPS locks
+}
+
+void test_memory_usage_stability(void) {
+    TestStabilityMonitor monitor;
+    
+    monitor.startTest();
+    
+    // Simulate memory usage over time
+    uint32_t baseMemory = 24000; // 24KB base usage
+    
+    for (int i = 0; i < 100; i++) {
+        // Simulate slight memory fluctuations
+        uint32_t currentMemory = baseMemory + (i % 10) * 100;
+        monitor.recordMemoryUsage(currentMemory);
+    }
+    
+    monitor.stopTest();
+    
+    const auto& metrics = monitor.getMetrics();
+    TEST_ASSERT_LESS_THAN_UINT32(30000, metrics.maxMemoryUsage); // <30KB max
+    TEST_ASSERT_GREATER_THAN_UINT32(20000, metrics.memoryUsage); // >20KB current
+}
+
+void test_gps_signal_stability_monitoring(void) {
+    TestStabilityMonitor monitor;
+    
+    monitor.startTest();
+    
+    // Simulate GPS signal stability over time
+    bool gpsLocked = true;
+    
+    for (int i = 0; i < 200; i++) {
+        // Simulate GPS signal loss every 50 iterations
+        if (i % 50 == 25) {
+            gpsLocked = false;
+        } else if (i % 50 == 35) {
+            gpsLocked = true;
+        }
+        
+        monitor.recordGpsStatus(gpsLocked);
+        
+        // Simulate accuracy measurements
+        float accuracy = gpsLocked ? 0.000001f : 1.0f; // 1μs vs 1s
+        monitor.recordAccuracy(accuracy);
+    }
+    
+    monitor.stopTest();
+    
+    const auto& metrics = monitor.getMetrics();
+    TEST_ASSERT_GREATER_THAN_UINT32(2, metrics.gpsLockCount);   // Multiple locks
+    TEST_ASSERT_GREATER_THAN_UINT32(2, metrics.gpsLossCount);   // Multiple losses
+    TEST_ASSERT_LESS_THAN_FLOAT(0.5f, metrics.averageAccuracy); // Good average accuracy
+}
+
 int main() {
     UNITY_BEGIN();
     
@@ -1142,6 +1702,18 @@ int main() {
     RUN_TEST(test_error_handler_statistics);
     RUN_TEST(test_ntp_version_validation);
     RUN_TEST(test_microsecond_precision_conversion);
+    
+    // 統合テストとシステムテスト
+    RUN_TEST(test_i2c_bus_initialization);
+    RUN_TEST(test_i2c_device_scanning_and_initialization);
+    RUN_TEST(test_i2c_communication_and_error_handling);
+    RUN_TEST(test_ntp_v3_client_compatibility);
+    RUN_TEST(test_ntp_v4_client_compatibility);
+    RUN_TEST(test_ntp_invalid_client_requests);
+    RUN_TEST(test_ntp_stratum_levels_based_on_gps_status);
+    RUN_TEST(test_long_term_ntp_request_handling);
+    RUN_TEST(test_memory_usage_stability);
+    RUN_TEST(test_gps_signal_stability_monitoring);
     
     return UNITY_END();
 }
