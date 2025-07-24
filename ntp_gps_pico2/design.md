@@ -47,6 +47,8 @@ graph TB
         NET_HAL[Network HAL]
         DISPLAY_HAL[Display HAL]
         RTC_HAL[RTC HAL]
+        BUTTON_HAL[Button HAL]
+        STORAGE_HAL[Storage HAL]
     end
     
     subgraph "Hardware Layer"
@@ -54,6 +56,8 @@ graph TB
         W5500_HW[W5500]
         OLED_HW[SH1106]
         PPS_HW[PPS Input]
+        BUTTON_HW[Reset Button]
+        FLASH_HW[Flash Memory]
     end
     
     NTP --> TIME
@@ -62,10 +66,14 @@ graph TB
     TIME --> GPS_HAL
     TIME --> RTC_HAL
     LOG --> NET_HAL
+    CONFIG --> STORAGE_HAL
+    CONFIG --> BUTTON_HAL
     GPS_HAL --> GNSS_HW
     GPS_HAL --> PPS_HW
     NET_HAL --> W5500_HW
     DISPLAY_HAL --> OLED_HW
+    BUTTON_HAL --> BUTTON_HW
+    STORAGE_HAL --> FLASH_HW
 ```
 
 ## Hardware Wiring Diagram
@@ -84,6 +92,7 @@ GPIO Pins:
 - GPIO 3             → ZED-F9T SAFEBOOT (optional, for firmware updates)
 - GPIO 4             → Status LED 1 (GNSS Fix Status) - Green
 - GPIO 5             → Status LED 2 (Network Status) - Blue  
+- GPIO 11            → Configuration Reset Button (active low, internal pull-up)
 - GPIO 14            → Status LED 3 (Error Status) - Red
 - GPIO 15            → Status LED 4 (PPS Status) - Yellow
 - GPIO 16 (SPI0 RX)  → W5500 MISO
@@ -129,6 +138,7 @@ GNSS Antenna:
                    │                     │
     LED1 (Green)───┤ GPIO 4              │ ← GNSS Fix Status
     LED2 (Blue)────┤ GPIO 5              │ ← Network Status
+    Reset Button───┤ GPIO 11             │ ← Config Reset (active low)
     LED3 (Red)─────┤ GPIO 14             │ ← Error Status
     LED4 (Yellow)──┤ GPIO 15             │ ← PPS Status
                    │                     │
@@ -146,6 +156,8 @@ Note: Both I2C buses require 4.7kΩ pull-up resistors on SDA and SCL lines
       I2C0 (GPIO 0/1): OLED Display only
       I2C1 (GPIO 6/7): GPS Module and RTC (shared bus)
       LEDs require 330Ω current limiting resistors
+      Reset button: GPIO 11 with internal pull-up, momentary switch to GND
+      Button functions: Short press (<2s): Display cycle, Long press (>5s): Factory reset
 ```
 
 ## Library Dependencies
@@ -227,14 +239,26 @@ Note: Both I2C buses require 4.7kΩ pull-up resistors on SDA and SCL lines
   - 衛星コンステレーション別信号強度表示
 
 ### Configuration Service
-- **Purpose**: システム設定管理
+- **Purpose**: 包括的なシステム設定管理と永続化
 - **Interfaces**:
-  - フラッシュメモリ読み書き
-  - Web設定インターフェース
+  - EEPROMエミュレーション（フラッシュメモリ専用領域）
+  - シンプルWeb設定インターフェース
+  - 物理リセットボタン処理
 - **Key Functions**:
-  - 設定ファイル管理
-  - デフォルト設定適用
-  - 設定検証
+  - **永続化ストレージ管理**:
+    - CRC32チェックサム検証による設定整合性確保
+    - 破損設定の検出と工場出荷時設定への自動復旧
+  - **Web設定インターフェース**:
+    - 全設定項目の変更対応（ネットワーク、GNSS、NTP、ログ、監視）
+    - リアルタイム設定検証
+  - **物理制御機能**:
+    - リセットボタンのデバウンス処理
+    - 短押し（<2秒）：ディスプレイモード切り替え
+    - 長押し（>5秒）：工場出荷時設定リセット
+  - **設定管理機能**:
+    - 設定値範囲検証と型安全性確保
+    - デフォルト設定フォールバック処理
+    - 設定変更通知とコールバックシステム
 
 ### Logging Service
 - **Purpose**: ログ生成とSyslog転送
@@ -255,6 +279,38 @@ Note: Both I2C buses require 4.7kΩ pull-up resistors on SDA and SCL lines
   - NTP統計メトリクス
   - GPS精度メトリクス
   - システム状態メトリクス
+
+### Button HAL (Hardware Abstraction Layer)
+- **Purpose**: 物理ボタン制御とイベント処理
+- **Interfaces**:
+  - GPIO割り込み処理（GPIO 11）
+  - デバウンス処理とタイミング制御
+  - ボタンイベントコールバックシステム
+- **Key Functions**:
+  - **ボタン状態管理**:
+    - ハードウェア読み取りとデバウンス（20ms間隔）
+    - 短押し/長押し検出（2秒/5秒しきい値）
+    - ボタンリリース検出と処理
+  - **イベント通知**:
+    - 短押し：ディスプレイモード切り替えコールバック
+    - 長押し：工場出荷時設定リセットコールバック
+    - ボタン状態変更通知システム
+  - **安全性機能**:
+    - 誤操作防止（長押し時の確認機構）
+    - 連続押下防止（クールダウン期間）
+
+### Storage HAL (Hardware Abstraction Layer)
+- **Purpose**: 設定データの永続化とフラッシュメモリ管理
+- **Interfaces**:
+  - EEPROMエミュレーション（フラッシュメモリ専用領域）
+  - CRC32整合性チェック
+- **Key Functions**:
+  - **永続化ストレージ管理**:
+    - フラッシュメモリ専用領域（4KBセクター）
+    - 電源断時の書き込み保護
+  - **データ整合性保証**:
+    - CRC32チェックサム検証（読み込み/書き込み時）
+    - 破損データ検出と工場出荷時設定への復旧
 
 ## Data Models
 
@@ -334,6 +390,43 @@ typedef struct {
 } config_t;
 ```
 
+### Configuration Management Structure
+```c
+#define CONFIG_MAGIC 0x47505341  // "GPSA" - GPS NTP Server Config
+
+typedef struct {
+    uint32_t magic;           // Magic number for validation
+    uint16_t size;            // Configuration data size
+    uint32_t crc32;           // CRC32 checksum
+    uint32_t timestamp;       // Last modification timestamp
+} config_header_t;
+
+typedef struct {
+    config_header_t header;   // Configuration header
+    config_t        data;     // Configuration data
+    uint8_t         padding[64]; // Padding for alignment
+} persistent_config_t;
+```
+
+### Button Control Structure
+```c
+typedef enum {
+    BUTTON_IDLE,              // Button not pressed
+    BUTTON_PRESSED,           // Button just pressed
+    BUTTON_SHORT_PRESS,       // Short press detected (<2s)
+    BUTTON_LONG_PRESS,        // Long press detected (>5s)
+    BUTTON_DEBOUNCE          // Debouncing in progress
+} button_state_t;
+
+typedef struct {
+    button_state_t state;     // Current button state
+    uint32_t press_start;     // Press start timestamp
+    uint32_t last_read;       // Last button read time
+    uint8_t  debounce_count;  // Debounce counter
+    bool     long_press_triggered; // Long press action triggered
+} button_control_t;
+```
+
 ## Error Handling
 
 ### GNSS Signal Loss
@@ -355,6 +448,41 @@ typedef struct {
 - **Detection**: 通信タイムアウト、異常応答
 - **Response**: エラー状態表示、セーフモード移行
 - **Recovery**: ハードウェアリセット、設定復旧
+
+### Configuration Corruption Recovery
+- **Detection**: 
+  - CRC32チェックサム不一致の検出
+  - マジックナンバー検証失敗
+  - 設定値範囲外エラー
+- **Response**: 
+  - 設定破損時：工場出荷時設定への自動フォールバック
+  - 破損設定の詳細ログ出力とメトリクス更新
+- **Recovery**: 
+  - 工場出荷時設定の書き込みと正常動作の復旧
+
+### Physical Button Failures
+- **Detection**: 
+  - ボタン読み取りエラーの検出
+  - 異常な連続押下パターン
+  - デバウンス処理タイムアウト
+- **Response**: 
+  - ボタン機能の一時無効化
+  - Web設定インターフェースでのフォールバック操作
+  - ハードウェア診断ログの出力
+- **Recovery**: 
+  - ボタン状態の定期監視と自動復旧
+  - 代替リセット方法の提供（Web経由）
+
+### Web Configuration Interface Errors
+- **Detection**: 
+  - 不正な設定値の受信
+  - JSONパース エラー
+  - HTTP要求フォーマット異常
+- **Response**: 
+  - 不正設定の拒否と詳細エラーメッセージ
+  - セキュリティログの出力
+- **Recovery**: 
+  - 現在の有効設定の維持
 
 ### Memory Management
 - **Prevention**: 静的メモリ割り当て、スタック監視
