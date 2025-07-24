@@ -12,8 +12,7 @@ void DisplayManager::init() {
     display->clearDisplay();
     display->display();
     
-    // Initialize button pin
-    pinMode(BTN_DISPLAY_PIN, INPUT_PULLUP);
+    // Button pin initialization moved to PhysicalReset (Button HAL)
     
     displayCount = 0;
     lastDisplay = 0;

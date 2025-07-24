@@ -21,6 +21,7 @@
 #include "PrometheusMetrics.h"
 #include "SystemController.h"
 #include "ErrorHandler.h"
+#include "PhysicalReset.h"
 
 // Hardware configuration moved to HardwareConfig.h
 
@@ -45,6 +46,7 @@ LoggingService* loggingService = nullptr;
 PrometheusMetrics* prometheusMetrics = nullptr;
 SystemController systemController;
 ErrorHandler errorHandler;
+PhysicalReset physicalReset;
 
 // Global state variables
 volatile unsigned long lastPps = 0;
@@ -337,6 +339,15 @@ void setup()
   systemController.updateDisplayStatus(true); // Display is always available
   
   LOG_INFO_MSG("SYSTEM", "SystemController initialized and services registered");
+  
+  // Initialize PhysicalReset with DisplayManager and ConfigManager
+  if (physicalReset.initialize(&displayManager, &configManager)) {
+    LOG_INFO_MSG("RESET", "PhysicalReset initialized successfully");
+  } else {
+    LOG_ERR_MSG("RESET", "PhysicalReset initialization failed");
+    REPORT_SW_ERROR("RESET", "PhysicalReset initialization failed");
+  }
+  
   LOG_INFO_MSG("SYSTEM", "System initialization completed successfully");
   Serial.println("System initialization completed");
 }
@@ -347,6 +358,9 @@ void loop()
 {
   // Error handler update (error monitoring and recovery)
   errorHandler.update();
+  
+  // Physical reset button handling (high priority)
+  physicalReset.update();
   
   // System controller update (system-wide health monitoring and state management)
   systemController.update();
