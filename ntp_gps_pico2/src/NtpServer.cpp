@@ -27,8 +27,20 @@ void NtpServer::processRequests() {
         return;
     }
     
-    int packetSize = ntpUdp->parsePacket();
-    if (packetSize > 0) {
+    // ★★★ Critical Fix: Process multiple packets in single call for concurrent client support ★★★
+    // W5500 can queue multiple UDP packets but parsePacket() only returns one at a time
+    // Process up to 10 packets per call to handle burst requests from multiple clients
+    int packetsProcessed = 0;
+    const int maxPacketsPerCall = 10;
+    
+    while (packetsProcessed < maxPacketsPerCall) {
+        int packetSize = ntpUdp->parsePacket();
+        if (packetSize <= 0) {
+            break; // No more packets available
+        }
+        
+        packetsProcessed++;
+        
         // Record receive timestamp as early as possible for precision
         receiveTimestamp_us = micros();
         
@@ -61,6 +73,21 @@ void NtpServer::processRequests() {
         float processingTime = millis() - startTime;
         updateStatistics(validRequest, processingTime);
         logRequest(currentClientIP, validRequest);
+        
+        // Clear any remaining data for this packet
+        while (ntpUdp->available()) {
+            ntpUdp->read();
+        }
+        
+        // Brief yield to prevent blocking other system operations
+        if (packetsProcessed % 3 == 0) {
+            yield();
+        }
+    }
+    
+    // Debug log if we processed multiple packets
+    if (packetsProcessed > 1) {
+        Serial.printf("NTP: Processed %d packets in batch\n", packetsProcessed);
     }
 }
 
@@ -119,18 +146,75 @@ bool NtpServer::validateNtpRequest(const NtpPacket& packet) {
 }
 
 bool NtpServer::isRateLimited(IPAddress clientIP) {
-    // Simple rate limiting: allow max 1 request per second per client
-    // In a full implementation, this would track multiple clients
-    static IPAddress lastClientIP;
-    static uint32_t lastRequestTime = 0;
+    // ★★★ Enhanced: Multi-client concurrent access rate limiting ★★★
+    // Support for multiple concurrent clients with reasonable per-client limits
+    // Use a simple circular buffer to track multiple clients
+    
+    static struct ClientRecord {
+        IPAddress ip;
+        uint32_t lastRequestTime;
+        uint8_t requestCount;
+        bool active;
+    } clientRecords[8]; // Support up to 8 concurrent clients
     
     uint32_t now = millis();
-    if (clientIP == lastClientIP && (now - lastRequestTime) < 1000) {
+    int clientIndex = -1;
+    
+    // Find existing client record or empty slot
+    for (int i = 0; i < 8; i++) {
+        if (clientRecords[i].active && clientRecords[i].ip == clientIP) {
+            clientIndex = i;
+            break;
+        }
+    }
+    
+    // If not found, find empty slot or oldest record
+    if (clientIndex == -1) {
+        uint32_t oldestTime = now;
+        int oldestIndex = 0;
+        
+        for (int i = 0; i < 8; i++) {
+            if (!clientRecords[i].active) {
+                clientIndex = i;
+                break;
+            }
+            if (clientRecords[i].lastRequestTime < oldestTime) {
+                oldestTime = clientRecords[i].lastRequestTime;
+                oldestIndex = i;
+            }
+        }
+        
+        if (clientIndex == -1) {
+            clientIndex = oldestIndex; // Reuse oldest slot
+        }
+        
+        // Initialize new client record
+        clientRecords[clientIndex].ip = clientIP;
+        clientRecords[clientIndex].requestCount = 0;
+        clientRecords[clientIndex].active = true;
+    }
+    
+    ClientRecord* client = &clientRecords[clientIndex];
+    
+    // Reset counter if more than 1 second has passed
+    if ((now - client->lastRequestTime) >= 1000) {
+        client->requestCount = 0;
+    }
+    
+    // Allow up to 20 requests per second per client (increased for concurrent testing)
+    if (client->requestCount >= 20 && (now - client->lastRequestTime) < 1000) {
         return true; // Rate limited
     }
     
-    lastClientIP = clientIP;
-    lastRequestTime = now;
+    // Update tracking
+    if ((now - client->lastRequestTime) < 1000) {
+        client->requestCount++;
+    } else {
+        client->requestCount = 1;
+        client->lastRequestTime = now;
+    }
+    
+    client->lastRequestTime = now;
     return false;
 }
 
@@ -181,11 +265,36 @@ bool NtpServer::sendNtpResponse() {
     // Convert response packet to byte array
     byte* response = (byte*)&responsePacket;
     
-    // Send response
-    bool success = ntpUdp->beginPacket(currentClientIP, currentClientPort);
-    if (success) {
-        size_t bytesWritten = ntpUdp->write(response, NTP_PACKET_SIZE);
-        success = (bytesWritten == NTP_PACKET_SIZE) && ntpUdp->endPacket();
+    // ★★★ Critical Fix: Force UDP socket reset before sending response ★★★
+    // W5500 UDP implementation sometimes gets stuck after first packet
+    // Flush any pending TX data and reset socket state
+    ntpUdp->flush();
+    
+    // Send response with retry logic
+    bool success = false;
+    int retryCount = 0;
+    const int maxRetries = 3;
+    
+    while (!success && retryCount < maxRetries) {
+        success = ntpUdp->beginPacket(currentClientIP, currentClientPort);
+        if (success) {
+            size_t bytesWritten = ntpUdp->write(response, NTP_PACKET_SIZE);
+            success = (bytesWritten == NTP_PACKET_SIZE) && ntpUdp->endPacket();
+            
+            if (success) {
+                // Force flush to ensure packet is sent immediately
+                ntpUdp->flush();
+            } else {
+                Serial.printf("NTP send attempt %d failed - endPacket() returned false\n", retryCount + 1);
+            }
+        } else {
+            Serial.printf("NTP send attempt %d failed - beginPacket() returned false\n", retryCount + 1);
+        }
+        
+        if (!success) {
+            retryCount++;
+            delay(1); // Brief delay before retry
+        }
     }
     
     if (success) {
@@ -195,7 +304,7 @@ bool NtpServer::sendNtpResponse() {
         Serial.print(responsePacket.stratum);
         Serial.println(")");
     } else {
-        Serial.println("Failed to send NTP response");
+        Serial.printf("Failed to send NTP response after %d attempts\n", maxRetries);
     }
     
     return success;

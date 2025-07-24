@@ -276,8 +276,37 @@ void NetworkManager::manageUdpSockets() {
         udpManager.lastSocketCheck = now;
         
         if (networkMonitor.isConnected) {
-            // NTP UDP socket management
-            if (!udpManager.ntpSocketOpen) {
+            // ★★★ Critical Fix: Periodic UDP socket refresh for W5500 reliability ★★★
+            // W5500 UDP sockets can become unresponsive after handling multiple requests
+            // Force socket restart every 60 seconds to maintain reliability
+            static unsigned long lastSocketRefresh = 0;
+            const unsigned long socketRefreshInterval = 60000; // 60 seconds
+            
+            bool needsRefresh = (now - lastSocketRefresh > socketRefreshInterval);
+            bool hasSocketErrors = (udpManager.socketErrors > 5);
+            
+            if (needsRefresh || hasSocketErrors) {
+                if (udpManager.ntpSocketOpen) {
+                    Serial.println("Refreshing NTP UDP socket for W5500 reliability");
+                    ntpUdp->stop();
+                    delay(10); // Brief delay to ensure socket is properly closed
+                }
+                
+                if (ntpUdp->begin(NTP_PORT)) {
+                    udpManager.ntpSocketOpen = true;
+                    networkMonitor.ntpServerActive = true;
+                    udpManager.socketErrors = 0;
+                    lastSocketRefresh = now;
+                    Serial.println("NTP UDP socket refreshed successfully");
+                } else {
+                    Serial.println("Failed to refresh NTP UDP socket");
+                    udpManager.socketErrors++;
+                    udpManager.ntpSocketOpen = false;
+                    networkMonitor.ntpServerActive = false;
+                }
+            }
+            // Normal socket management
+            else if (!udpManager.ntpSocketOpen) {
                 Serial.println("Opening NTP UDP socket on port 123");
                 if (ntpUdp->begin(NTP_PORT)) {
                     udpManager.ntpSocketOpen = true;
@@ -299,8 +328,8 @@ void NetworkManager::manageUdpSockets() {
         }
     }
     
-    // Reset socket errors on success
-    if (udpManager.ntpSocketOpen && udpManager.socketErrors > 0) {
+    // Reset socket errors on success (but only if not too many)
+    if (udpManager.ntpSocketOpen && udpManager.socketErrors > 0 && udpManager.socketErrors < 10) {
         udpManager.socketErrors = 0;
     }
 }
