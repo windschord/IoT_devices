@@ -2,7 +2,7 @@
 #define CONFIG_MANAGER_H
 
 #include <Arduino.h>
-#include <EEPROM.h>
+#include "Storage_HAL.h"
 
 // Configuration structure matching design.md specifications
 struct SystemConfig {
@@ -42,9 +42,8 @@ struct SystemConfig {
     uint32_t restart_interval;  // Hours between automatic restarts
     bool debug_enabled;         // Debug output enabled
     
-    // Configuration metadata
+    // Configuration metadata (simplified)
     uint32_t config_version;    // For future migration
-    uint32_t checksum;          // Configuration integrity check
 };
 
 // Default configuration values
@@ -52,18 +51,17 @@ class ConfigManager {
 private:
     SystemConfig currentConfig;
     bool configValid;
-    static constexpr uint32_t CONFIG_VERSION = 1;
-    static constexpr uint32_t EEPROM_CONFIG_ADDR = 0;
-    static constexpr uint32_t CONFIG_MAGIC = 0xC0FFEE42; // Magic number for validation
+    StorageHAL* storageHal;
     
 public:
     ConfigManager();
     
     // Initialization and persistence
     void init();
-    bool loadFromEEPROM();
-    bool saveToEEPROM();
+    bool loadConfig();
+    bool saveConfig();
     void loadDefaults();
+    void resetToDefaults();
     
     // Configuration access
     const SystemConfig& getConfig() const { return currentConfig; }
@@ -91,9 +89,8 @@ public:
     bool setGnssConstellations(bool gps, bool glonass, bool galileo, bool beidou, bool qzss);
     bool setGnssUpdateRate(uint8_t rate);
     
-    // Configuration validation
+    // Configuration validation (simplified)
     bool validateConfig(const SystemConfig& config) const;
-    uint32_t calculateChecksum(const SystemConfig& config) const;
     
     // JSON serialization for web interface
     String configToJson() const;

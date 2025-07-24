@@ -1,87 +1,89 @@
 #include "ConfigManager.h"
 #include "HardwareConfig.h"
+#include "logging.h"
 #include <ArduinoJson.h>
 
-ConfigManager::ConfigManager() : configValid(false) {
+ConfigManager::ConfigManager() : 
+    configValid(false),
+    storageHal(&g_storage_hal) {
 }
 
 void ConfigManager::init() {
-    Serial.println("Initializing Configuration Manager...");
+    LOG_INFO_MSG("ConfigManager: 初期化開始...");
     
-    // Initialize EEPROM
-    EEPROM.begin(512);  // Allocate 512 bytes for configuration
-    
-    // Try to load configuration from EEPROM
-    if (!loadFromEEPROM()) {
-        Serial.println("No valid configuration found, loading defaults");
+    // Storage HAL初期化
+    if (!storageHal->initialize()) {
+        LOG_ERR_MSG("ConfigManager: Storage HAL初期化失敗");
         loadDefaults();
-        saveToEEPROM();
+        configValid = true;
+        return;
+    }
+    
+    // 設定読み込み試行
+    if (!loadConfig()) {
+        LOG_WARN_MSG("ConfigManager: 設定読み込み失敗、デフォルト設定使用");
+        loadDefaults();
+        saveConfig(); // デフォルト設定を保存
     }
     
     configValid = true;
-    Serial.println("Configuration Manager initialized successfully");
+    LOG_INFO_MSG("ConfigManager: 初期化完了");
     printConfig();
 }
 
-bool ConfigManager::loadFromEEPROM() {
-    // Read magic number to verify configuration exists
-    uint32_t magic = 0;
-    EEPROM.get(EEPROM_CONFIG_ADDR, magic);
+bool ConfigManager::loadConfig() {
+    StorageResult result = storageHal->readConfig(&currentConfig, sizeof(SystemConfig));
     
-    if (magic != CONFIG_MAGIC) {
-        Serial.println("No configuration magic number found in EEPROM");
-        return false;
+    switch (result) {
+        case STORAGE_SUCCESS:
+            if (validateConfig(currentConfig)) {
+                LOG_INFO_MSG("ConfigManager: 設定読み込み成功");
+                return true;
+            } else {
+                LOG_ERR_MSG("ConfigManager: 設定検証失敗");
+                return false;
+            }
+            
+        case STORAGE_ERROR_MAGIC:
+            LOG_WARN_MSG("ConfigManager: 初回起動 - 設定が存在しません");
+            return false;
+            
+        case STORAGE_ERROR_CRC:
+            LOG_ERR_MSG("ConfigManager: 設定データ破損 (CRC32エラー)");
+            return false;
+            
+        case STORAGE_ERROR_SIZE:
+            LOG_ERR_MSG("ConfigManager: 設定サイズ不一致");
+            return false;
+            
+        default:
+            LOG_ERR_MSG("ConfigManager: 設定読み込みエラー (%d)", result);
+            return false;
     }
-    
-    // Read configuration structure
-    SystemConfig tempConfig;
-    EEPROM.get(EEPROM_CONFIG_ADDR + sizeof(CONFIG_MAGIC), tempConfig);
-    
-    // Validate configuration
-    if (!validateConfig(tempConfig)) {
-        Serial.println("Configuration validation failed");
-        return false;
-    }
-    
-    // Verify checksum
-    uint32_t expectedChecksum = calculateChecksum(tempConfig);
-    if (tempConfig.checksum != expectedChecksum) {
-        Serial.print("Configuration checksum mismatch: expected ");
-        Serial.print(expectedChecksum, HEX);
-        Serial.print(", got ");
-        Serial.println(tempConfig.checksum, HEX);
-        return false;
-    }
-    
-    currentConfig = tempConfig;
-    Serial.println("Configuration loaded from EEPROM successfully");
-    return true;
 }
 
-bool ConfigManager::saveToEEPROM() {
-    // Calculate and set checksum
-    currentConfig.checksum = calculateChecksum(currentConfig);
-    
-    // Write magic number first
-    EEPROM.put(EEPROM_CONFIG_ADDR, CONFIG_MAGIC);
-    
-    // Write configuration structure
-    EEPROM.put(EEPROM_CONFIG_ADDR + sizeof(CONFIG_MAGIC), currentConfig);
-    
-    // Commit to EEPROM
-    bool success = EEPROM.commit();
-    
-    if (success) {
-        Serial.println("Configuration saved to EEPROM successfully");
-    } else {
-        Serial.println("Failed to save configuration to EEPROM");
+bool ConfigManager::saveConfig() {
+    if (!validateConfig(currentConfig)) {
+        LOG_ERR_MSG("ConfigManager: 無効な設定のため保存中止");
+        return false;
     }
     
-    return success;
+    // タイムスタンプ更新
+    currentConfig.config_version = 1;
+    
+    StorageResult result = storageHal->writeConfig(&currentConfig, sizeof(SystemConfig));
+    
+    if (result == STORAGE_SUCCESS) {
+        LOG_INFO_MSG("ConfigManager: 設定保存完了");
+        return true;
+    } else {
+        LOG_ERR_MSG("ConfigManager: 設定保存失敗 (%d)", result);
+        return false;
+    }
 }
 
 void ConfigManager::loadDefaults() {
-    Serial.println("Loading default configuration...");
+    LOG_INFO_MSG("ConfigManager: デフォルト設定読み込み...");
     memset(&currentConfig, 0, sizeof(SystemConfig));
     
     // Network Configuration
@@ -104,142 +106,136 @@ void ConfigManager::loadDefaults() {
     currentConfig.gps_enabled = true;
     currentConfig.glonass_enabled = true;
     currentConfig.galileo_enabled = true;
-    currentConfig.beidou_enabled = true;
-    currentConfig.qzss_enabled = true;
-    currentConfig.qzss_l1s_enabled = true;
-    currentConfig.gnss_update_rate = 1;  // 1 Hz
-    currentConfig.disaster_alert_priority = 2;  // High priority
+    currentConfig.beidou_enabled = false;   // Optional for power saving
+    currentConfig.qzss_enabled = true;      // Important for Japan
+    currentConfig.qzss_l1s_enabled = true;  // Disaster alert system
+    currentConfig.gnss_update_rate = 1;     // 1Hz default
+    currentConfig.disaster_alert_priority = 2; // High priority
     
     // NTP Server Configuration
     currentConfig.ntp_enabled = true;
-    currentConfig.ntp_port = NTP_PORT;
-    currentConfig.ntp_stratum = 1;  // GPS primary reference
+    currentConfig.ntp_port = 123;
+    currentConfig.ntp_stratum = 1;
     
     // System Configuration
     currentConfig.auto_restart_enabled = false;
-    currentConfig.restart_interval = 24;  // 24 hours
+    currentConfig.restart_interval = 24;   // 24 hours
     currentConfig.debug_enabled = false;
     
     // Configuration metadata
-    currentConfig.config_version = CONFIG_VERSION;
-    currentConfig.checksum = 0;  // Will be calculated when saved
+    currentConfig.config_version = 1;
     
-    Serial.println("Default configuration loaded");
+    LOG_INFO_MSG("ConfigManager: デフォルト設定設定完了");
+}
+
+void ConfigManager::resetToDefaults() {
+    LOG_WARN_MSG("ConfigManager: 工場出荷時リセット実行...");
+    
+    // Storage HAL経由で工場出荷時リセット
+    StorageResult result = storageHal->factoryReset();
+    if (result != STORAGE_SUCCESS) {
+        LOG_ERR_MSG("ConfigManager: ストレージリセット失敗 (%d)", result);
+    }
+    
+    // デフォルト設定読み込み
+    loadDefaults();
+    
+    // 新しい設定を保存
+    if (saveConfig()) {
+        LOG_INFO_MSG("ConfigManager: 工場出荷時リセット完了");
+    } else {
+        LOG_ERR_MSG("ConfigManager: 工場出荷時リセット - 設定保存失敗");
+    }
 }
 
 bool ConfigManager::setConfig(const SystemConfig& newConfig) {
     if (!validateConfig(newConfig)) {
-        Serial.println("Configuration validation failed");
+        LOG_ERR_MSG("ConfigManager: 無効な設定");
         return false;
     }
     
     currentConfig = newConfig;
-    currentConfig.config_version = CONFIG_VERSION;
-    
-    return saveToEEPROM();
+    return saveConfig();
 }
 
 bool ConfigManager::validateConfig(const SystemConfig& config) const {
-    // Validate hostname
+    // 基本的なバリデーション
+    
+    // ホスト名チェック
     if (strlen(config.hostname) == 0 || strlen(config.hostname) >= sizeof(config.hostname)) {
-        Serial.println("Invalid hostname");
+        LOG_ERR_MSG("ConfigManager: 無効なホスト名");
         return false;
     }
     
-    // Validate syslog server
-    if (strlen(config.syslog_server) >= sizeof(config.syslog_server)) {
-        Serial.println("Invalid syslog server");
+    // ログレベルチェック
+    if (config.log_level > 7) {  // 0=DEBUG to 7=EMERGENCY
+        LOG_ERR_MSG("ConfigManager: 無効なログレベル (%d)", config.log_level);
         return false;
     }
     
-    // Validate syslog port
-    if (config.syslog_port == 0) {
-        Serial.println("Invalid syslog port");
+    // Syslogポートチェック
+    if (config.syslog_port == 0 || config.syslog_port > 65535) {
+        LOG_ERR_MSG("ConfigManager: 無効なSyslogポート (%d)", config.syslog_port);
         return false;
     }
     
-    // Validate log level
-    if (config.log_level > 3) {
-        Serial.println("Invalid log level");
-        return false;
-    }
-    
-    // Validate GNSS update rate
+    // GNSS更新レートチェック
     if (config.gnss_update_rate == 0 || config.gnss_update_rate > 10) {
-        Serial.println("Invalid GNSS update rate");
+        LOG_ERR_MSG("ConfigManager: 無効なGNSS更新レート (%d)", config.gnss_update_rate);
         return false;
     }
     
-    // Validate disaster alert priority
-    if (config.disaster_alert_priority > 2) {
-        Serial.println("Invalid disaster alert priority");
+    // NTPポートチェック
+    if (config.ntp_port == 0 || config.ntp_port > 65535) {
+        LOG_ERR_MSG("ConfigManager: 無効なNTPポート (%d)", config.ntp_port);
         return false;
     }
     
-    // Validate configuration version
-    if (config.config_version != CONFIG_VERSION) {
-        Serial.println("Invalid configuration version");
+    // 設定バージョンチェック
+    if (config.config_version == 0) {
+        LOG_ERR_MSG("ConfigManager: 無効な設定バージョン");
         return false;
     }
     
     return true;
 }
 
-uint32_t ConfigManager::calculateChecksum(const SystemConfig& config) const {
-    uint32_t checksum = 0;
-    const uint8_t* data = reinterpret_cast<const uint8_t*>(&config);
-    
-    // Calculate checksum for all fields except the checksum field itself
-    size_t checksumOffset = offsetof(SystemConfig, checksum);
-    
-    for (size_t i = 0; i < sizeof(SystemConfig); i++) {
-        if (i < checksumOffset || i >= checksumOffset + sizeof(config.checksum)) {
-            checksum ^= data[i];
-            checksum = (checksum << 1) | (checksum >> 31);  // Simple rotate left
-        }
-    }
-    
-    return checksum;
-}
-
+// Individual setting setters with validation
 bool ConfigManager::setHostname(const char* hostname) {
     if (!hostname || strlen(hostname) == 0 || strlen(hostname) >= sizeof(currentConfig.hostname)) {
         return false;
     }
-    
     strcpy(currentConfig.hostname, hostname);
-    return saveToEEPROM();
+    return saveConfig();
 }
 
 bool ConfigManager::setNetworkConfig(uint32_t ip, uint32_t netmask, uint32_t gateway) {
     currentConfig.ip_address = ip;
     currentConfig.netmask = netmask;
     currentConfig.gateway = gateway;
-    return saveToEEPROM();
+    return saveConfig();
 }
 
 bool ConfigManager::setSyslogConfig(const char* server, uint16_t port) {
     if (!server || strlen(server) >= sizeof(currentConfig.syslog_server) || port == 0) {
         return false;
     }
-    
     strcpy(currentConfig.syslog_server, server);
     currentConfig.syslog_port = port;
-    return saveToEEPROM();
+    return saveConfig();
 }
 
 bool ConfigManager::setLogLevel(uint8_t level) {
-    if (level > 3) {
+    if (level > 7) {
         return false;
     }
-    
     currentConfig.log_level = level;
-    return saveToEEPROM();
+    return saveConfig();
 }
 
 bool ConfigManager::setPrometheusEnabled(bool enabled) {
     currentConfig.prometheus_enabled = enabled;
-    return saveToEEPROM();
+    return saveConfig();
 }
 
 bool ConfigManager::setGnssConstellations(bool gps, bool glonass, bool galileo, bool beidou, bool qzss) {
@@ -248,157 +244,144 @@ bool ConfigManager::setGnssConstellations(bool gps, bool glonass, bool galileo, 
     currentConfig.galileo_enabled = galileo;
     currentConfig.beidou_enabled = beidou;
     currentConfig.qzss_enabled = qzss;
-    return saveToEEPROM();
+    return saveConfig();
 }
 
 bool ConfigManager::setGnssUpdateRate(uint8_t rate) {
     if (rate == 0 || rate > 10) {
         return false;
     }
-    
     currentConfig.gnss_update_rate = rate;
-    return saveToEEPROM();
+    return saveConfig();
 }
 
+// JSON serialization for web interface
 String ConfigManager::configToJson() const {
-    DynamicJsonDocument doc(1024);
+    DynamicJsonDocument doc(2048);
     
-    // Network Configuration
-    doc["network"]["hostname"] = currentConfig.hostname;
-    doc["network"]["ip_address"] = String(currentConfig.ip_address);
-    doc["network"]["netmask"] = String(currentConfig.netmask);
-    doc["network"]["gateway"] = String(currentConfig.gateway);
-    doc["network"]["dns_server"] = String(currentConfig.dns_server);
+    // Network
+    doc["hostname"] = currentConfig.hostname;
+    doc["ip_address"] = currentConfig.ip_address;
+    doc["netmask"] = currentConfig.netmask;
+    doc["gateway"] = currentConfig.gateway;
+    doc["dns_server"] = currentConfig.dns_server;
     
-    // Logging Configuration
-    doc["logging"]["syslog_server"] = currentConfig.syslog_server;
-    doc["logging"]["syslog_port"] = currentConfig.syslog_port;
-    doc["logging"]["log_level"] = currentConfig.log_level;
+    // Logging
+    doc["syslog_server"] = currentConfig.syslog_server;
+    doc["syslog_port"] = currentConfig.syslog_port;
+    doc["log_level"] = currentConfig.log_level;
     
     // Monitoring
-    doc["monitoring"]["prometheus_enabled"] = currentConfig.prometheus_enabled;
-    doc["monitoring"]["prometheus_port"] = currentConfig.prometheus_port;
+    doc["prometheus_enabled"] = currentConfig.prometheus_enabled;
+    doc["prometheus_port"] = currentConfig.prometheus_port;
     
-    // GNSS Configuration
-    doc["gnss"]["gps_enabled"] = currentConfig.gps_enabled;
-    doc["gnss"]["glonass_enabled"] = currentConfig.glonass_enabled;
-    doc["gnss"]["galileo_enabled"] = currentConfig.galileo_enabled;
-    doc["gnss"]["beidou_enabled"] = currentConfig.beidou_enabled;
-    doc["gnss"]["qzss_enabled"] = currentConfig.qzss_enabled;
-    doc["gnss"]["qzss_l1s_enabled"] = currentConfig.qzss_l1s_enabled;
-    doc["gnss"]["update_rate"] = currentConfig.gnss_update_rate;
-    doc["gnss"]["disaster_alert_priority"] = currentConfig.disaster_alert_priority;
+    // GNSS
+    doc["gps_enabled"] = currentConfig.gps_enabled;
+    doc["glonass_enabled"] = currentConfig.glonass_enabled;
+    doc["galileo_enabled"] = currentConfig.galileo_enabled;
+    doc["beidou_enabled"] = currentConfig.beidou_enabled;
+    doc["qzss_enabled"] = currentConfig.qzss_enabled;
+    doc["qzss_l1s_enabled"] = currentConfig.qzss_l1s_enabled;
+    doc["gnss_update_rate"] = currentConfig.gnss_update_rate;
+    doc["disaster_alert_priority"] = currentConfig.disaster_alert_priority;
     
-    // NTP Configuration
-    doc["ntp"]["enabled"] = currentConfig.ntp_enabled;
-    doc["ntp"]["port"] = currentConfig.ntp_port;
-    doc["ntp"]["stratum"] = currentConfig.ntp_stratum;
+    // NTP
+    doc["ntp_enabled"] = currentConfig.ntp_enabled;
+    doc["ntp_port"] = currentConfig.ntp_port;
+    doc["ntp_stratum"] = currentConfig.ntp_stratum;
     
-    // System Configuration
-    doc["system"]["auto_restart_enabled"] = currentConfig.auto_restart_enabled;
-    doc["system"]["restart_interval"] = currentConfig.restart_interval;
-    doc["system"]["debug_enabled"] = currentConfig.debug_enabled;
+    // System
+    doc["auto_restart_enabled"] = currentConfig.auto_restart_enabled;
+    doc["restart_interval"] = currentConfig.restart_interval;
+    doc["debug_enabled"] = currentConfig.debug_enabled;
+    doc["config_version"] = currentConfig.config_version;
     
-    String result;
-    serializeJson(doc, result);
-    return result;
+    String jsonString;
+    serializeJson(doc, jsonString);
+    return jsonString;
 }
 
 bool ConfigManager::configFromJson(const String& json) {
-    DynamicJsonDocument doc(1024);
-    
+    DynamicJsonDocument doc(2048);
     DeserializationError error = deserializeJson(doc, json);
+    
     if (error) {
-        Serial.print("JSON deserialization failed: ");
-        Serial.println(error.c_str());
+        LOG_ERR_MSG("ConfigManager: JSON解析エラー - %s", error.c_str());
         return false;
     }
     
-    SystemConfig newConfig = currentConfig;  // Start with current config
+    SystemConfig tempConfig = currentConfig; // バックアップ
     
-    // Update fields if present in JSON
-    if (doc.containsKey("network")) {
-        if (doc["network"].containsKey("hostname")) {
-            const char* hostname = doc["network"]["hostname"];
-            if (strlen(hostname) < sizeof(newConfig.hostname)) {
-                strcpy(newConfig.hostname, hostname);
-            }
-        }
-        if (doc["network"].containsKey("ip_address")) {
-            newConfig.ip_address = doc["network"]["ip_address"].as<uint32_t>();
-        }
-        // Add other network fields...
+    // Network
+    if (doc.containsKey("hostname")) {
+        strncpy(tempConfig.hostname, doc["hostname"], sizeof(tempConfig.hostname) - 1);
+        tempConfig.hostname[sizeof(tempConfig.hostname) - 1] = '\0';
     }
+    if (doc.containsKey("ip_address")) tempConfig.ip_address = doc["ip_address"];
+    if (doc.containsKey("netmask")) tempConfig.netmask = doc["netmask"];
+    if (doc.containsKey("gateway")) tempConfig.gateway = doc["gateway"];
+    if (doc.containsKey("dns_server")) tempConfig.dns_server = doc["dns_server"];
     
-    if (doc.containsKey("logging")) {
-        if (doc["logging"].containsKey("syslog_server")) {
-            const char* server = doc["logging"]["syslog_server"];
-            if (strlen(server) < sizeof(newConfig.syslog_server)) {
-                strcpy(newConfig.syslog_server, server);
-            }
-        }
-        if (doc["logging"].containsKey("syslog_port")) {
-            newConfig.syslog_port = doc["logging"]["syslog_port"];
-        }
-        if (doc["logging"].containsKey("log_level")) {
-            newConfig.log_level = doc["logging"]["log_level"];
-        }
+    // Logging
+    if (doc.containsKey("syslog_server")) {
+        strncpy(tempConfig.syslog_server, doc["syslog_server"], sizeof(tempConfig.syslog_server) - 1);
+        tempConfig.syslog_server[sizeof(tempConfig.syslog_server) - 1] = '\0';
     }
+    if (doc.containsKey("syslog_port")) tempConfig.syslog_port = doc["syslog_port"];
+    if (doc.containsKey("log_level")) tempConfig.log_level = doc["log_level"];
     
-    // Add other sections...
+    // Monitoring
+    if (doc.containsKey("prometheus_enabled")) tempConfig.prometheus_enabled = doc["prometheus_enabled"];
+    if (doc.containsKey("prometheus_port")) tempConfig.prometheus_port = doc["prometheus_port"];
     
-    return setConfig(newConfig);
-}
-
-void ConfigManager::resetToDefaults() {
-    Serial.println("Resetting configuration to defaults");
-    loadDefaults();
-    saveToEEPROM();
-}
-
-void ConfigManager::clearEEPROM() {
-    for (int i = 0; i < 512; i++) {
-        EEPROM.write(i, 0xFF);
+    // GNSS
+    if (doc.containsKey("gps_enabled")) tempConfig.gps_enabled = doc["gps_enabled"];
+    if (doc.containsKey("glonass_enabled")) tempConfig.glonass_enabled = doc["glonass_enabled"];
+    if (doc.containsKey("galileo_enabled")) tempConfig.galileo_enabled = doc["galileo_enabled"];
+    if (doc.containsKey("beidou_enabled")) tempConfig.beidou_enabled = doc["beidou_enabled"];
+    if (doc.containsKey("qzss_enabled")) tempConfig.qzss_enabled = doc["qzss_enabled"];
+    if (doc.containsKey("qzss_l1s_enabled")) tempConfig.qzss_l1s_enabled = doc["qzss_l1s_enabled"];
+    if (doc.containsKey("gnss_update_rate")) tempConfig.gnss_update_rate = doc["gnss_update_rate"];
+    if (doc.containsKey("disaster_alert_priority")) tempConfig.disaster_alert_priority = doc["disaster_alert_priority"];
+    
+    // NTP
+    if (doc.containsKey("ntp_enabled")) tempConfig.ntp_enabled = doc["ntp_enabled"];
+    if (doc.containsKey("ntp_port")) tempConfig.ntp_port = doc["ntp_port"];
+    if (doc.containsKey("ntp_stratum")) tempConfig.ntp_stratum = doc["ntp_stratum"];
+    
+    // System
+    if (doc.containsKey("auto_restart_enabled")) tempConfig.auto_restart_enabled = doc["auto_restart_enabled"];
+    if (doc.containsKey("restart_interval")) tempConfig.restart_interval = doc["restart_interval"];
+    if (doc.containsKey("debug_enabled")) tempConfig.debug_enabled = doc["debug_enabled"];
+    
+    // 設定バージョン更新
+    tempConfig.config_version = 1;
+    
+    // 設定を適用
+    if (setConfig(tempConfig)) {
+        LOG_INFO_MSG("ConfigManager: JSON設定適用成功");
+        return true;
+    } else {
+        LOG_ERR_MSG("ConfigManager: JSON設定適用失敗");
+        return false;
     }
-    EEPROM.commit();
-    Serial.println("EEPROM cleared");
 }
 
 void ConfigManager::printConfig() const {
-    Serial.println("=== Current Configuration ===");
-    Serial.print("Hostname: "); Serial.println(currentConfig.hostname);
-    Serial.print("IP Address: "); Serial.println(currentConfig.ip_address == 0 ? "DHCP" : String(currentConfig.ip_address));
-    Serial.print("Syslog Server: "); Serial.println(currentConfig.syslog_server);
-    Serial.print("Syslog Port: "); Serial.println(currentConfig.syslog_port);
-    Serial.print("Log Level: "); Serial.println(currentConfig.log_level);
-    Serial.print("Prometheus: "); Serial.println(currentConfig.prometheus_enabled ? "Enabled" : "Disabled");
-    Serial.print("GPS: "); Serial.println(currentConfig.gps_enabled ? "On" : "Off");
-    Serial.print("GLONASS: "); Serial.println(currentConfig.glonass_enabled ? "On" : "Off");
-    Serial.print("Galileo: "); Serial.println(currentConfig.galileo_enabled ? "On" : "Off");
-    Serial.print("BeiDou: "); Serial.println(currentConfig.beidou_enabled ? "On" : "Off");
-    Serial.print("QZSS: "); Serial.println(currentConfig.qzss_enabled ? "On" : "Off");
-    Serial.print("QZSS L1S: "); Serial.println(currentConfig.qzss_l1s_enabled ? "On" : "Off");
-    Serial.print("GNSS Update Rate: "); Serial.print(currentConfig.gnss_update_rate); Serial.println(" Hz");
-    Serial.print("NTP: "); Serial.println(currentConfig.ntp_enabled ? "Enabled" : "Disabled");
-    Serial.print("Config Version: "); Serial.println(currentConfig.config_version);
-    Serial.print("Checksum: 0x"); Serial.println(currentConfig.checksum, HEX);
-    Serial.println("============================");
-}
-
-void ConfigManager::printConfigDifferences(const SystemConfig& other) const {
-    Serial.println("=== Configuration Differences ===");
-    
-    if (strcmp(currentConfig.hostname, other.hostname) != 0) {
-        Serial.print("Hostname: "); Serial.print(currentConfig.hostname); 
-        Serial.print(" -> "); Serial.println(other.hostname);
-    }
-    
-    if (currentConfig.ip_address != other.ip_address) {
-        Serial.print("IP Address: "); Serial.print(currentConfig.ip_address); 
-        Serial.print(" -> "); Serial.println(other.ip_address);
-    }
-    
-    // Add other field comparisons as needed...
-    
-    Serial.println("=================================");
+    LOG_INFO_MSG("=== Current Configuration ===");
+    LOG_INFO_MSG("Hostname: %s", currentConfig.hostname);
+    LOG_INFO_MSG("IP Address: %s", currentConfig.ip_address == 0 ? "DHCP" : "Static");
+    LOG_INFO_MSG("Syslog Server: %s", currentConfig.syslog_server);
+    LOG_INFO_MSG("Syslog Port: %d", currentConfig.syslog_port);
+    LOG_INFO_MSG("Log Level: %d", currentConfig.log_level);
+    LOG_INFO_MSG("Prometheus: %s", currentConfig.prometheus_enabled ? "Enabled" : "Disabled");
+    LOG_INFO_MSG("GPS: %s", currentConfig.gps_enabled ? "On" : "Off");
+    LOG_INFO_MSG("GLONASS: %s", currentConfig.glonass_enabled ? "On" : "Off");
+    LOG_INFO_MSG("Galileo: %s", currentConfig.galileo_enabled ? "On" : "Off");
+    LOG_INFO_MSG("BeiDou: %s", currentConfig.beidou_enabled ? "On" : "Off");
+    LOG_INFO_MSG("QZSS: %s", currentConfig.qzss_enabled ? "On" : "Off");
+    LOG_INFO_MSG("QZSS L1S: %s", currentConfig.qzss_l1s_enabled ? "On" : "Off");
+    LOG_INFO_MSG("GNSS Update Rate: %d Hz", currentConfig.gnss_update_rate);
+    LOG_INFO_MSG("NTP: %s", currentConfig.ntp_enabled ? "Enabled" : "Disabled");
+    LOG_INFO_MSG("Config Version: %d", currentConfig.config_version);
 }
