@@ -29,6 +29,7 @@ private:
     void configPage(EthernetClient &client);
     void configApiGet(EthernetClient &client);
     void configApiPost(EthernetClient &client, String postData);
+    void configApiReset(EthernetClient &client);
     void configFormPage(EthernetClient &client);
     void printHeader(EthernetClient &client, String contentType);
     bool parsePostData(const String& data, String& key, String& value);
