@@ -27,14 +27,11 @@ enum class ErrorSeverity {
     FATAL                 // 致命的
 };
 
-// 復旧戦略
+// 復旧戦略（簡素化）
 enum class RecoveryStrategy {
     NONE,                 // 復旧なし
     RETRY,                // 再試行
-    RESTART_SERVICE,      // サービス再起動
-    RESTART_SYSTEM,       // システム再起動
-    SAFE_MODE,            // セーフモード
-    EMERGENCY_STOP        // 緊急停止
+    RESTART_SYSTEM        // システム再起動
 };
 
 // エラー情報の構造体
@@ -77,23 +74,16 @@ private:
     
     ErrorStatistics statistics;
     
-    // 自動復旧設定
+    // 簡素化された自動復旧設定
     bool autoRecoveryEnabled;
-    unsigned long recoveryTimeout;
     unsigned long maxRetryCount;
     
-    // 復旧処理のコールバック関数ポインタ
-    typedef bool (*RecoveryCallback)(const char* component, ErrorType type);
-    RecoveryCallback recoveryCallbacks[10];
-    int callbackCount;
-    
-    // 内部メソッド
+    // 内部メソッド（簡素化）
     uint32_t generateErrorCode(ErrorType type, const char* component);
     void updateStatistics(const ErrorInfo& error);
     void performRecovery(const ErrorInfo& error);
     bool executeRecoveryStrategy(const ErrorInfo& error);
     void logError(const ErrorInfo& error);
-    int findErrorIndex(const char* component, ErrorType type);
 
 public:
     ErrorHandler();
@@ -120,12 +110,9 @@ public:
     void resolveAllErrors(const char* component);
     void markResolved(int errorIndex);
     
-    // 復旧処理
+    // 復旧処理（簡素化）
     void setAutoRecovery(bool enabled) { autoRecoveryEnabled = enabled; }
-    void setRecoveryTimeout(unsigned long timeoutMs) { recoveryTimeout = timeoutMs; }
     void setMaxRetryCount(unsigned long count) { maxRetryCount = count; }
-    void registerRecoveryCallback(RecoveryCallback callback);
-    void triggerRecovery(const char* component);
     
     // 状態確認
     bool hasUnresolvedErrors() const;

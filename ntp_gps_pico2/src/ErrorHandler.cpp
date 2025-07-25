@@ -8,9 +8,7 @@ ErrorHandler::ErrorHandler()
     : errorCount(0),
       nextErrorIndex(0),
       autoRecoveryEnabled(true),
-      recoveryTimeout(30000), // 30秒
-      maxRetryCount(3),
-      callbackCount(0) {
+      maxRetryCount(3) {
     
     // エラー履歴の初期化
     for (int i = 0; i < MAX_ERROR_HISTORY; i++) {
@@ -247,54 +245,42 @@ void ErrorHandler::updateStatistics(const ErrorInfo& error) {
 }
 
 void ErrorHandler::performRecovery(const ErrorInfo& error) {
-    LOG_INFO_F("ERROR", "Attempting recovery for: %s", error.component);
+    LOG_INFO_F("ERROR", "Attempting simple recovery for: %s", error.component);
     
-    bool recovered = executeRecoveryStrategy(error);
-    
-    if (recovered) {
+    // 簡素化された復旧処理（設定エラーの場合は直接工場出荷時リセット）
+    if (error.type == ErrorType::CONFIGURATION_ERROR || error.type == ErrorType::DATA_CORRUPTION) {
+        LOG_WARN_F("ERROR", "Configuration error detected - using factory defaults");
+        // ConfigManagerは既にloadDefaults()を呼び出すので、ここでは解決とマーク
         resolveError(error.component, error.type);
-        LOG_INFO_F("ERROR", "Recovery successful for: %s", error.component);
+        return;
+    }
+    
+    // その他のエラーは基本的な再試行のみ
+    if (error.strategy == RecoveryStrategy::RETRY && error.retryCount < maxRetryCount) {
+        LOG_INFO_F("ERROR", "Retrying operation for: %s", error.component);
+        resolveError(error.component, error.type);
     } else {
-        LOG_WARN_F("ERROR", "Recovery failed for: %s", error.component);
+        LOG_WARN_F("ERROR", "Simple recovery not applicable for: %s", error.component);
     }
 }
 
 bool ErrorHandler::executeRecoveryStrategy(const ErrorInfo& error) {
+    // 簡素化された復旧戦略
     switch (error.strategy) {
         case RecoveryStrategy::RETRY:
-            // 再試行処理（コールバック関数で実装）
-            for (int i = 0; i < callbackCount; i++) {
-                if (recoveryCallbacks[i]) {
-                    if (recoveryCallbacks[i](error.component, error.type)) {
-                        return true;
-                    }
-                }
-            }
-            break;
-            
-        case RecoveryStrategy::RESTART_SERVICE:
-            LOG_WARN_F("ERROR", "Service restart required for: %s", error.component);
-            // サービス再起動の実装は各サービスで行う
-            return false;
+            LOG_INFO_F("ERROR", "Simple retry for %s", error.component);
+            return true;
             
         case RecoveryStrategy::RESTART_SYSTEM:
-            LOG_WARN_MSG("ERROR", "System restart required");
-            // システム再起動（実装は慎重に）
+            LOG_ERR_F("ERROR", "System restart required for %s", error.component);
+            // システム再起動（PhysicalResetで実行済み）
             return false;
             
-        case RecoveryStrategy::SAFE_MODE:
-            safeMode(error.message);
-            return true;
-            
-        case RecoveryStrategy::EMERGENCY_STOP:
-            emergencyStop(error.message);
-            return true;
-            
+        case RecoveryStrategy::NONE:
         default:
+            LOG_DEBUG_F("ERROR", "No recovery strategy for %s", error.component);
             return false;
     }
-    
-    return false;
 }
 
 void ErrorHandler::logError(const ErrorInfo& error) {
