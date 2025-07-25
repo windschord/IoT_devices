@@ -246,7 +246,7 @@ bool StorageHAL::verifyConfig(const void* data, uint16_t size, uint32_t expected
     return calculated_crc == expected_crc;
 }
 
-bool StorageHAL::isConfigValid() {
+bool StorageHAL::isConfigValid() const {
     if (!initialized) {
         return false;
     }
@@ -360,7 +360,7 @@ StorageResult StorageHAL::writeHeader(const ConfigHeader& header, uint32_t offse
     return writeData(&header, sizeof(header), offset);
 }
 
-StorageResult StorageHAL::readHeader(ConfigHeader& header, uint32_t offset) {
+StorageResult StorageHAL::readHeader(ConfigHeader& header, uint32_t offset) const {
     return readData(&header, sizeof(header), offset);
 }
 
@@ -377,7 +377,7 @@ StorageResult StorageHAL::writeData(const void* data, uint16_t size, uint32_t of
     return STORAGE_SUCCESS;
 }
 
-StorageResult StorageHAL::readData(void* data, uint16_t size, uint32_t offset) {
+StorageResult StorageHAL::readData(void* data, uint16_t size, uint32_t offset) const {
     if (offset + size > STORAGE_SECTOR_SIZE) {
         return STORAGE_ERROR_SIZE;
     }
@@ -390,7 +390,7 @@ StorageResult StorageHAL::readData(void* data, uint16_t size, uint32_t offset) {
     return STORAGE_SUCCESS;
 }
 
-bool StorageHAL::checkPowerStability() {
+bool StorageHAL::checkPowerStability() const {
     // 簡単な電源安定性チェック（実装依存）
     // 実際の実装では、電源電圧監視やバッテリー状態を確認
     return true; // デフォルトでは安定と仮定

@@ -77,7 +77,7 @@ bool ConfigManager::saveConfig() {
         LOG_INFO_MSG("CONFIG", "ConfigManager: 設定保存完了");
         return true;
     } else {
-        LOG_ERR_MSG("ConfigManager: 設定保存失敗 (%d)", result);
+        LOG_ERR_F("CONFIG", "ConfigManager: 設定保存失敗 (%d)", (int)result);
         return false;
     }
 }
@@ -134,7 +134,7 @@ void ConfigManager::resetToDefaults() {
     // Storage HAL経由で工場出荷時リセット
     StorageResult result = storageHal->factoryReset();
     if (result != STORAGE_SUCCESS) {
-        LOG_ERR_MSG("ConfigManager: ストレージリセット失敗 (%d)", result);
+        LOG_ERR_F("CONFIG", "ConfigManager: ストレージリセット失敗 (%d)", (int)result);
     }
     
     // デフォルト設定読み込み
@@ -169,25 +169,25 @@ bool ConfigManager::validateConfig(const SystemConfig& config) const {
     
     // ログレベルチェック
     if (config.log_level > 7) {  // 0=DEBUG to 7=EMERGENCY
-        LOG_ERR_MSG("ConfigManager: 無効なログレベル (%d)", config.log_level);
+        LOG_ERR_F("CONFIG", "ConfigManager: 無効なログレベル (%d)", (int)config.log_level);
         return false;
     }
     
     // Syslogポートチェック
     if (config.syslog_port == 0 || config.syslog_port > 65535) {
-        LOG_ERR_MSG("ConfigManager: 無効なSyslogポート (%d)", config.syslog_port);
+        LOG_ERR_F("CONFIG", "ConfigManager: 無効なSyslogポート (%d)", (int)config.syslog_port);
         return false;
     }
     
     // GNSS更新レートチェック
     if (config.gnss_update_rate == 0 || config.gnss_update_rate > 10) {
-        LOG_ERR_MSG("ConfigManager: 無効なGNSS更新レート (%d)", config.gnss_update_rate);
+        LOG_ERR_F("CONFIG", "ConfigManager: 無効なGNSS更新レート (%d)", (int)config.gnss_update_rate);
         return false;
     }
     
     // NTPポートチェック
     if (config.ntp_port == 0 || config.ntp_port > 65535) {
-        LOG_ERR_MSG("ConfigManager: 無効なNTPポート (%d)", config.ntp_port);
+        LOG_ERR_F("CONFIG", "ConfigManager: 無効なNTPポート (%d)", (int)config.ntp_port);
         return false;
     }
     
@@ -306,7 +306,7 @@ bool ConfigManager::configFromJson(const String& json) {
     DeserializationError error = deserializeJson(doc, json);
     
     if (error) {
-        LOG_ERR_MSG("ConfigManager: JSON解析エラー - %s", error.c_str());
+        LOG_ERR_F("CONFIG", "ConfigManager: JSON解析エラー - %s", error.c_str());
         return false;
     }
     
@@ -369,19 +369,19 @@ bool ConfigManager::configFromJson(const String& json) {
 
 void ConfigManager::printConfig() const {
     LOG_INFO_MSG("CONFIG", "=== Current Configuration ===");
-    LOG_INFO_MSG("Hostname: %s", currentConfig.hostname);
-    LOG_INFO_MSG("IP Address: %s", currentConfig.ip_address == 0 ? "DHCP" : "Static");
-    LOG_INFO_MSG("Syslog Server: %s", currentConfig.syslog_server);
-    LOG_INFO_MSG("Syslog Port: %d", currentConfig.syslog_port);
-    LOG_INFO_MSG("Log Level: %d", currentConfig.log_level);
-    LOG_INFO_MSG("Prometheus: %s", currentConfig.prometheus_enabled ? "Enabled" : "Disabled");
-    LOG_INFO_MSG("GPS: %s", currentConfig.gps_enabled ? "On" : "Off");
-    LOG_INFO_MSG("GLONASS: %s", currentConfig.glonass_enabled ? "On" : "Off");
-    LOG_INFO_MSG("Galileo: %s", currentConfig.galileo_enabled ? "On" : "Off");
-    LOG_INFO_MSG("BeiDou: %s", currentConfig.beidou_enabled ? "On" : "Off");
-    LOG_INFO_MSG("QZSS: %s", currentConfig.qzss_enabled ? "On" : "Off");
-    LOG_INFO_MSG("QZSS L1S: %s", currentConfig.qzss_l1s_enabled ? "On" : "Off");
-    LOG_INFO_MSG("GNSS Update Rate: %d Hz", currentConfig.gnss_update_rate);
-    LOG_INFO_MSG("NTP: %s", currentConfig.ntp_enabled ? "Enabled" : "Disabled");
-    LOG_INFO_MSG("Config Version: %d", currentConfig.config_version);
+    LOG_INFO_F("CONFIG", "Hostname: %s", currentConfig.hostname);
+    LOG_INFO_F("CONFIG", "IP Address: %s", currentConfig.ip_address == 0 ? "DHCP" : "Static");
+    LOG_INFO_F("CONFIG", "Syslog Server: %s", currentConfig.syslog_server);
+    LOG_INFO_F("CONFIG", "Syslog Port: %d", (int)currentConfig.syslog_port);
+    LOG_INFO_F("CONFIG", "Log Level: %d", (int)currentConfig.log_level);
+    LOG_INFO_F("CONFIG", "Prometheus: %s", currentConfig.prometheus_enabled ? "Enabled" : "Disabled");
+    LOG_INFO_F("CONFIG", "GPS: %s", currentConfig.gps_enabled ? "On" : "Off");
+    LOG_INFO_F("CONFIG", "GLONASS: %s", currentConfig.glonass_enabled ? "On" : "Off");
+    LOG_INFO_F("CONFIG", "Galileo: %s", currentConfig.galileo_enabled ? "On" : "Off");
+    LOG_INFO_F("CONFIG", "BeiDou: %s", currentConfig.beidou_enabled ? "On" : "Off");
+    LOG_INFO_F("CONFIG", "QZSS: %s", currentConfig.qzss_enabled ? "On" : "Off");
+    LOG_INFO_F("CONFIG", "QZSS L1S: %s", currentConfig.qzss_l1s_enabled ? "On" : "Off");
+    LOG_INFO_F("CONFIG", "GNSS Update Rate: %d Hz", (int)currentConfig.gnss_update_rate);
+    LOG_INFO_F("CONFIG", "NTP: %s", currentConfig.ntp_enabled ? "Enabled" : "Disabled");
+    LOG_INFO_F("CONFIG", "Config Version: %d", (int)currentConfig.config_version);
 }

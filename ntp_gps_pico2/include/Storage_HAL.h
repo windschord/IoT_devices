@@ -51,7 +51,7 @@ public:
 
     // データ検証
     bool verifyConfig(const void* data, uint16_t size, uint32_t expected_crc);
-    bool isConfigValid();
+    bool isConfigValid() const;
 
     // CRC32計算
     static uint32_t calculateCRC32(const void* data, size_t length);
@@ -76,12 +76,12 @@ private:
 
     // 内部処理
     StorageResult writeHeader(const ConfigHeader& header, uint32_t offset);
-    StorageResult readHeader(ConfigHeader& header, uint32_t offset);
+    StorageResult readHeader(ConfigHeader& header, uint32_t offset) const;
     StorageResult writeData(const void* data, uint16_t size, uint32_t offset);
-    StorageResult readData(void* data, uint16_t size, uint32_t offset);
+    StorageResult readData(void* data, uint16_t size, uint32_t offset) const;
 
     // 電源断保護
-    bool checkPowerStability();
+    bool checkPowerStability() const;
     void enablePowerSafeMode();
     void disablePowerSafeMode();
 

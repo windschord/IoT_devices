@@ -345,7 +345,7 @@ void setup()
     LOG_INFO_MSG("RESET", "PhysicalReset initialized successfully");
   } else {
     LOG_ERR_MSG("RESET", "PhysicalReset initialization failed");
-    REPORT_SW_ERROR("RESET", "PhysicalReset initialization failed");
+    REPORT_ERROR(ErrorType::SYSTEM_ERROR, "RESET", "PhysicalReset initialization failed");
   }
   
   LOG_INFO_MSG("SYSTEM", "System initialization completed successfully");

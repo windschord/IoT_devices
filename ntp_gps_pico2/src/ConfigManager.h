@@ -97,7 +97,6 @@ public:
     bool configFromJson(const String& json);
     
     // Reset and factory defaults
-    void resetToDefaults();
     void clearEEPROM();
     
     // Debug and diagnostics
