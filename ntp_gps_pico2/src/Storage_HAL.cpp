@@ -1,5 +1,5 @@
 #include "Storage_HAL.h"
-#include "logging.h"
+#include "LoggingService.h"
 #include <EEPROM.h>
 #include <hardware/flash.h>
 
@@ -103,20 +103,20 @@ bool StorageHAL::initialize() {
     
     // 電源安定性チェック
     if (!checkPowerStability()) {
-        LOG_WARN_MSG("StorageHAL: 電源不安定 - セーフモード有効");
+        LOG_WARN_MSG("STORAGE", "StorageHAL: 電源不安定 - セーフモード有効");
         enablePowerSafeMode();
     }
     
     // セルフテスト実行
     StorageResult selftest_result = performSelfTest();
     if (selftest_result != STORAGE_SUCCESS) {
-        LOG_ERR_MSG("StorageHAL: セルフテスト失敗 (%d)", selftest_result);
+        LOG_ERR_F("STORAGE", "StorageHAL: セルフテスト失敗 (%d)", selftest_result);
         return false;
     }
     
     initialized = true;
     
-    LOG_INFO_MSG("StorageHAL: 初期化完了 (%dKB利用可能)", STORAGE_SECTOR_SIZE / 1024);
+    LOG_INFO_F("STORAGE", "StorageHAL: 初期化完了 (%dKB利用可能)", STORAGE_SECTOR_SIZE / 1024);
     return true;
 }
 
@@ -133,7 +133,7 @@ void StorageHAL::shutdown() {
     
     initialized = false;
     
-    LOG_INFO_MSG("StorageHAL: シャットダウン完了");
+    LOG_INFO_MSG("STORAGE", "StorageHAL: シャットダウン完了");
 }
 
 StorageResult StorageHAL::readConfig(void* data, uint16_t size) {
@@ -149,19 +149,19 @@ StorageResult StorageHAL::readConfig(void* data, uint16_t size) {
     ConfigHeader header;
     StorageResult result = readHeader(header, STORAGE_CONFIG_OFFSET);
     if (result != STORAGE_SUCCESS) {
-        LOG_ERR_MSG("StorageHAL: 設定ヘッダー読み取り失敗");
+        LOG_ERR_MSG("STORAGE", "StorageHAL: 設定ヘッダー読み取り失敗");
         return result;
     }
     
     // マジックナンバー検証
     if (header.magic != STORAGE_MAGIC_NUMBER) {
-        LOG_ERR_MSG("StorageHAL: 無効なマジックナンバー (0x%08X)", header.magic);
+        LOG_ERR_F("STORAGE", "StorageHAL: 無効なマジックナンバー (0x%08X)", header.magic);
         return STORAGE_ERROR_MAGIC;
     }
     
     // サイズ検証
     if (header.size != size) {
-        LOG_ERR_MSG("StorageHAL: サイズ不一致 (期待:%d, 実際:%d)", size, header.size);
+        LOG_ERR_F("STORAGE", "StorageHAL: サイズ不一致 (期待:%d, 実際:%d)", size, header.size);
         return STORAGE_ERROR_SIZE;
     }
     
@@ -169,19 +169,19 @@ StorageResult StorageHAL::readConfig(void* data, uint16_t size) {
     uint32_t data_offset = STORAGE_CONFIG_OFFSET + sizeof(ConfigHeader);
     result = readData(data, size, data_offset);
     if (result != STORAGE_SUCCESS) {
-        LOG_ERR_MSG("StorageHAL: 設定データ読み取り失敗");
+        LOG_ERR_MSG("STORAGE", "StorageHAL: 設定データ読み取り失敗");
         return result;
     }
     
     // CRC32検証
     uint32_t calculated_crc = calculateCRC32(data, size);
     if (calculated_crc != header.crc32) {
-        LOG_ERR_MSG("StorageHAL: CRC32不一致 (期待:0x%08X, 実際:0x%08X)", 
+        LOG_ERR_F("STORAGE", "StorageHAL: CRC32不一致 (期待:0x%08X, 実際:0x%08X)", 
                     header.crc32, calculated_crc);
         return STORAGE_ERROR_CRC;
     }
     
-    LOG_DEBUG_MSG("StorageHAL: 設定読み取り成功 (%dバイト)", size);
+    LOG_DEBUG_F("STORAGE", "StorageHAL: 設定読み取り成功 (%dバイト)", size);
     return STORAGE_SUCCESS;
 }
 
@@ -196,7 +196,7 @@ StorageResult StorageHAL::writeConfig(const void* data, uint16_t size) {
     
     // 電源セーフモードチェック
     if (power_safe_mode && !checkPowerStability()) {
-        LOG_WARN_MSG("StorageHAL: 電源不安定のため書き込み中止");
+        LOG_WARN_MSG("STORAGE", "StorageHAL: 電源不安定のため書き込み中止");
         return STORAGE_ERROR_WRITE;
     }
     
@@ -216,7 +216,7 @@ StorageResult StorageHAL::writeConfig(const void* data, uint16_t size) {
     // ヘッダー書き込み
     StorageResult result = writeHeader(header, STORAGE_CONFIG_OFFSET);
     if (result != STORAGE_SUCCESS) {
-        LOG_ERR_MSG("StorageHAL: ヘッダー書き込み失敗");
+        LOG_ERR_MSG("STORAGE", "StorageHAL: ヘッダー書き込み失敗");
         return result;
     }
     
@@ -224,7 +224,7 @@ StorageResult StorageHAL::writeConfig(const void* data, uint16_t size) {
     uint32_t data_offset = STORAGE_CONFIG_OFFSET + sizeof(ConfigHeader);
     result = writeData(data, size, data_offset);
     if (result != STORAGE_SUCCESS) {
-        LOG_ERR_MSG("StorageHAL: データ書き込み失敗");
+        LOG_ERR_MSG("STORAGE", "StorageHAL: データ書き込み失敗");
         return result;
     }
     
@@ -232,7 +232,7 @@ StorageResult StorageHAL::writeConfig(const void* data, uint16_t size) {
     EEPROM.commit();
     last_write_timestamp = header.timestamp;
     
-    LOG_INFO_MSG("StorageHAL: 設定書き込み完了 (%dバイト, CRC32:0x%08X)", 
+    LOG_INFO_F("STORAGE", "StorageHAL: 設定書き込み完了 (%dバイト, CRC32:0x%08X)", 
                  size, crc32);
     return STORAGE_SUCCESS;
 }
@@ -281,7 +281,7 @@ StorageResult StorageHAL::factoryReset() {
         return STORAGE_ERROR_INIT;
     }
     
-    LOG_WARN_MSG("StorageHAL: 工場出荷時リセット実行中...");
+    LOG_WARN_MSG("STORAGE", "StorageHAL: 工場出荷時リセット実行中...");
     
     // EEPROMセクター全体をクリア
     for (int i = 0; i < STORAGE_SECTOR_SIZE; i++) {
@@ -294,17 +294,17 @@ StorageResult StorageHAL::factoryReset() {
     // タイムスタンプリセット
     last_write_timestamp = 0;
     
-    LOG_INFO_MSG("StorageHAL: 工場出荷時リセット完了");
+    LOG_INFO_MSG("STORAGE", "StorageHAL: 工場出荷時リセット完了");
     return STORAGE_SUCCESS;
 }
 
 void StorageHAL::printStatus() const {
-    LOG_INFO_MSG("StorageHAL Status:");
-    LOG_INFO_MSG("  Initialized: %s", initialized ? "Yes" : "No");
-    LOG_INFO_MSG("  Available Space: %zu bytes", getAvailableSpace());
-    LOG_INFO_MSG("  Last Write: %u", last_write_timestamp);
-    LOG_INFO_MSG("  Power Safe Mode: %s", power_safe_mode ? "Enabled" : "Disabled");
-    LOG_INFO_MSG("  Config Valid: %s", isConfigValid() ? "Yes" : "No");
+    LOG_INFO_MSG("STORAGE", "StorageHAL Status:");
+    LOG_INFO_F("STORAGE", "  Initialized: %s", initialized ? "Yes" : "No");
+    LOG_INFO_F("STORAGE", "  Available Space: %zu bytes", getAvailableSpace());
+    LOG_INFO_F("STORAGE", "  Last Write: %u", last_write_timestamp);
+    LOG_INFO_F("STORAGE", "  Power Safe Mode: %s", power_safe_mode ? "Enabled" : "Disabled");
+    LOG_INFO_F("STORAGE", "  Config Valid: %s", isConfigValid() ? "Yes" : "No");
 }
 
 StorageResult StorageHAL::performSelfTest() {
@@ -328,7 +328,7 @@ StorageResult StorageHAL::performSelfTest() {
     // 検証
     for (size_t i = 0; i < sizeof(test_pattern); i++) {
         if (read_buffer[i] != test_pattern[i]) {
-            LOG_ERR_MSG("StorageHAL: セルフテスト失敗 at offset %zu", i);
+            LOG_ERR_F("STORAGE", "StorageHAL: セルフテスト失敗 at offset %zu", i);
             return STORAGE_ERROR_CORRUPTION;
         }
     }
@@ -339,7 +339,7 @@ StorageResult StorageHAL::performSelfTest() {
     }
     EEPROM.commit();
     
-    LOG_DEBUG_MSG("StorageHAL: セルフテスト成功");
+    LOG_DEBUG_MSG("STORAGE", "StorageHAL: セルフテスト成功");
     return STORAGE_SUCCESS;
 }
 
@@ -398,15 +398,15 @@ bool StorageHAL::checkPowerStability() {
 
 void StorageHAL::enablePowerSafeMode() {
     power_safe_mode = true;
-    LOG_DEBUG_MSG("StorageHAL: 電源セーフモード有効");
+    LOG_DEBUG_MSG("STORAGE", "StorageHAL: 電源セーフモード有効");
 }
 
 void StorageHAL::disablePowerSafeMode() {
     power_safe_mode = false;
-    LOG_DEBUG_MSG("StorageHAL: 電源セーフモード無効");
+    LOG_DEBUG_MSG("STORAGE", "StorageHAL: 電源セーフモード無効");
 }
 
 void StorageHAL::initializeCRC32Table() {
     // テーブルは静的に定義されているため、初期化不要
-    LOG_DEBUG_MSG("StorageHAL: CRC32テーブル初期化完了");
+    LOG_DEBUG_MSG("STORAGE", "StorageHAL: CRC32テーブル初期化完了");
 }

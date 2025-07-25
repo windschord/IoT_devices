@@ -1,7 +1,7 @@
 #include "PhysicalReset.h"
 #include "DisplayManager.h"
 #include "ConfigManager.h"
-#include "logging.h"
+#include "LoggingService.h"
 
 // グローバルインスタンス
 PhysicalReset g_physical_reset;
@@ -33,7 +33,7 @@ bool PhysicalReset::initialize(DisplayManager* displayMgr, ConfigManager* config
     }
     
     if (!displayMgr || !configMgr) {
-        LOG_ERR_MSG("PhysicalReset: DisplayManager または ConfigManager が null");
+        LOG_ERR_MSG("RESET", "PhysicalReset: DisplayManager または ConfigManager が null");
         return false;
     }
     
@@ -42,7 +42,7 @@ bool PhysicalReset::initialize(DisplayManager* displayMgr, ConfigManager* config
     
     // Button HAL初期化
     if (!g_button_hal.initialize()) {
-        LOG_ERR_MSG("PhysicalReset: Button HAL初期化失敗");
+        LOG_ERR_MSG("RESET", "PhysicalReset: Button HAL初期化失敗");
         return false;
     }
     
@@ -58,7 +58,7 @@ bool PhysicalReset::initialize(DisplayManager* displayMgr, ConfigManager* config
     
     initialized = true;
     
-    LOG_INFO_MSG("PhysicalReset: 初期化完了");
+    LOG_INFO_MSG("RESET", "PhysicalReset: 初期化完了");
     return true;
 }
 
@@ -80,7 +80,7 @@ void PhysicalReset::shutdown() {
     
     initialized = false;
     
-    LOG_INFO_MSG("PhysicalReset: シャットダウン完了");
+    LOG_INFO_MSG("RESET", "PhysicalReset: シャットダウン完了");
 }
 
 void PhysicalReset::update() {
@@ -111,7 +111,7 @@ void PhysicalReset::update() {
             // 完了画面表示
             displayFactoryResetComplete();
             
-            LOG_INFO_MSG("PhysicalReset: 工場出荷時リセット完了");
+            LOG_INFO_MSG("RESET", "PhysicalReset: 工場出荷時リセット完了");
         }
     }
 }
@@ -125,13 +125,13 @@ bool PhysicalReset::wasFactoryResetPerformed() const {
 }
 
 void PhysicalReset::printStatus() const {
-    LOG_INFO_MSG("PhysicalReset Status:");
-    LOG_INFO_MSG("  Initialized: %s", initialized ? "Yes" : "No");
-    LOG_INFO_MSG("  Factory Reset In Progress: %s", factory_reset_in_progress ? "Yes" : "No");
-    LOG_INFO_MSG("  Factory Reset Performed: %s", factory_reset_performed ? "Yes" : "No");
+    LOG_INFO_MSG("RESET", "PhysicalReset Status:");
+    LOG_INFO_F("RESET", "  Initialized: %s", initialized ? "Yes" : "No");
+    LOG_INFO_F("RESET", "  Factory Reset In Progress: %s", factory_reset_in_progress ? "Yes" : "No");
+    LOG_INFO_F("RESET", "  Factory Reset Performed: %s", factory_reset_performed ? "Yes" : "No");
     if (factory_reset_in_progress) {
         uint32_t elapsed = millis() - factory_reset_start_time;
-        LOG_INFO_MSG("  Reset Progress: %ums / 8000ms", elapsed);
+        LOG_INFO_F("RESET", "  Reset Progress: %ums / 8000ms", elapsed);
     }
 }
 
@@ -154,7 +154,7 @@ void PhysicalReset::handleShortPress() {
         return;
     }
     
-    LOG_INFO_MSG("PhysicalReset: 短押し検出 - ディスプレイモード切り替え");
+    LOG_INFO_MSG("RESET", "PhysicalReset: 短押し検出 - ディスプレイモード切り替え");
     
     // DisplayManagerのnextDisplayMode()を呼び出し
     if (display_manager) {
@@ -168,7 +168,7 @@ void PhysicalReset::handleLongPress() {
         return;
     }
     
-    LOG_WARN_MSG("PhysicalReset: 長押し検出 - 工場出荷時リセット開始");
+    LOG_WARN_MSG("RESET", "PhysicalReset: 長押し検出 - 工場出荷時リセット開始");
     
     // 工場出荷時リセットプロセス開始
     factory_reset_in_progress = true;
@@ -180,18 +180,18 @@ void PhysicalReset::handleLongPress() {
 }
 
 void PhysicalReset::performFactoryReset() {
-    LOG_WARN_MSG("PhysicalReset: 工場出荷時リセット実行中...");
+    LOG_WARN_MSG("RESET", "PhysicalReset: 工場出荷時リセット実行中...");
     
     // ConfigManager経由で設定をリセット
     if (config_manager) {
         config_manager->resetToDefaults();
-        LOG_INFO_MSG("PhysicalReset: 設定をデフォルトにリセット完了");
+        LOG_INFO_MSG("RESET", "PhysicalReset: 設定をデフォルトにリセット完了");
     }
     
     // その他のリセット処理がある場合はここに追加
     // 例：ログファイルクリア、統計リセットなど
     
-    LOG_INFO_MSG("PhysicalReset: 工場出荷時リセット実行完了");
+    LOG_INFO_MSG("RESET", "PhysicalReset: 工場出荷時リセット実行完了");
 }
 
 void PhysicalReset::displayFactoryResetConfirmation() {
@@ -231,7 +231,7 @@ void PhysicalReset::displayFactoryResetComplete() {
     // 3秒後にシステム再起動
     delay(3000);
     
-    LOG_INFO_MSG("PhysicalReset: システム再起動実行");
+    LOG_INFO_MSG("RESET", "PhysicalReset: システム再起動実行");
     
     // Raspberry Pi Pico 2の再起動
     // 注意：この方法はハードウェア固有です

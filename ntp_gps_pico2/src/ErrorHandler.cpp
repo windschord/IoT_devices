@@ -77,13 +77,11 @@ void ErrorHandler::reportError(ErrorType type, ErrorSeverity severity,
         0
     };
     
-    // 復旧戦略を決定
+    // 復旧戦略を決定（簡素化）
     switch (severity) {
         case ErrorSeverity::FATAL:
-            error.strategy = RecoveryStrategy::EMERGENCY_STOP;
-            break;
         case ErrorSeverity::CRITICAL:
-            error.strategy = RecoveryStrategy::RESTART_SERVICE;
+            error.strategy = RecoveryStrategy::RESTART_SYSTEM;
             break;
         case ErrorSeverity::ERROR:
             error.strategy = RecoveryStrategy::RETRY;
@@ -372,7 +370,8 @@ void ErrorHandler::checkForRecovery() {
         ErrorInfo& error = errorHistory[index];
         
         if (!error.resolved && error.retryCount < maxRetryCount) {
-            // 復旧タイムアウトをチェック
+            // 復旧タイムアウトをチェック（30秒）
+            const unsigned long recoveryTimeout = 30000UL;
             if (now - error.timestamp > recoveryTimeout) {
                 error.retryCount++;
                 LOG_INFO_F("ERROR", "Retry recovery for %s (attempt %d/%lu)", 
@@ -512,30 +511,10 @@ const ErrorInfo* ErrorHandler::getLatestError(const char* component) const {
     return nullptr;
 }
 
-void ErrorHandler::registerRecoveryCallback(RecoveryCallback callback) {
-    if (callbackCount < 10) {
-        recoveryCallbacks[callbackCount++] = callback;
-        LOG_INFO_MSG("ERROR", "Recovery callback registered");
-    } else {
-        LOG_WARN_MSG("ERROR", "Maximum recovery callbacks reached");
-    }
-}
-
 void ErrorHandler::markResolved(int errorIndex) {
     if (errorIndex >= 0 && errorIndex < MAX_ERROR_HISTORY) {
         errorHistory[errorIndex].resolved = true;
         errorHistory[errorIndex].resolvedTime = millis();
-    }
-}
-
-void ErrorHandler::triggerRecovery(const char* component) {
-    // 指定されたコンポーネントの未解決エラーに対して復旧を試行
-    for (int i = 0; i < errorCount; i++) {
-        int index = (nextErrorIndex - 1 - i + MAX_ERROR_HISTORY) % MAX_ERROR_HISTORY;
-        if (!errorHistory[index].resolved &&
-            strcmp(errorHistory[index].component, component) == 0) {
-            performRecovery(errorHistory[index]);
-        }
     }
 }
 

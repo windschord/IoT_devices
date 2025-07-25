@@ -1,6 +1,6 @@
 #include "ConfigManager.h"
 #include "HardwareConfig.h"
-#include "logging.h"
+#include "LoggingService.h"
 #include <ArduinoJson.h>
 
 ConfigManager::ConfigManager() : 
@@ -9,11 +9,11 @@ ConfigManager::ConfigManager() :
 }
 
 void ConfigManager::init() {
-    LOG_INFO_MSG("ConfigManager: 初期化開始...");
+    LOG_INFO_MSG("CONFIG", "ConfigManager: 初期化開始...");
     
     // Storage HAL初期化
     if (!storageHal->initialize()) {
-        LOG_ERR_MSG("ConfigManager: Storage HAL初期化失敗");
+        LOG_ERR_MSG("CONFIG", "ConfigManager: Storage HAL初期化失敗");
         loadDefaults();
         configValid = true;
         return;
@@ -21,13 +21,13 @@ void ConfigManager::init() {
     
     // 設定読み込み試行
     if (!loadConfig()) {
-        LOG_WARN_MSG("ConfigManager: 設定読み込み失敗、デフォルト設定使用");
+        LOG_WARN_MSG("CONFIG", "ConfigManager: 設定読み込み失敗、デフォルト設定使用");
         loadDefaults();
         saveConfig(); // デフォルト設定を保存
     }
     
     configValid = true;
-    LOG_INFO_MSG("ConfigManager: 初期化完了");
+    LOG_INFO_MSG("CONFIG", "ConfigManager: 初期化完了");
     printConfig();
 }
 
@@ -37,34 +37,34 @@ bool ConfigManager::loadConfig() {
     switch (result) {
         case STORAGE_SUCCESS:
             if (validateConfig(currentConfig)) {
-                LOG_INFO_MSG("ConfigManager: 設定読み込み成功");
+                LOG_INFO_MSG("CONFIG", "ConfigManager: 設定読み込み成功");
                 return true;
             } else {
-                LOG_ERR_MSG("ConfigManager: 設定検証失敗");
+                LOG_ERR_MSG("CONFIG", "ConfigManager: 設定検証失敗");
                 return false;
             }
             
         case STORAGE_ERROR_MAGIC:
-            LOG_WARN_MSG("ConfigManager: 初回起動 - 設定が存在しません");
+            LOG_WARN_MSG("CONFIG", "ConfigManager: 初回起動 - 設定が存在しません");
             return false;
             
         case STORAGE_ERROR_CRC:
-            LOG_ERR_MSG("ConfigManager: 設定データ破損 (CRC32エラー)");
+            LOG_ERR_MSG("CONFIG", "ConfigManager: 設定データ破損 (CRC32エラー)");
             return false;
             
         case STORAGE_ERROR_SIZE:
-            LOG_ERR_MSG("ConfigManager: 設定サイズ不一致");
+            LOG_ERR_MSG("CONFIG", "ConfigManager: 設定サイズ不一致");
             return false;
             
         default:
-            LOG_ERR_MSG("ConfigManager: 設定読み込みエラー (%d)", result);
+            LOG_ERR_F("CONFIG", "ConfigManager: 設定読み込みエラー (%d)", result);
             return false;
     }
 }
 
 bool ConfigManager::saveConfig() {
     if (!validateConfig(currentConfig)) {
-        LOG_ERR_MSG("ConfigManager: 無効な設定のため保存中止");
+        LOG_ERR_MSG("CONFIG", "ConfigManager: 無効な設定のため保存中止");
         return false;
     }
     
@@ -74,7 +74,7 @@ bool ConfigManager::saveConfig() {
     StorageResult result = storageHal->writeConfig(&currentConfig, sizeof(SystemConfig));
     
     if (result == STORAGE_SUCCESS) {
-        LOG_INFO_MSG("ConfigManager: 設定保存完了");
+        LOG_INFO_MSG("CONFIG", "ConfigManager: 設定保存完了");
         return true;
     } else {
         LOG_ERR_MSG("ConfigManager: 設定保存失敗 (%d)", result);
@@ -83,7 +83,7 @@ bool ConfigManager::saveConfig() {
 }
 
 void ConfigManager::loadDefaults() {
-    LOG_INFO_MSG("ConfigManager: デフォルト設定読み込み...");
+    LOG_INFO_MSG("CONFIG", "ConfigManager: デフォルト設定読み込み...");
     memset(&currentConfig, 0, sizeof(SystemConfig));
     
     // Network Configuration
@@ -125,11 +125,11 @@ void ConfigManager::loadDefaults() {
     // Configuration metadata
     currentConfig.config_version = 1;
     
-    LOG_INFO_MSG("ConfigManager: デフォルト設定設定完了");
+    LOG_INFO_MSG("CONFIG", "ConfigManager: デフォルト設定設定完了");
 }
 
 void ConfigManager::resetToDefaults() {
-    LOG_WARN_MSG("ConfigManager: 工場出荷時リセット実行...");
+    LOG_WARN_MSG("CONFIG", "ConfigManager: 工場出荷時リセット実行...");
     
     // Storage HAL経由で工場出荷時リセット
     StorageResult result = storageHal->factoryReset();
@@ -142,15 +142,15 @@ void ConfigManager::resetToDefaults() {
     
     // 新しい設定を保存
     if (saveConfig()) {
-        LOG_INFO_MSG("ConfigManager: 工場出荷時リセット完了");
+        LOG_INFO_MSG("CONFIG", "ConfigManager: 工場出荷時リセット完了");
     } else {
-        LOG_ERR_MSG("ConfigManager: 工場出荷時リセット - 設定保存失敗");
+        LOG_ERR_MSG("CONFIG", "ConfigManager: 工場出荷時リセット - 設定保存失敗");
     }
 }
 
 bool ConfigManager::setConfig(const SystemConfig& newConfig) {
     if (!validateConfig(newConfig)) {
-        LOG_ERR_MSG("ConfigManager: 無効な設定");
+        LOG_ERR_MSG("CONFIG", "ConfigManager: 無効な設定");
         return false;
     }
     
@@ -163,7 +163,7 @@ bool ConfigManager::validateConfig(const SystemConfig& config) const {
     
     // ホスト名チェック
     if (strlen(config.hostname) == 0 || strlen(config.hostname) >= sizeof(config.hostname)) {
-        LOG_ERR_MSG("ConfigManager: 無効なホスト名");
+        LOG_ERR_MSG("CONFIG", "ConfigManager: 無効なホスト名");
         return false;
     }
     
@@ -193,7 +193,7 @@ bool ConfigManager::validateConfig(const SystemConfig& config) const {
     
     // 設定バージョンチェック
     if (config.config_version == 0) {
-        LOG_ERR_MSG("ConfigManager: 無効な設定バージョン");
+        LOG_ERR_MSG("CONFIG", "ConfigManager: 無効な設定バージョン");
         return false;
     }
     
@@ -359,16 +359,16 @@ bool ConfigManager::configFromJson(const String& json) {
     
     // 設定を適用
     if (setConfig(tempConfig)) {
-        LOG_INFO_MSG("ConfigManager: JSON設定適用成功");
+        LOG_INFO_MSG("CONFIG", "ConfigManager: JSON設定適用成功");
         return true;
     } else {
-        LOG_ERR_MSG("ConfigManager: JSON設定適用失敗");
+        LOG_ERR_MSG("CONFIG", "ConfigManager: JSON設定適用失敗");
         return false;
     }
 }
 
 void ConfigManager::printConfig() const {
-    LOG_INFO_MSG("=== Current Configuration ===");
+    LOG_INFO_MSG("CONFIG", "=== Current Configuration ===");
     LOG_INFO_MSG("Hostname: %s", currentConfig.hostname);
     LOG_INFO_MSG("IP Address: %s", currentConfig.ip_address == 0 ? "DHCP" : "Static");
     LOG_INFO_MSG("Syslog Server: %s", currentConfig.syslog_server);

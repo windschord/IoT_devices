@@ -1,5 +1,5 @@
 #include "Button_HAL.h"
-#include "logging.h"
+#include "LoggingService.h"
 
 // グローバルインスタンス
 ButtonHAL g_button_hal;
@@ -30,7 +30,7 @@ bool ButtonHAL::initialize() {
     
     initialized = true;
     
-    LOG_INFO_MSG("ButtonHAL: 初期化完了 (GPIO %d)", BUTTON_PIN);
+    LOG_INFO_F("BUTTON", "ButtonHAL: 初期化完了 (GPIO %d)", BUTTON_PIN);
     return true;
 }
 
@@ -48,7 +48,7 @@ void ButtonHAL::shutdown() {
     
     initialized = false;
     
-    LOG_INFO_MSG("ButtonHAL: シャットダウン完了");
+    LOG_INFO_MSG("BUTTON", "ButtonHAL: シャットダウン完了");
 }
 
 void ButtonHAL::update() {
@@ -82,7 +82,7 @@ void ButtonHAL::update() {
                 control.long_press_triggered = false;
                 control.debounce_count = 0;
                 
-                LOG_DEBUG_MSG("ButtonHAL: ボタン押下検出");
+                LOG_DEBUG_MSG("BUTTON", "ButtonHAL: ボタン押下検出");
             }
             break;
             
@@ -94,7 +94,7 @@ void ButtonHAL::update() {
                     control.state = BUTTON_SHORT_PRESS;
                     triggerCallback(BUTTON_SHORT_PRESS);
                     
-                    LOG_INFO_MSG("ButtonHAL: 短押し検出 (%ums)", duration);
+                    LOG_INFO_F("BUTTON", "ButtonHAL: 短押し検出 (%ums)", duration);
                 }
                 resetState();
             } else {
@@ -105,7 +105,7 @@ void ButtonHAL::update() {
                     control.long_press_triggered = true;
                     triggerCallback(BUTTON_LONG_PRESS);
                     
-                    LOG_WARN_MSG("ButtonHAL: 長押し検出 (%ums)", duration);
+                    LOG_WARN_F("BUTTON", "ButtonHAL: 長押し検出 (%ums)", duration);
                 }
             }
             break;
@@ -129,12 +129,12 @@ void ButtonHAL::update() {
 
 void ButtonHAL::setShortPressCallback(ButtonCallback callback) {
     short_press_callback = callback;
-    LOG_DEBUG_MSG("ButtonHAL: 短押しコールバック設定");
+    LOG_DEBUG_MSG("BUTTON", "ButtonHAL: 短押しコールバック設定");
 }
 
 void ButtonHAL::setLongPressCallback(ButtonCallback callback) {
     long_press_callback = callback;
-    LOG_DEBUG_MSG("ButtonHAL: 長押しコールバック設定");
+    LOG_DEBUG_MSG("BUTTON", "ButtonHAL: 長押しコールバック設定");
 }
 
 ButtonState ButtonHAL::getState() const {
@@ -159,12 +159,12 @@ void ButtonHAL::printStatus() const {
         "IDLE", "PRESSED", "SHORT_PRESS", "LONG_PRESS", "DEBOUNCE"
     };
     
-    LOG_INFO_MSG("ButtonHAL Status:");
-    LOG_INFO_MSG("  State: %s", state_names[control.state]);
-    LOG_INFO_MSG("  Pressed Duration: %ums", getPressedDuration());
-    LOG_INFO_MSG("  Debounce Count: %d", control.debounce_count);
-    LOG_INFO_MSG("  Long Press Triggered: %s", control.long_press_triggered ? "Yes" : "No");
-    LOG_INFO_MSG("  Cooldown: %s", isInCooldown() ? "Active" : "Inactive");
+    LOG_INFO_MSG("BUTTON", "ButtonHAL Status:");
+    LOG_INFO_F("BUTTON", "  State: %s", state_names[control.state]);
+    LOG_INFO_F("BUTTON", "  Pressed Duration: %ums", getPressedDuration());
+    LOG_INFO_F("BUTTON", "  Debounce Count: %d", control.debounce_count);
+    LOG_INFO_F("BUTTON", "  Long Press Triggered: %s", control.long_press_triggered ? "Yes" : "No");
+    LOG_INFO_F("BUTTON", "  Cooldown: %s", isInCooldown() ? "Active" : "Inactive");
 }
 
 bool ButtonHAL::readButton() {
