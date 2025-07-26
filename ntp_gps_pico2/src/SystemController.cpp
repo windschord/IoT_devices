@@ -340,6 +340,7 @@ unsigned long SystemController::getStateTime() const {
 }
 
 void SystemController::printSystemStatus() {
+#ifdef DEBUG_SYSTEM_STATUS
     Serial.println("=== System Status ===");
     Serial.printf("State: %d, Health: %d%%, Uptime: %lu ms\n", 
                   (int)currentState, healthScore.overall, getUptime());
@@ -347,6 +348,7 @@ void SystemController::printSystemStatus() {
                   gpsConnected ? "OK" : "FAIL",
                   networkConnected ? "OK" : "FAIL", 
                   displayConnected ? "OK" : "FAIL");
+#endif
 }
 
 void SystemController::printServiceStatus() {

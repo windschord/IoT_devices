@@ -109,21 +109,36 @@ void DisplayManager::update() {
 }
 
 void DisplayManager::displayInfo(const GpsSummaryData& gpsSummaryData) {
-    if (!initialized || !display) return;
+    if (!initialized || !display) {
+        Serial.println("DisplayManager::displayInfo - Not initialized or no display");
+        return;
+    }
     
     if (errorState) {
+        Serial.println("DisplayManager::displayInfo - Error state, showing error screen");
         displayErrorScreen();
         return;
     }
     
+    Serial.printf("DisplayManager::displayInfo - Mode: %d, displayCount: %d\n", currentMode, displayCount);
+    
     switch (currentMode) {
         case DISPLAY_GPS_TIME:
+#ifdef DEBUG_DISPLAY_GPS
+            Serial.println("Displaying GPS Time screen");
+#endif
             displayGpsTimeScreen(gpsSummaryData);
             break;
         case DISPLAY_GPS_SATS:
+#ifdef DEBUG_DISPLAY_GPS
+            Serial.println("Displaying GPS Satellites screen");
+#endif
             displayGpsSatsScreen(gpsSummaryData);
             break;
         default:
+#ifdef DEBUG_DISPLAY_GPS
+            Serial.printf("Displaying default GPS Time screen (mode: %d)\n", currentMode);
+#endif
             displayGpsTimeScreen(gpsSummaryData);
             break;
     }
@@ -169,10 +184,12 @@ void DisplayManager::displayError(const String& message) {
 }
 
 void DisplayManager::nextDisplayMode() {
+    DisplayMode oldMode = currentMode;
     currentMode = static_cast<DisplayMode>((currentMode + 1) % DISPLAY_MODE_COUNT);
     modeChangeTime = millis();
-    Serial.print("Display mode changed to: ");
-    Serial.println(currentMode);
+    Serial.printf("Display mode changed from %d to %d\n", oldMode, currentMode);
+    Serial.printf("DisplayManager state: displayCount=%d, shouldDisplay=%s, initialized=%s\n", 
+                  displayCount, shouldDisplay() ? "YES" : "NO", initialized ? "YES" : "NO");
 }
 
 void DisplayManager::setErrorState(const String& message) {

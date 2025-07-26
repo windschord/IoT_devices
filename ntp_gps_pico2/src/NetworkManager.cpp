@@ -26,7 +26,9 @@ void NetworkManager::init() {
     if (!hardwareDetected) {
         Serial.println("ERROR: W5500 Ethernet hardware not found after 3 attempts");
         Serial.println("This may be a library compatibility issue");
+#ifdef DEBUG_NETWORK_INIT
         Serial.println("Continuing without Ethernet (GPS-only mode)");
+#endif
         analogWrite(LED_ERROR_PIN, 255);
         networkMonitor.isConnected = false;
     } else {

@@ -448,6 +448,7 @@ void ErrorHandler::printErrorHistory() const {
 }
 
 void ErrorHandler::printStatistics() const {
+#ifdef DEBUG_ERROR_STATS
     Serial.println("=== Error Statistics ===");
     Serial.printf("Total: %lu, Resolved: %lu, Unresolved: %lu\n",
                   statistics.totalErrors, statistics.resolvedErrors, statistics.unresolvedErrors);
@@ -455,6 +456,7 @@ void ErrorHandler::printStatistics() const {
                   statistics.hardwareErrors, statistics.networkErrors, 
                   statistics.gpsErrors, statistics.ntpErrors);
     Serial.printf("Resolution Rate: %.1f%%\n", statistics.resolutionRate);
+#endif
 }
 
 // 未実装メソッドの追加

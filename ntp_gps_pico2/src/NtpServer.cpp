@@ -255,10 +255,12 @@ bool NtpServer::sendNtpResponse() {
     uint32_t transmitUnixTime = timeManager->getUnixTimestamp();
     uint32_t transmitMicroseconds = transmitTimestamp_us % 1000000;
     
-    // Debug NTP timestamp conversion
+    // NTP timestamp conversion
     NtpTimestamp ntpTs = unixToNtpTimestamp(transmitUnixTime, transmitMicroseconds);
+#ifdef DEBUG_NTP_TIMESTAMPS
     Serial.printf("NTP Timestamp Debug - Unix: %lu, NTP: %lu (0x%08X), Expected: %lu\n", 
                   transmitUnixTime, ntpTs.seconds, ntpTs.seconds, transmitUnixTime + 2208988800UL);
+#endif
     
     responsePacket.transmit_timestamp = htonTimestamp(ntpTs);
     
@@ -374,9 +376,11 @@ NtpTimestamp NtpServer::getReferenceTimestamp() {
     uint32_t refTime = timeManager->getUnixTimestamp() - 1;
     NtpTimestamp refTimestamp = unixToNtpTimestamp(refTime, 0);
     
+#ifdef DEBUG_NTP_TIMESTAMPS
     // Debug reference timestamp
     Serial.printf("Reference Timestamp Debug - Unix: %lu, NTP: %lu (0x%08X)\n", 
                   refTime, refTimestamp.seconds, refTimestamp.seconds);
+#endif
     
     return refTimestamp;
 }

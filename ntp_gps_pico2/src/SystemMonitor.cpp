@@ -67,28 +67,40 @@ void SystemMonitor::evaluateFallbackMode() {
     // Debug fallback conditions
     static unsigned long lastFallbackDebug = 0;
     if (now - lastFallbackDebug > 5000) { // Every 5 seconds
+#ifdef DEBUG_GPS_MONITOR
         Serial.print("Fallback evaluation - ");
         Serial.print("GPS Connected: "); Serial.print(*gpsConnected ? "YES" : "NO");
         Serial.print(", GPS Time Valid: "); Serial.print(gpsMonitor.gpsTimeValid ? "YES" : "NO");
         Serial.print(", PPS Active: "); Serial.print(gpsMonitor.ppsActive ? "YES" : "NO");
         Serial.print(", Current Fallback: "); Serial.print(gpsMonitor.inFallbackMode ? "YES" : "NO");
+#endif
     }
     
     if (!*gpsConnected) {
         shouldFallback = true;
+#ifdef DEBUG_GPS_MONITOR
         if (now - lastFallbackDebug > 5000) Serial.print(" -> FALLBACK (GPS not connected)");
+#endif
     } else if (!gpsMonitor.gpsTimeValid && (now - gpsMonitor.lastValidTime > gpsMonitor.gpsTimeoutMs)) {
         shouldFallback = true;
+#ifdef DEBUG_GPS_MONITOR
         if (now - lastFallbackDebug > 5000) Serial.print(" -> FALLBACK (GPS time timeout)");
+#endif
     } else if (!gpsMonitor.ppsActive && (now - gpsMonitor.lastPpsTime > gpsMonitor.ppsTimeoutMs)) {
         shouldFallback = true;
+#ifdef DEBUG_GPS_MONITOR
         if (now - lastFallbackDebug > 5000) Serial.print(" -> FALLBACK (PPS timeout)");
+#endif
     } else {
+#ifdef DEBUG_GPS_MONITOR
         if (now - lastFallbackDebug > 5000) Serial.print(" -> GPS OK");
+#endif
     }
     
     if (now - lastFallbackDebug > 5000) {
+#ifdef DEBUG_GPS_MONITOR
         Serial.println();
+#endif
         lastFallbackDebug = now;
     }
     
@@ -106,10 +118,12 @@ void SystemMonitor::evaluateFallbackMode() {
         gpsMonitor.inFallbackMode = false;
         analogWrite(LED_ERROR_PIN, 0); // Turn off error LED
         
+#ifdef DEBUG_GPS_FALLBACK
         Serial.println("✅ GPS signal recovered - exiting fallback mode");
         Serial.print("   GPS Connected: "); Serial.println(*gpsConnected ? "YES" : "NO");
         Serial.print("   GPS Time Valid: "); Serial.println(gpsMonitor.gpsTimeValid ? "YES" : "NO");
         Serial.print("   PPS Active: "); Serial.println(gpsMonitor.ppsActive ? "YES" : "NO");
+#endif
     }
 }
 

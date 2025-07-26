@@ -405,6 +405,7 @@ void PrometheusMetrics::printNtpMetrics() const {
 }
 
 void PrometheusMetrics::printGpsMetrics() const {
+#ifdef DEBUG_PROMETHEUS_GPS
     Serial.println("=== GPSメトリクス ===");
     Serial.printf("総衛星数: %d\n", gpsMetrics.totalSatellites);
     Serial.printf("GPS: %d, GLONASS: %d, Galileo: %d, BeiDou: %d, QZSS: %d\n",
@@ -415,6 +416,7 @@ void PrometheusMetrics::printGpsMetrics() const {
     Serial.printf("PPS総数: %lu\n", gpsMetrics.totalPpsPulses);
     Serial.printf("信号品質: %d/10\n", gpsMetrics.signalQuality);
     Serial.printf("フォールバックモード: %s\n", gpsMetrics.inFallbackMode ? "はい" : "いいえ");
+#endif
 }
 
 void PrometheusMetrics::printSystemMetrics() const {

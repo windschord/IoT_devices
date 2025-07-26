@@ -79,6 +79,7 @@ unsigned long TimeManager::getHighPrecisionTime() {
     extern bool gpsConnected;
     
     // Debug time source selection
+#ifdef DEBUG_TIME_MANAGER
     static unsigned long lastTimeDebug = 0;
     if (millis() - lastTimeDebug > 10000) { // Every 10 seconds
         Serial.print("TimeManager::getHighPrecisionTime() - Using ");
@@ -101,6 +102,7 @@ unsigned long TimeManager::getHighPrecisionTime() {
         }
         lastTimeDebug = millis();
     }
+#endif
     
     // Debug condition check
     static unsigned long lastConditionDebug = 0;
@@ -109,12 +111,14 @@ unsigned long TimeManager::getHighPrecisionTime() {
         bool gpsTimeValid = (timeSync->synchronized && timeSync->gpsTime > 1000000000);
         bool gpsRecentlyUpdated = (timeSinceGpsUpdate < 30000);
         
+#ifdef DEBUG_TIME_MANAGER
         Serial.printf("GPS Condition Debug - gpsTimeValid: %s, recentlyUpdated: %s (age: %lu ms)\n",
                      gpsTimeValid ? "YES" : "NO",
                      gpsRecentlyUpdated ? "YES" : "NO",
                      timeSinceGpsUpdate);
         Serial.printf("GPS Condition Debug - timeSync->gpsTime: %lu, synchronized: %s\n",
                      timeSync->gpsTime, timeSync->synchronized ? "YES" : "NO");
+#endif
         lastConditionDebug = millis();
     }
     
@@ -144,9 +148,11 @@ unsigned long TimeManager::getHighPrecisionTime() {
         // Debug GPS time usage
         static unsigned long lastGpsTimeDebug = 0;
         if (millis() - lastGpsTimeDebug > 5000) { // Every 5 seconds
+#ifdef DEBUG_TIME_MANAGER
             Serial.printf("GPS Time Detail Debug:\n");
             Serial.printf("  timeSync->gpsTime: %lu (Unix seconds)\n", timeSync->gpsTime);
             Serial.printf("  64-bit gpsTimeMs: %llu (milliseconds)\n", gpsTimeMs64);
+#endif
             Serial.printf("  32-bit max: %lu\n", ULONG_MAX);
             Serial.printf("  elapsed microseconds: %lu\n", elapsed);
             Serial.printf("  elapsed milliseconds: %llu\n", elapsedMs64);
@@ -161,7 +167,9 @@ unsigned long TimeManager::getHighPrecisionTime() {
         // RTC fallback time
         static unsigned long lastFallbackDebug = 0;
         if (millis() - lastFallbackDebug > 5000) { // Every 5 seconds
+#ifdef DEBUG_TIME_MANAGER
             Serial.printf("Using RTC Fallback - GPS conditions not met\n");
+#endif
             lastFallbackDebug = millis();
         }
         
@@ -206,8 +214,10 @@ time_t TimeManager::getUnixTimestamp() {
         
         static unsigned long lastGpsDebug = 0;
         if (millis() - lastGpsDebug > 5000) {
+#ifdef DEBUG_TIME_MANAGER
             Serial.printf("GPS Unix Timestamp - GPS base: %lu, elapsed: %lu sec, result: %lu\n",
                          timeSync->gpsTime, elapsedSec, result);
+#endif
             lastGpsDebug = millis();
         }
         
@@ -272,12 +282,14 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
     static unsigned long lastDebugTime = 0;
     unsigned long now = millis();
     if (now - lastDebugTime > 5000) { // Every 5 seconds
+#ifdef DEBUG_GPS_SYNC
         Serial.print("GPS Sync Debug - PPS: ");
         Serial.print(ppsReceived ? "YES" : "NO");
         Serial.print(", GPS Connected: ");
         Serial.print(gpsConnected ? "YES" : "NO");
         Serial.print(", Time Valid: ");
         Serial.print(gpsData.timeValid ? "YES" : "NO");
+#endif
         Serial.print(", Date Valid: ");
         Serial.print(gpsData.dateValid ? "YES" : "NO");
         Serial.print(", Synchronized: ");
@@ -292,9 +304,11 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
         
         if (gpsData.timeValid && gpsData.dateValid) {
             // Debug GPS date/time data
+#ifdef DEBUG_GPS_SYNC
             Serial.printf("GPS Date/Time Debug - Year: %d, Month: %d, Day: %d, Hour: %d, Min: %d, Sec: %d\n",
                          gpsData.year, gpsData.month, gpsData.day, 
                          gpsData.hour, gpsData.min, gpsData.sec);
+#endif
             
             // Convert to Unix timestamp
             struct tm timeinfo = {0};
@@ -325,19 +339,25 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
             timeSync->synchronized = true;
             
             // Debug GPS time sync
+#ifdef DEBUG_GPS_SYNC
             Serial.printf("GPS Time Sync - Set timeSync->gpsTime to: %lu (UTC timestamp)\n", utc_result);
+#endif
             
             // Synchronize with RTC
+#ifdef DEBUG_GPS_SYNC
             Serial.printf("RTC Update - Setting RTC to GPS time: 20%02d/%02d/%02d %02d:%02d:%02d\n",
                          gpsData.year % 100, gpsData.month, gpsData.day,
                          gpsData.hour, gpsData.min, gpsData.sec);
+#endif
             
             // Test I2C communication before setting RTC
             extern TwoWire Wire1;
             Wire1.beginTransmission(0x68);
             byte preCommError = Wire1.endTransmission();
+#ifdef DEBUG_GPS_SYNC
             Serial.printf("RTC I2C Pre-write test: %s (error: %d)\n", 
                          preCommError == 0 ? "SUCCESS" : "FAILED", preCommError);
+#endif
             
             // Manual DS3231 time setting (bypassing uRTCLib)
             Serial.println("Manual DS3231 time setting:");
@@ -373,7 +393,9 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
             DateTime gpsDateTime(gpsData.year, gpsData.month, gpsData.day,
                                 gpsData.hour, gpsData.min, gpsData.sec);
             rtc->adjust(gpsDateTime);
+#ifdef DEBUG_GPS_SYNC
             Serial.printf("RTClib adjust() operation completed\n");
+#endif
             timeSync->rtcTime = timeSync->gpsTime;
             
             // Small delay to ensure write completes
@@ -413,15 +435,19 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
             
             // Verify RTC was updated correctly using RTClib
             DateTime afterUpdate = rtc->now();
+#ifdef DEBUG_GPS_SYNC
             Serial.printf("RTClib verification: %04d/%02d/%02d %02d:%02d:%02d\n",
                          afterUpdate.year(), afterUpdate.month(), afterUpdate.day(),
                          afterUpdate.hour(), afterUpdate.minute(), afterUpdate.second());
+#endif
             
             // Test I2C communication after setting RTC
             Wire1.beginTransmission(0x68);
             byte postCommError = Wire1.endTransmission();
+#ifdef DEBUG_GPS_SYNC
             Serial.printf("RTC I2C Post-write test: %s (error: %d)\n", 
                          postCommError == 0 ? "SUCCESS" : "FAILED", postCommError);
+#endif
             
             // Accuracy calculation (high precision with PPS signal)
             timeSync->accuracy = 0.001; // 1ms accuracy

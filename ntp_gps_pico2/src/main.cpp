@@ -102,22 +102,30 @@ bool enableQZSSL1S(void)
 
 void setupGps()
 {
+#ifdef DEBUG_GPS_INIT
   Serial.println("=== GPS Setup Starting ===");
   Serial.print("GPS SDA Pin: "); Serial.println(GPS_SDA_PIN);
   Serial.print("GPS SCL Pin: "); Serial.println(GPS_SCL_PIN);
+#endif
   
   Wire1.setSDA(GPS_SDA_PIN);
   Wire1.setSCL(GPS_SCL_PIN);
   Wire1.begin();
+#ifdef DEBUG_GPS_INIT
   Serial.println("Wire1 initialized for GPS/RTC shared bus");
+#endif
 
+#ifdef DEBUG_GPS_INIT
   Serial.println("Attempting to connect to u-blox GNSS module...");
+#endif
   if (myGNSS.begin(Wire1) == false) // Connect to the u-blox module using Wire1 port
   {
+#ifdef DEBUG_GPS_INIT
     Serial.println(F("❌ FAILED: u-blox GNSS not detected at default I2C address (0x42)"));
     Serial.println(F("   Check I2C wiring: SDA=GPIO6, SCL=GPIO7 (GPS/RTC bus)"));
     Serial.println(F("   Check power supply to GPS module"));
     Serial.println(F("❌ GPS initialization FAILED - continuing without GPS"));
+#endif
     
     // ErrorHandlerを使用してエラーを報告
     REPORT_HW_ERROR("GPS", "u-blox GNSS not detected at I2C address 0x42");
@@ -130,8 +138,10 @@ void setupGps()
     return; // エラーで停止せず、続行する
   }
   
+#ifdef DEBUG_GPS_INIT
   Serial.println("✅ GPS module connected successfully!");
   Serial.println("✅ GPS initialization completed");
+#endif
   LOG_INFO_MSG("GPS", "u-blox GNSS module connected successfully at I2C 0x42");
   LOG_INFO_MSG("GPS", "QZSS L1S signal reception enabled for disaster alerts");
   gpsConnected = true;
@@ -152,8 +162,11 @@ void setupGps()
 void setupRtc()
 {
   // Note: Wire1 is already initialized by GPS setup
+#ifdef DEBUG_RTC_INIT
   Serial.println("Initializing RTClib DS3231 on Wire1 bus (shared with GPS)");
+#endif
   
+#ifdef DEBUG_RTC_INIT
   // I2C scan on Wire1 bus to verify device presence
   Serial.println("Scanning I2C devices on Wire1 bus:");
   int deviceCount = 0;
@@ -166,22 +179,30 @@ void setupRtc()
     }
   }
   Serial.printf("Total I2C devices found: %d\n", deviceCount);
+#endif
   
   // Initialize RTClib with Wire1
   if (!rtc.begin(&Wire1)) {
+#ifdef DEBUG_RTC_INIT
     Serial.println("ERROR: Could not find RTC DS3231!");
+#endif
     return;
   }
   
+#ifdef DEBUG_RTC_INIT
   Serial.println("RTClib DS3231 initialization: SUCCESS");
+#endif
   
   // Check if RTC lost power and needs initialization
   if (rtc.lostPower()) {
+#ifdef DEBUG_RTC_INIT
     Serial.println("RTC lost power - setting to compile time");
+#endif
     // Set to compile time as initial value
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   }
   
+#ifdef DEBUG_RTC_INIT
   // Display current RTC time
   DateTime now = rtc.now();
   Serial.printf("Current RTC time: %04d/%02d/%02d %02d:%02d:%02d\n",
@@ -190,7 +211,9 @@ void setupRtc()
   
   // Display temperature from DS3231
   Serial.printf("DS3231 temperature: %.2f°C\n", rtc.getTemperature());
+#endif
   
+#ifdef DEBUG_RTC_INIT
   // Manual DS3231 register verification
   Serial.println("Manual DS3231 register read test:");
   Wire1.beginTransmission(0x68);
@@ -226,6 +249,7 @@ void setupRtc()
   } else {
     Serial.printf("DS3231 register read failed: error %d\n", ds3231Error);
   }
+#endif
 }
 
 void setup()
@@ -423,6 +447,7 @@ void loop()
     GpsSummaryData gpsData = gpsClient.getGpsSummaryData();
     
     // Display content based on current mode
+    Serial.printf("Main loop: shouldDisplay=YES, currentMode=%d\n", displayManager.getCurrentMode());
     switch (displayManager.getCurrentMode()) {
       case DISPLAY_GPS_TIME:
       case DISPLAY_GPS_SATS:
@@ -457,10 +482,11 @@ void loop()
   networkManager.monitorConnection();
   networkManager.attemptReconnection();
   
-  // Debug network status every 10 seconds
+  // Debug network status every 30 seconds (reduced frequency)
   static unsigned long lastNetworkDebug = 0;
-  if (millis() - lastNetworkDebug > 10000) {
+  if (millis() - lastNetworkDebug > 30000) {
     lastNetworkDebug = millis();
+#ifdef DEBUG_NETWORK
     Serial.print("Network Status - Connected: ");
     Serial.print(networkManager.isConnected() ? "YES" : "NO");
     if (networkManager.isConnected()) {
@@ -482,6 +508,7 @@ void loop()
       case LinkOFF: Serial.print("OFF"); break;
     }
     Serial.println();
+#endif
   }
   
   // UDP socket management and NTP request processing

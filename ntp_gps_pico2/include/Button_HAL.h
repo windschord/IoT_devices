@@ -26,9 +26,9 @@ class ButtonHAL {
 public:
     static const uint8_t BUTTON_PIN = 11;           // GPIO 11
     static const uint32_t DEBOUNCE_DELAY = 20;      // 20ms
-    static const uint32_t SHORT_PRESS_THRESHOLD = 2000; // 2秒
+    static const uint32_t SHORT_PRESS_THRESHOLD = 100;  // 100ms (大幅短縮)
     static const uint32_t LONG_PRESS_THRESHOLD = 5000;  // 5秒
-    static const uint32_t COOLDOWN_PERIOD = 1000;   // 1秒
+    static const uint32_t COOLDOWN_PERIOD = 300;    // 300ms (短縮)
 
     ButtonHAL();
     ~ButtonHAL();

@@ -58,8 +58,28 @@ void ButtonHAL::update() {
 
     uint32_t current_time = millis();
     
+    // 定期的なデバッグ出力（5秒ごと）
+    static uint32_t last_debug = 0;
+    static uint32_t update_call_count = 0;
+    update_call_count++;
+    
+    if (current_time - last_debug > 5000) {
+        bool raw_state = digitalRead(BUTTON_PIN);
+        Serial.printf("ButtonHAL DEBUG: GPIO %d = %s (RAW), cooldown=%s, state=%d, update_calls=%d\n", 
+                      BUTTON_PIN, raw_state ? "HIGH" : "LOW", 
+                      isInCooldown() ? "YES" : "NO", control.state, update_call_count);
+        last_debug = current_time;
+        update_call_count = 0; // Reset counter
+    }
+    
     // クールダウン期間中は処理をスキップ
     if (isInCooldown()) {
+        static uint32_t last_cooldown_debug = 0;
+        if (current_time - last_cooldown_debug > 1000) {
+            uint32_t remaining = control.cooldown_until - current_time;
+            Serial.printf("ButtonHAL: Still in cooldown, %ums remaining\n", remaining);
+            last_cooldown_debug = current_time;
+        }
         return;
     }
 
@@ -70,6 +90,18 @@ void ButtonHAL::update() {
     
     control.last_read = current_time;
     bool current_pressed = readButton();
+    
+    // ボタン状態変化のデバッグ
+    static bool last_pressed_debug = false;
+    static uint32_t last_state_change = 0;
+    if (current_pressed != last_pressed_debug) {
+        uint32_t time_since_last = current_time - last_state_change;
+        Serial.printf("ButtonHAL: Button state changed from %s to %s (after %ums)\n", 
+                      last_pressed_debug ? "PRESSED" : "RELEASED",
+                      current_pressed ? "PRESSED" : "RELEASED", time_since_last);
+        last_pressed_debug = current_pressed;
+        last_state_change = current_time;
+    }
     
     handleStateTransition();
     
@@ -88,13 +120,15 @@ void ButtonHAL::update() {
             
         case BUTTON_PRESSED:
             if (!current_pressed) {
-                // 短時間での離脱 - 短押しとして判定
+                // ボタンが離された - 短押しとして判定
                 uint32_t duration = current_time - control.press_start;
-                if (duration < SHORT_PRESS_THRESHOLD) {
+                if (duration >= SHORT_PRESS_THRESHOLD) {
                     control.state = BUTTON_SHORT_PRESS;
                     triggerCallback(BUTTON_SHORT_PRESS);
                     
                     LOG_INFO_F("BUTTON", "ButtonHAL: 短押し検出 (%ums)", duration);
+                } else {
+                    LOG_DEBUG_F("BUTTON", "ButtonHAL: 押下時間が短すぎる (%ums < %ums)", duration, SHORT_PRESS_THRESHOLD);
                 }
                 resetState();
             } else {
