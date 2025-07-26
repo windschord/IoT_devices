@@ -2,8 +2,8 @@
 #define DISPLAY_MANAGER_H
 
 #include <Arduino.h>
-#include <Adafruit_GFX.h>
-#include "../lib/Adafruit_SH1106_Manual/Adafruit_SH1106.h"
+#include <Wire.h>
+#include <oled.h>
 #include "Gps_model.h"
 #include "SystemTypes.h"
 #include "NtpTypes.h"
@@ -20,7 +20,9 @@ enum DisplayMode {
 
 class DisplayManager {
 private:
-    Adafruit_SH1106* display;
+    OLED* display;
+    uint8_t i2cAddress;
+    bool initialized;
     int displayCount;
     unsigned long lastDisplay;
     DisplayMode currentMode;
@@ -30,10 +32,15 @@ private:
     unsigned long buttonLastPressed;
 
 public:
-    DisplayManager(Adafruit_SH1106* displayInstance);
+    DisplayManager();
+    bool initialize();
     
     void init();
     void update();
+    
+    // I2C address auto-detection and connection test
+    bool testI2CAddress(uint8_t address);
+    bool isInitialized() const { return initialized; }
     void displayInfo(const GpsSummaryData& gpsSummaryData);
     void displayNtpStats(const NtpStatistics& ntpStats);
     void displaySystemStatus(bool gpsConnected, bool networkConnected, uint32_t uptimeSeconds);

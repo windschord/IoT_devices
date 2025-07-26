@@ -31,7 +31,6 @@ EthernetServer server(80);
 EthernetUDP ntpUdp;
 WebServer webServer;
 GpsClient gpsClient(Serial);
-Adafruit_SH1106 display(OLED_RESET);
 RTC_DS3231 rtc;
 
 // Global system instances
@@ -41,7 +40,7 @@ TimeManager timeManager(&rtc, &timeSync, nullptr);
 NetworkManager networkManager(&ntpUdp);
 SystemMonitor* systemMonitor = nullptr;
 NtpServer* ntpServer = nullptr;
-DisplayManager displayManager(&display);
+DisplayManager displayManager;
 LoggingService* loggingService = nullptr;
 PrometheusMetrics* prometheusMetrics = nullptr;
 SystemController systemController;
@@ -351,7 +350,13 @@ void setup()
     }
   }
   
-  displayManager.init();
+  if (!displayManager.initialize()) {
+    Serial.println("❌ DisplayManager initialization failed - continuing without display");
+    LOG_ERR_MSG("DISPLAY", "DisplayManager initialization failed");
+  } else {
+    Serial.println("✅ DisplayManager initialized successfully");
+    LOG_INFO_MSG("DISPLAY", "OLED display initialized with auto-detected I2C address");
+  }
   
   // Initialize logging service
   loggingService = new LoggingService(&ntpUdp);

@@ -1,159 +1,95 @@
 #include "DisplayManager.h"
 #include "HardwareConfig.h"
 
-DisplayManager::DisplayManager(Adafruit_SH1106* displayInstance)
-    : display(displayInstance), displayCount(0), lastDisplay(0), 
-      currentMode(DISPLAY_GPS_TIME), modeChangeTime(0), errorState(false), 
-      errorMessage(""), buttonLastPressed(0) {
+DisplayManager::DisplayManager() 
+    : display(nullptr), i2cAddress(0), initialized(false), displayCount(0), 
+      lastDisplay(0), currentMode(DISPLAY_GPS_TIME), modeChangeTime(0), 
+      errorState(false), errorMessage(""), buttonLastPressed(0) {
+}
+
+bool DisplayManager::testI2CAddress(uint8_t address) {
+    Serial.printf("Testing I2C address 0x%02X...\n", address);
+    
+    Wire.beginTransmission(address);
+    Wire.write(0x00); // Command mode
+    Wire.write(0xAE); // Display OFF command
+    int result = Wire.endTransmission();
+    
+    if (result == 0) {
+        Serial.printf("✅ Device responds at address 0x%02X\n", address);
+        return true;
+    } else {
+        Serial.printf("❌ No response at address 0x%02X (error: %d)\n", address, result);
+        return false;
+    }
+}
+
+bool DisplayManager::initialize() {
+    Serial.println("=== DisplayManager Initialization ===");
+    
+    // Try common OLED I2C addresses
+    uint8_t testAddresses[] = {0x3C, 0x3D};
+    bool found = false;
+    
+    for (int i = 0; i < 2; i++) {
+        if (testI2CAddress(testAddresses[i])) {
+            i2cAddress = testAddresses[i];
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) {
+        Serial.println("❌ No OLED display found at common I2C addresses");
+        return false;
+    }
+    
+    // Clean up any existing display instance
+    if (display) {
+        delete display;
+        display = nullptr;
+    }
+    
+    Serial.printf("Creating OLED instance at address 0x%02X...\n", i2cAddress);
+    
+    // Create OLED instance: OLED(SDA, SCL, RESET, WIDTH, HEIGHT, CONTROLLER, ADDRESS)
+    display = new OLED(0, 1, 255, OLED::W_128, OLED::H_64, OLED::CTRL_SH1106, i2cAddress);
+    
+    if (!display) {
+        Serial.println("❌ Failed to create OLED instance");
+        return false;
+    }
+    
+    Serial.println("Initializing OLED display...");
+    display->begin();
+    
+    // Enable SH1106 offset for 132x64 -> 128x64 conversion
+    display->useOffset(true);
+    
+    Serial.println("Testing display with initial message...");
+    display->clear();
+    display->draw_string(0, 0, "GPS NTP Server");
+    display->draw_string(0, 10, "Initializing...");
+    char addrStr[20];
+    sprintf(addrStr, "I2C: 0x%02X", i2cAddress);
+    display->draw_string(0, 20, addrStr);
+    display->display();
+    
+    initialized = true;
+    Serial.println("✅ DisplayManager initialized successfully");
+    
+    return true;
 }
 
 void DisplayManager::init() {
     Serial.println("=== OLED Display Initialization ===");
     Serial.printf("Display address: 0x%02X\n", SCREEN_ADDRESS);
-    Serial.printf("Display instance: %p\n", display);
     
-    if (display == nullptr) {
-        Serial.println("❌ ERROR: Display instance is NULL!");
+    // Use the new initialize method
+    if (!initialize()) {
+        Serial.println("❌ DisplayManager initialization failed");
         return;
     }
-    
-    Serial.println("=== Manual I2C Test ===");
-    
-    // Test basic I2C communication with raw commands
-    Serial.println("Testing raw I2C commands...");
-    
-    // Try to turn display off and on manually
-    Wire.beginTransmission(SCREEN_ADDRESS);
-    Wire.write(0x00); // Command mode
-    Wire.write(0xAE); // Display OFF
-    int result1 = Wire.endTransmission();
-    Serial.printf("Display OFF command result: %d\n", result1);
-    delay(100);
-    
-    Wire.beginTransmission(SCREEN_ADDRESS);
-    Wire.write(0x00); // Command mode  
-    Wire.write(0xAF); // Display ON
-    int result2 = Wire.endTransmission();
-    Serial.printf("Display ON command result: %d\n", result2);
-    delay(100);
-    
-    // Try to fill entire display with pattern
-    Serial.println("Attempting to fill display with test pattern...");
-    for (int page = 0; page < 8; page++) {
-        // Set page
-        Wire.beginTransmission(SCREEN_ADDRESS);
-        Wire.write(0x00); // Command mode
-        Wire.write(0xB0 + page); // Page address
-        Wire.endTransmission();
-        
-        // Set column start (SH1106 starts at column 2)
-        Wire.beginTransmission(SCREEN_ADDRESS);
-        Wire.write(0x00); // Command mode
-        Wire.write(0x02); // Column low nibble
-        Wire.endTransmission();
-        
-        Wire.beginTransmission(SCREEN_ADDRESS);
-        Wire.write(0x00); // Command mode
-        Wire.write(0x10); // Column high nibble
-        Wire.endTransmission();
-        
-        // Send test pattern data (1 byte at a time)
-        for (int col = 0; col < 128; col++) {
-            Wire.beginTransmission(SCREEN_ADDRESS);
-            Wire.write(0x40); // Data mode
-            Wire.write(0xFF); // All pixels on
-            int result = Wire.endTransmission();
-            if (result != 0) {
-                Serial.printf("Data write error page %d col %d: %d\n", page, col, result);
-                break; // Stop on first error
-            }
-        }
-    }
-    
-    Serial.println("Manual test completed - check display");
-    delay(3000);
-    
-    // Test alternative I2C address 0x3D
-    Serial.println("Testing alternative I2C address 0x3D...");
-    Wire.beginTransmission(0x3D);
-    Wire.write(0x00); // Command mode
-    Wire.write(0xAF); // Display ON
-    int result_alt = Wire.endTransmission();
-    Serial.printf("Alternative address (0x3D) test result: %d\n", result_alt);
-    
-    if (result_alt == 0) {
-        Serial.println("SUCCESS: Device responds to 0x3D! Trying test pattern...");
-        // Try test pattern on 0x3D
-        for (int page = 0; page < 8; page++) {
-            Wire.beginTransmission(0x3D);
-            Wire.write(0x00); // Command mode
-            Wire.write(0xB0 + page); // Page address
-            Wire.endTransmission();
-            
-            Wire.beginTransmission(0x3D);
-            Wire.write(0x00); // Command mode
-            Wire.write(0x02); // Column low nibble
-            Wire.endTransmission();
-            
-            Wire.beginTransmission(0x3D);
-            Wire.write(0x00); // Command mode
-            Wire.write(0x10); // Column high nibble
-            Wire.endTransmission();
-            
-            for (int col = 0; col < 128; col++) {
-                Wire.beginTransmission(0x3D);
-                Wire.write(0x40); // Data mode
-                Wire.write(0xAA); // Alternating pattern
-                int result = Wire.endTransmission();
-                if (result != 0) {
-                    Serial.printf("0x3D write error page %d col %d: %d\n", page, col, result);
-                    break;
-                }
-            }
-        }
-        Serial.println("Alternative address test pattern sent");
-    }
-    
-    delay(2000);
-    
-    Serial.println("Calling display->begin()...");
-    display->begin(SH1106_SWITCHCAPVCC, SCREEN_ADDRESS);
-    Serial.println("✅ display->begin() completed");
-    
-    Serial.println("=== Simple Display Test ===");
-    
-    // First, just clear the display
-    Serial.println("Step 1: Clearing display buffer");
-    display->clearDisplay();
-    
-    // Try to draw a single pixel
-    Serial.println("Step 2: Drawing single pixel at (0,0)");
-    display->drawPixel(0, 0, WHITE);
-    
-    // Call display() to transfer buffer to screen
-    Serial.println("Step 3: Calling display() method");
-    display->display();
-    Serial.println("Step 3 completed");
-    delay(3000);
-    
-    // Try a simple filled rectangle
-    Serial.println("Step 4: Drawing filled rectangle");
-    display->clearDisplay();
-    display->fillRect(0, 0, 20, 20, WHITE);
-    display->display();
-    Serial.println("Step 4 completed");
-    delay(3000);
-    
-    // Try text
-    Serial.println("Step 5: Drawing text");
-    display->clearDisplay();
-    display->setTextSize(1);
-    display->setTextColor(WHITE);
-    display->setCursor(0, 0);
-    display->print("Hello");
-    display->display();
-    Serial.println("Step 5 completed");
-    delay(3000);
     
     displayCount = 0;
     lastDisplay = 0;
@@ -162,7 +98,7 @@ void DisplayManager::init() {
     errorState = false;
     buttonLastPressed = 0;
     
-    Serial.println("✅ OLED Display test completed");
+    Serial.println("✅ OLED Display initialization completed");
 }
 
 void DisplayManager::checkDisplayButton() {
@@ -193,6 +129,8 @@ void DisplayManager::update() {
 }
 
 void DisplayManager::displayInfo(const GpsSummaryData& gpsSummaryData) {
+    if (!initialized || !display) return;
+    
     if (errorState) {
         displayErrorScreen();
         return;
@@ -212,8 +150,10 @@ void DisplayManager::displayInfo(const GpsSummaryData& gpsSummaryData) {
 }
 
 void DisplayManager::clearDisplay() {
-    display->clearDisplay();
-    display->display();
+    if (initialized && display) {
+        display->clear();
+        display->display();
+    }
 }
 
 void DisplayManager::formatDateTime(const GpsSummaryData& gpsData, char* buffer, size_t bufferSize) {
@@ -230,20 +170,22 @@ void DisplayManager::formatPosition(const GpsSummaryData& gpsData, char* buffer,
 }
 
 void DisplayManager::displayNtpStats(const NtpStatistics& ntpStats) {
-    if (currentMode == DISPLAY_NTP_STATS && !errorState) {
+    if (currentMode == DISPLAY_NTP_STATS && !errorState && initialized && display) {
         displayNtpStatsScreen(ntpStats);
     }
 }
 
 void DisplayManager::displaySystemStatus(bool gpsConnected, bool networkConnected, uint32_t uptimeSeconds) {
-    if (currentMode == DISPLAY_SYSTEM_STATUS && !errorState) {
+    if (currentMode == DISPLAY_SYSTEM_STATUS && !errorState && initialized && display) {
         displaySystemStatusScreen(gpsConnected, networkConnected, uptimeSeconds);
     }
 }
 
 void DisplayManager::displayError(const String& message) {
     setErrorState(message);
-    displayErrorScreen();
+    if (initialized && display) {
+        displayErrorScreen();
+    }
 }
 
 void DisplayManager::nextDisplayMode() {
@@ -266,208 +208,177 @@ void DisplayManager::clearErrorState() {
 }
 
 void DisplayManager::displayStartupScreen() {
-    display->clearDisplay();
-    display->setTextSize(2);
-    display->setTextColor(WHITE);
-    display->setCursor(15, 10);
-    display->println("GPS NTP");
-    display->setTextSize(1);
-    display->setCursor(25, 35);
-    display->println("Server v1.0");
-    display->setCursor(10, 50);
-    display->println("Initializing...");
+    if (!initialized || !display) return;
+    
+    display->clear();
+    display->draw_string(15, 10, "GPS NTP");
+    display->draw_string(25, 25, "Server v1.0");
+    display->draw_string(10, 40, "Initializing...");
     display->display();
     delay(2000);
 }
 
 void DisplayManager::displayGpsTimeScreen(const GpsSummaryData& gpsData) {
-    display->clearDisplay();
-    display->setTextSize(1);
-    display->setTextColor(WHITE);
+    if (!initialized || !display) return;
+    
+    display->clear();
     
     // Title
-    display->setCursor(0, 0);
-    display->println("GPS Time & Position");
-    display->drawLine(0, 9, 128, 9, WHITE);
+    display->draw_string(0, 0, "GPS Time & Position");
+    display->draw_line(0, 9, 128, 9, OLED::WHITE);
     
     // Date/Time
     char dateTimeChr[32];
     formatDateTime(gpsData, dateTimeChr, sizeof(dateTimeChr));
-    display->setCursor(0, 12);
-    display->print("Time: ");
-    display->println(dateTimeChr);
+    display->draw_string(0, 12, "Time:");
+    display->draw_string(0, 22, dateTimeChr);
     
     // Position
-    display->setCursor(0, 22);
-    display->printf("Lat: %7.4f", gpsData.latitude / 10000000.0);
-    display->setCursor(0, 32);
-    display->printf("Lon: %7.4f", gpsData.longitude / 10000000.0);
-    display->setCursor(0, 42);
-    display->printf("Alt: %6.2fm", gpsData.altitude / 1000.0);
+    char latStr[20], lonStr[20], altStr[20];
+    sprintf(latStr, "Lat: %7.4f", gpsData.latitude / 10000000.0);
+    sprintf(lonStr, "Lon: %7.4f", gpsData.longitude / 10000000.0);
+    sprintf(altStr, "Alt: %6.2fm", gpsData.altitude / 1000.0);
     
-    // Status indicators
-    display->setCursor(0, 54);
-    display->print("Time: ");
-    display->print(gpsData.timeValid ? "OK" : "ERR");
-    display->setCursor(50, 54);
-    display->print("Date: ");
-    display->print(gpsData.dateValid ? "OK" : "ERR");
+    display->draw_string(0, 32, latStr);
+    display->draw_string(0, 42, lonStr);
+    display->draw_string(0, 52, altStr);
     
     display->display();
 }
 
 void DisplayManager::displayGpsSatsScreen(const GpsSummaryData& gpsData) {
-    display->clearDisplay();
-    display->setTextSize(1);
-    display->setTextColor(WHITE);
+    if (!initialized || !display) return;
+    
+    display->clear();
     
     // Title
-    display->setCursor(0, 0);
-    display->println("GPS Satellites");
-    display->drawLine(0, 9, 128, 9, WHITE);
+    display->draw_string(0, 0, "GPS Satellites");
+    display->draw_line(0, 9, 128, 9, OLED::WHITE);
     
-    // Satellite counts by constellation
-    display->setCursor(0, 12);
-    display->printf("SIV:    %2d", gpsData.SIV);
-    display->setCursor(0, 22);
-    display->printf("Fix:    %2d", gpsData.fixType);
-    display->setCursor(0, 32);
-    display->printf("GAL:    --"); // TODO: Add individual constellation counts from UBX-NAV-SAT
-    display->setCursor(0, 42);
-    display->printf("BDS:    --"); // TODO: Add BeiDou count
+    // Satellite info
+    char sivStr[20], fixStr[20];
+    sprintf(sivStr, "SIV:    %2d", gpsData.SIV);
+    sprintf(fixStr, "Fix:    %2d", gpsData.fixType);
     
-    // Signal quality indicator
-    display->setCursor(70, 12);
-    display->print("Quality:");
-    display->setCursor(70, 22);
+    display->draw_string(0, 12, sivStr);
+    display->draw_string(0, 22, fixStr);
+    
+    // Signal quality
+    display->draw_string(70, 12, "Quality:");
     if (gpsData.fixType >= 3) {
-      display->print("Good");
+        display->draw_string(70, 22, "Good");
     } else if (gpsData.fixType >= 2) {
-      display->print("Fair");
+        display->draw_string(70, 22, "Fair");
     } else {
-      display->print("Poor");
+        display->draw_string(70, 22, "Poor");
     }
-    
-    // Signal strength bars based on satellites in view
-    drawSignalBars(70, 35, min(gpsData.SIV * 10, 100));
     
     display->display();
 }
 
 void DisplayManager::displayNtpStatsScreen(const NtpStatistics& stats) {
-    display->clearDisplay();
-    display->setTextSize(1);
-    display->setTextColor(WHITE);
+    if (!initialized || !display) return;
+    
+    display->clear();
     
     // Title
-    display->setCursor(0, 0);
-    display->println("NTP Server Stats");
-    display->drawLine(0, 9, 128, 9, WHITE);
+    display->draw_string(0, 0, "NTP Server Stats");
+    display->draw_line(0, 9, 128, 9, OLED::WHITE);
     
     // Statistics
-    display->setCursor(0, 12);
-    display->printf("Requests: %d", stats.requests_total);
-    display->setCursor(0, 22);
-    display->printf("Valid:    %d", stats.requests_valid);
-    display->setCursor(0, 32);
-    display->printf("Invalid:  %d", stats.requests_invalid);
-    display->setCursor(0, 42);
-    display->printf("Avg time: %.1fms", stats.avg_processing_time);
+    char reqStr[20], validStr[20], invalidStr[20], avgStr[25];
+    sprintf(reqStr, "Requests: %d", stats.requests_total);
+    sprintf(validStr, "Valid:    %d", stats.requests_valid);
+    sprintf(invalidStr, "Invalid:  %d", stats.requests_invalid);
+    sprintf(avgStr, "Avg time: %.1fms", stats.avg_processing_time);
     
-    // Response rate
+    display->draw_string(0, 12, reqStr);
+    display->draw_string(0, 22, validStr);
+    display->draw_string(0, 32, invalidStr);
+    display->draw_string(0, 42, avgStr);
+    
+    // Success rate
     if (stats.requests_total > 0) {
         int successRate = (stats.requests_valid * 100) / stats.requests_total;
-        display->setCursor(0, 52);
-        display->printf("Success:  %d%%", successRate);
-        
-        // Success rate bar
-        drawProgressBar(70, 52, 50, 8, successRate, 100);
+        char successStr[20];
+        sprintf(successStr, "Success:  %d%%", successRate);
+        display->draw_string(0, 52, successStr);
     }
     
     display->display();
 }
 
 void DisplayManager::displaySystemStatusScreen(bool gpsConnected, bool networkConnected, uint32_t uptimeSeconds) {
-    display->clearDisplay();
-    display->setTextSize(1);
-    display->setTextColor(WHITE);
+    if (!initialized || !display) return;
+    
+    display->clear();
     
     // Title
-    display->setCursor(0, 0);
-    display->println("System Status");
-    display->drawLine(0, 9, 128, 9, WHITE);
+    display->draw_string(0, 0, "System Status");
+    display->draw_line(0, 9, 128, 9, OLED::WHITE);
     
     // Status indicators
-    display->setCursor(0, 12);
-    display->print("GPS:     ");
-    display->println(gpsConnected ? "CONNECTED" : "DISCONNECTED");
+    display->draw_string(0, 12, "GPS:");
+    display->draw_string(50, 12, gpsConnected ? "CONNECTED" : "DISCONNECTED");
     
-    display->setCursor(0, 22);
-    display->print("Network: ");
-    display->println(networkConnected ? "CONNECTED" : "DISCONNECTED");
+    display->draw_string(0, 22, "Network:");
+    display->draw_string(50, 22, networkConnected ? "CONNECTED" : "DISCONNECTED");
     
     // Uptime
     uint32_t hours = uptimeSeconds / 3600;
     uint32_t minutes = (uptimeSeconds % 3600) / 60;
     uint32_t seconds = uptimeSeconds % 60;
     
-    display->setCursor(0, 32);
-    display->printf("Uptime: %02d:%02d:%02d", hours, minutes, seconds);
+    char uptimeStr[25];
+    sprintf(uptimeStr, "Uptime: %02d:%02d:%02d", hours, minutes, seconds);
+    display->draw_string(0, 32, uptimeStr);
     
     // Memory status (approximate)
-    display->setCursor(0, 42);
-    display->printf("Free RAM: %d KB", (524288 - 16880) / 1024);
+    char memStr[20];
+    sprintf(memStr, "Free RAM: %d KB", (524288 - 16880) / 1024);
+    display->draw_string(0, 42, memStr);
     
-    display->setCursor(0, 52);
-    display->printf("Build: %s", __DATE__);
+    char buildStr[20];
+    sprintf(buildStr, "Build: %s", __DATE__);
+    display->draw_string(0, 52, buildStr);
     
     display->display();
 }
 
 void DisplayManager::displayErrorScreen() {
-    display->clearDisplay();
-    display->setTextSize(1);
-    display->setTextColor(WHITE);
+    if (!initialized || !display) return;
+    
+    display->clear();
     
     // Title
-    display->setCursor(0, 0);
-    display->println("ERROR");
-    display->drawLine(0, 9, 128, 9, WHITE);
+    display->draw_string(0, 0, "ERROR");
+    display->draw_line(0, 9, 128, 9, OLED::WHITE);
     
     // Error message
-    display->setCursor(0, 15);
-    display->println("System Error:");
-    display->setCursor(0, 25);
+    display->draw_string(0, 15, "System Error:");
+    display->draw_string(0, 25, errorMessage.c_str());
     
-    // Word wrap for error message
-    String msg = errorMessage;
-    int lineLength = 21; // Characters per line on 128px wide screen
-    int yPos = 25;
-    
-    while (msg.length() > 0 && yPos < 55) {
-        String line = msg.substring(0, min(lineLength, (int)msg.length()));
-        display->setCursor(0, yPos);
-        display->println(line);
-        msg = msg.substring(line.length());
-        yPos += 10;
-    }
-    
-    display->setCursor(0, 55);
-    display->println("Press BTN to continue");
+    display->draw_string(0, 55, "Press BTN to continue");
     
     display->display();
 }
 
 void DisplayManager::drawProgressBar(int x, int y, int width, int height, int value, int maxValue) {
+    if (!initialized || !display) return;
+    
     // Draw border
-    display->drawRect(x, y, width, height, WHITE);
+    display->draw_rectangle(x, y, x + width - 1, y + height - 1, OLED::HOLLOW, OLED::WHITE);
     
     // Draw fill
     int fillWidth = (value * (width - 2)) / maxValue;
-    display->fillRect(x + 1, y + 1, fillWidth, height - 2, WHITE);
+    if (fillWidth > 0) {
+        display->draw_rectangle(x + 1, y + 1, x + fillWidth, y + height - 2, OLED::SOLID, OLED::WHITE);
+    }
 }
 
 void DisplayManager::drawSignalBars(int x, int y, int signalStrength) {
+    if (!initialized || !display) return;
+    
     int barWidth = 3;
     int barSpacing = 4;
     int maxBars = 5;
@@ -479,9 +390,9 @@ void DisplayManager::drawSignalBars(int x, int y, int signalStrength) {
         int barY = y + (10 - barHeight);
         
         if (i < activeBars) {
-            display->fillRect(barX, barY, barWidth, barHeight, WHITE);
+            display->draw_rectangle(barX, barY, barX + barWidth - 1, barY + barHeight - 1, OLED::SOLID, OLED::WHITE);
         } else {
-            display->drawRect(barX, barY, barWidth, barHeight, WHITE);
+            display->draw_rectangle(barX, barY, barX + barWidth - 1, barY + barHeight - 1, OLED::HOLLOW, OLED::WHITE);
         }
     }
 }
