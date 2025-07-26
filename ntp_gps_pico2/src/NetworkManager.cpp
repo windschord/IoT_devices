@@ -29,7 +29,7 @@ void NetworkManager::init() {
 #ifdef DEBUG_NETWORK_INIT
         Serial.println("Continuing without Ethernet (GPS-only mode)");
 #endif
-        analogWrite(LED_ERROR_PIN, 255);
+        digitalWrite(LED_ERROR_PIN, HIGH); // Turn on error LED (常時点灯)
         networkMonitor.isConnected = false;
     } else {
         Serial.println("W5500 hardware detected");
@@ -59,7 +59,7 @@ void NetworkManager::init() {
             networkMonitor.isConnected = false;
         } else {
             networkMonitor.isConnected = true;
-            analogWrite(LED_NETWORK_PIN, 255); // Turn on network status LED (Blue)
+            digitalWrite(LED_NETWORK_PIN, HIGH); // Turn on network status LED (Blue) - 常時点灯
             
             Serial.print("Ethernet initialized successfully");
             Serial.print(" - IP: ");
@@ -224,10 +224,10 @@ void NetworkManager::monitorConnection() {
     // Detect connection status changes
     if (wasConnected && !networkMonitor.isConnected) {
         Serial.println("Network connection lost");
-        analogWrite(LED_NETWORK_PIN, 0); // Turn off network status LED (Blue)
+        digitalWrite(LED_NETWORK_PIN, LOW); // Turn off network status LED (Blue)
     } else if (!wasConnected && networkMonitor.isConnected) {
         Serial.println("Network connection established");
-        analogWrite(LED_NETWORK_PIN, 255); // Turn on network status LED (Blue)
+        digitalWrite(LED_NETWORK_PIN, HIGH); // Turn on network status LED (Blue) - 常時点灯
         Serial.print("IP: ");
         Serial.print(Ethernet.localIP());
         Serial.print(", Gateway: ");

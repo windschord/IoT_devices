@@ -108,7 +108,7 @@ void SystemMonitor::evaluateFallbackMode() {
     if (shouldFallback && !gpsMonitor.inFallbackMode) {
         // Enter fallback mode
         gpsMonitor.inFallbackMode = true;
-        analogWrite(LED_ERROR_PIN, 255); // Turn on error LED
+        digitalWrite(LED_ERROR_PIN, HIGH); // Turn on error LED (常時点灯)
         
 #if defined(DEBUG_CONSOLE_GPS)
         Serial.println("GPS signal lost - entering fallback mode (using RTC)");
@@ -116,7 +116,7 @@ void SystemMonitor::evaluateFallbackMode() {
     } else if (!shouldFallback && gpsMonitor.inFallbackMode) {
         // Exit fallback mode
         gpsMonitor.inFallbackMode = false;
-        analogWrite(LED_ERROR_PIN, 0); // Turn off error LED
+        digitalWrite(LED_ERROR_PIN, LOW); // Turn off error LED
         
 #ifdef DEBUG_GPS_FALLBACK
         Serial.println("✅ GPS signal recovered - exiting fallback mode");

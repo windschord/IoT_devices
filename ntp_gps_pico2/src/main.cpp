@@ -53,6 +53,11 @@ volatile bool ppsReceived = false;
 bool gpsConnected = false;
 bool webServerStarted = false;
 
+// LED Blinking State Variables
+unsigned long lastGnssLedUpdate = 0;
+bool gnssLedState = false;
+unsigned long gnssBlinkInterval = 0;
+
 // Functions moved to TimeManager class
 
 // Function moved to SystemMonitor class
@@ -132,8 +137,9 @@ void setupGps()
     
     LOG_ERR_MSG("GPS", "u-blox GNSS not detected at I2C address 0x42");
     LOG_ERR_MSG("GPS", "Check wiring - SDA=GPIO6, SCL=GPIO7 (GPS/RTC I2C bus) and power supply");
-    analogWrite(LED_ERROR_PIN, 255);
-    analogWrite(LED_GNSS_FIX_PIN, 0); // Turn off GNSS fix LED (no GPS connection)
+    digitalWrite(LED_ERROR_PIN, HIGH); // Turn on error LED (常時点灯)
+    gnssBlinkInterval = 0;
+    digitalWrite(LED_GNSS_FIX_PIN, LOW); // Turn off GNSS fix LED (no GPS connection)
     displayManager.displayError("GPS Module not detected. Check wiring.");
     gpsConnected = false;
     return; // エラーで停止せず、続行する
@@ -145,7 +151,9 @@ void setupGps()
 #endif
   LOG_INFO_MSG("GPS", "u-blox GNSS module connected successfully at I2C 0x42");
   LOG_INFO_MSG("GPS", "QZSS L1S signal reception enabled for disaster alerts");
-  analogWrite(LED_GNSS_FIX_PIN, 64);  // Turn on GNSS fix LED dimly (GPS connected but no fix yet)
+  gnssBlinkInterval = 2000; // SLOW BLINK (2秒間隔): GPS connected but no fix yet
+  lastGnssLedUpdate = millis();
+  gnssLedState = false;
   gpsConnected = true;
   
   myGNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output both NMEA and UBX messages
@@ -432,15 +440,27 @@ void loop()
     
     // GNSS Fix Status LED control based on GPS fix quality
     if (gpsData.fixType >= 3) { // 3D fix or better
-      analogWrite(LED_GNSS_FIX_PIN, 255); // BRIGHT (100%): 3D fix or better
+      gnssBlinkInterval = 0; // ON (常時点灯): 3D fix or better
+      digitalWrite(LED_GNSS_FIX_PIN, HIGH);
     } else if (gpsData.fixType >= 2) { // 2D fix
-      analogWrite(LED_GNSS_FIX_PIN, 128); // MEDIUM (50%): 2D fix available
+      gnssBlinkInterval = 500; // FAST BLINK (0.5秒間隔): 2D fix available
     } else { // GPS connected but no fix
-      analogWrite(LED_GNSS_FIX_PIN, 64);  // DIM (25%): GPS connected but no fix
+      gnssBlinkInterval = 2000; // SLOW BLINK (2秒間隔): GPS connected but no fix
     }
   } else {
     // GPS not connected - turn off GNSS fix LED
-    analogWrite(LED_GNSS_FIX_PIN, 0);
+    gnssBlinkInterval = 0;
+    digitalWrite(LED_GNSS_FIX_PIN, LOW);
+  }
+  
+  // Handle GNSS LED blinking pattern
+  if (gnssBlinkInterval > 0) {
+    unsigned long currentTime = millis();
+    if (currentTime - lastGnssLedUpdate >= gnssBlinkInterval) {
+      gnssLedState = !gnssLedState;
+      digitalWrite(LED_GNSS_FIX_PIN, gnssLedState ? HIGH : LOW);
+      lastGnssLedUpdate = currentTime;
+    }
   }
   
   // LED management (non-blocking)
