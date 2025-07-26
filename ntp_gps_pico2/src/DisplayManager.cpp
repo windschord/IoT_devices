@@ -1,7 +1,7 @@
 #include "DisplayManager.h"
 #include "HardwareConfig.h"
 
-DisplayManager::DisplayManager(Adafruit_SSD1306* displayInstance)
+DisplayManager::DisplayManager(Adafruit_SH1106* displayInstance)
     : display(displayInstance), displayCount(0), lastDisplay(0), 
       currentMode(DISPLAY_GPS_TIME), modeChangeTime(0), errorState(false), 
       errorMessage(""), buttonLastPressed(0) {
@@ -18,11 +18,8 @@ void DisplayManager::init() {
     }
     
     Serial.println("Calling display->begin()...");
-    if (!display->begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-        Serial.println("❌ SSD1306 allocation failed");
-        return;
-    }
-    Serial.println("✅ display->begin() succeeded");
+    display->begin(SH1106_SWITCHCAPVCC, SCREEN_ADDRESS);
+    Serial.println("✅ display->begin() completed");
     
     Serial.println("Clearing display...");
     display->clearDisplay();

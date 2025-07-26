@@ -31,7 +31,7 @@ EthernetServer server(80);
 EthernetUDP ntpUdp;
 WebServer webServer;
 GpsClient gpsClient(Serial);
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SH1106 display(OLED_RESET);
 RTC_DS3231 rtc;
 
 // Global system instances
