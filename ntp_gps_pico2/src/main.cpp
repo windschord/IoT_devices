@@ -125,7 +125,7 @@ void setupGps()
   Wire1.setSCL(GPS_SCL_PIN);
   Wire1.begin();
 #ifdef DEBUG_GPS_INIT
-  Serial.println("Wire1 initialized for GPS/RTC shared bus");
+  LOG_INFO_MSG("HARDWARE", "Wire1 initialized for GPS/RTC shared bus");
 #endif
 
 #ifdef DEBUG_GPS_INIT
@@ -154,8 +154,8 @@ void setupGps()
   }
   
 #ifdef DEBUG_GPS_INIT
-  Serial.println("✅ GPS module connected successfully!");
-  Serial.println("✅ GPS initialization completed");
+  LOG_INFO_MSG("GPS", "GPS module connected successfully!");
+  LOG_INFO_MSG("GPS", "GPS initialization completed");
 #endif
   LOG_INFO_MSG("GPS", "u-blox GNSS module connected successfully at I2C 0x42");
   LOG_INFO_MSG("GPS", "QZSS L1S signal reception enabled for disaster alerts");
@@ -181,7 +181,7 @@ void setupRtc()
 {
   // Note: Wire1 is already initialized by GPS setup
 #ifdef DEBUG_RTC_INIT
-  Serial.println("Initializing RTClib DS3231 on Wire1 bus (shared with GPS)");
+  LOG_INFO_MSG("RTC", "Starting RTC initialization on Wire1 bus");
 #endif
   
 #ifdef DEBUG_RTC_INIT
@@ -202,13 +202,13 @@ void setupRtc()
   // Initialize RTClib with Wire1
   if (!rtc.begin(&Wire1)) {
 #ifdef DEBUG_RTC_INIT
-    Serial.println("ERROR: Could not find RTC DS3231!");
+    LOG_ERR_MSG("RTC", "Could not find RTC DS3231!");
 #endif
     return;
   }
   
 #ifdef DEBUG_RTC_INIT
-  Serial.println("RTClib DS3231 initialization: SUCCESS");
+  LOG_INFO_MSG("RTC", "RTClib DS3231 initialization: SUCCESS");
 #endif
   
   // Check if RTC lost power and needs initialization
@@ -278,7 +278,8 @@ void setup()
   {
     ; // wait for serial port to connect. Needed for native USB port only
   }
-  Serial.println("Start");
+  // Note: Can't use LOG_INFO_MSG yet as LoggingService is not initialized
+  Serial.println("=== GPS NTP Server v1.0 ===");
 
   // LED initialization
   pinMode(LED_GNSS_FIX_PIN, OUTPUT);  // GNSS Fix Status LED (Green)
@@ -298,6 +299,7 @@ void setup()
   pinMode(0, INPUT_PULLUP);  // SDA pull-up
   pinMode(1, INPUT_PULLUP);  // SCL pull-up
   
+  // Note: Can't use LOG_INFO_MSG yet as LoggingService is not initialized
   Serial.println("I2C pull-ups enabled, starting I2C...");
   Wire.begin();
   Wire.setClock(100000); // Use slower 100kHz for more reliable communication
@@ -311,11 +313,11 @@ void setup()
 
   // Initialize DisplayManager first (before any other I2C operations)
   if (!displayManager.initialize()) {
+    // Note: Can't use LOG_ERR_MSG yet as LoggingService is not initialized
     Serial.println("❌ DisplayManager initialization failed - continuing without display");
-    LOG_ERR_MSG("DISPLAY", "DisplayManager initialization failed");
   } else {
+    // Note: Can't use LOG_INFO_MSG yet as LoggingService is not initialized  
     Serial.println("✅ DisplayManager initialized successfully");
-    LOG_INFO_MSG("DISPLAY", "OLED display initialized with auto-detected I2C address");
   }
   
   // Initialize system modules  
@@ -332,6 +334,10 @@ void setup()
   strcpy(logConfig.syslogServer, "");     // Will be configured later
   logConfig.syslogPort = 514;
   loggingService->init(logConfig);
+  
+  // Set LoggingService references for components
+  displayManager.setLoggingService(loggingService);
+  networkManager.setLoggingService(loggingService);
   
   // Initialize Prometheus metrics (now using static instance)
   prometheusMetrics->init();
@@ -365,16 +371,14 @@ void setup()
 
   // Webサーバーを起動（ネットワーク接続状態に関わらず起動）
   server.begin();
-  Serial.print("Web server started on port 80 - Network connected: ");
-  Serial.println(networkManager.isConnected() ? "YES" : "NO");
+  LOG_INFO_F("WEB", "Web server started on port 80 - Network connected: %s", 
+             networkManager.isConnected() ? "YES" : "NO");
   if (networkManager.isConnected()) {
-    Serial.print("Server accessible at: http://");
-    Serial.println(Ethernet.localIP());
     LOG_INFO_F("WEB", "Web server accessible at http://%d.%d.%d.%d", 
                Ethernet.localIP()[0], Ethernet.localIP()[1], 
                Ethernet.localIP()[2], Ethernet.localIP()[3]);
   } else {
-    LOG_WARN_MSG("WEB", "Web server started without network connection");
+    LOG_INFO_MSG("WEB", "Web server accessible at http://0.0.0.0");
   }
 
   // setup GPS
@@ -411,7 +415,6 @@ void setup()
   }
   
   LOG_INFO_MSG("SYSTEM", "System initialization completed successfully");
-  Serial.println("System initialization completed");
 }
 
 unsigned long ledOffTime = 0;

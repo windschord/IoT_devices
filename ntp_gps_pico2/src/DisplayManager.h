@@ -8,6 +8,9 @@
 #include "SystemTypes.h"
 #include "NtpTypes.h"
 
+// Forward declaration for LoggingService
+class LoggingService;
+
 // Display modes for page switching
 enum DisplayMode {
     DISPLAY_GPS_TIME,
@@ -21,6 +24,7 @@ enum DisplayMode {
 class DisplayManager {
 private:
     OLED* display;
+    LoggingService* loggingService;
     uint8_t i2cAddress;
     bool initialized;
     int displayCount;
@@ -45,6 +49,7 @@ private:
 
 public:
     DisplayManager();
+    void setLoggingService(LoggingService* loggingServiceInstance) { loggingService = loggingServiceInstance; }
     bool initialize();
     
     void init();

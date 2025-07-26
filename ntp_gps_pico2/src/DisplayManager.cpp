@@ -1,8 +1,9 @@
 #include "DisplayManager.h"
 #include "HardwareConfig.h"
+#include "LoggingService.h"
 
 DisplayManager::DisplayManager() 
-    : display(nullptr), i2cAddress(0), initialized(false), displayCount(0), 
+    : display(nullptr), loggingService(nullptr), i2cAddress(0), initialized(false), displayCount(0), 
       lastDisplay(0), currentMode(DISPLAY_GPS_TIME), modeChangeTime(0), 
       errorState(false), errorMessage(""), buttonLastPressed(0),
       displayOn(true), sleepCounter(0) {
@@ -18,14 +19,22 @@ bool DisplayManager::testI2CAddress(uint8_t address) {
     int result = Wire.endTransmission();
     
     if (result == 0) {
-        Serial.printf("OLED found at I2C address 0x%02X\n", address);
+        if (loggingService) {
+            loggingService->infof("DISPLAY", "OLED found at I2C address 0x%02X", address);
+        } else {
+            Serial.printf("OLED found at I2C address 0x%02X\n", address);
+        }
         return true;
     }
     return false;
 }
 
 bool DisplayManager::initialize() {
-    Serial.println("Initializing OLED display...");
+    if (loggingService) {
+        loggingService->info("DISPLAY", "Initializing OLED display...");
+    } else {
+        Serial.println("Initializing OLED display...");
+    }
     
     // Try common OLED I2C addresses
     uint8_t testAddresses[] = {0x3C, 0x3D};
@@ -40,7 +49,11 @@ bool DisplayManager::initialize() {
     }
     
     if (!found) {
-        Serial.println("No OLED display found");
+        if (loggingService) {
+            loggingService->error("DISPLAY", "No OLED display found");
+        } else {
+            Serial.println("No OLED display found");
+        }
         return false;
     }
     
@@ -50,28 +63,56 @@ bool DisplayManager::initialize() {
         display = nullptr;
     }
     
-    Serial.printf("Creating OLED instance at address 0x%02X\n", i2cAddress);
+    if (loggingService) {
+        loggingService->infof("DISPLAY", "Creating OLED instance at address 0x%02X", i2cAddress);
+    } else {
+        Serial.printf("Creating OLED instance at address 0x%02X\n", i2cAddress);
+    }
     
     // Create OLED instance: OLED(SDA, SCL, RESET, WIDTH, HEIGHT, CONTROLLER, ADDRESS)
     display = new OLED(0, 1, 255, OLED::W_128, OLED::H_64, OLED::CTRL_SH1106, i2cAddress);
     
     if (!display) {
-        Serial.println("Failed to create OLED instance");
+        if (loggingService) {
+            loggingService->error("DISPLAY", "Failed to create OLED instance");
+        } else {
+            Serial.println("Failed to create OLED instance");
+        }
         return false;
     }
     
-    Serial.println("Calling display->begin()...");
+    if (loggingService) {
+        loggingService->info("DISPLAY", "Calling display->begin()...");
+    } else {
+        Serial.println("Calling display->begin()...");
+    }
     display->begin();
-    Serial.println("display->begin() completed");
+    if (loggingService) {
+        loggingService->info("DISPLAY", "display->begin() completed");
+    } else {
+        Serial.println("display->begin() completed");
+    }
     
     // Enable SH1106 offset for 132x64 -> 128x64 conversion
-    Serial.println("Setting SH1106 offset...");
+    if (loggingService) {
+        loggingService->info("DISPLAY", "Setting SH1106 offset...");
+    } else {
+        Serial.println("Setting SH1106 offset...");
+    }
     display->useOffset(true);
-    Serial.println("SH1106 offset set");
+    if (loggingService) {
+        loggingService->info("DISPLAY", "SH1106 offset set");
+    } else {
+        Serial.println("SH1106 offset set");
+    }
     
     // Set initialized flag BEFORE calling display methods
     initialized = true;
-    Serial.println("DisplayManager marked as initialized");
+    if (loggingService) {
+        loggingService->info("DISPLAY", "DisplayManager marked as initialized");
+    } else {
+        Serial.println("DisplayManager marked as initialized");
+    }
     
     // Display startup screen
     displayStartupScreen();
@@ -84,7 +125,11 @@ bool DisplayManager::initialize() {
     displayOn = true;
     sleepCounter = 0;
     
-    Serial.println("OLED display initialized successfully");
+    if (loggingService) {
+        loggingService->info("DISPLAY", "OLED display initialized successfully");
+    } else {
+        Serial.println("OLED display initialized successfully");
+    }
     
     return true;
 }
@@ -92,7 +137,11 @@ bool DisplayManager::initialize() {
 void DisplayManager::init() {
     // Use the new initialize method
     if (!initialize()) {
-        Serial.println("DisplayManager initialization failed");
+        if (loggingService) {
+            loggingService->error("DISPLAY", "DisplayManager initialization failed");
+        } else {
+            Serial.println("DisplayManager initialization failed");
+        }
         return;
     }
     

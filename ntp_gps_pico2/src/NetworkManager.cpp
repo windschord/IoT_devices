@@ -1,8 +1,9 @@
 #include "NetworkManager.h"
 #include "HardwareConfig.h"
+#include "LoggingService.h"
 #include <SPI.h>
 
-NetworkManager::NetworkManager(EthernetUDP* udpInstance) : ntpUdp(udpInstance) {
+NetworkManager::NetworkManager(EthernetUDP* udpInstance) : ntpUdp(udpInstance), loggingService(nullptr) {
     // Initialize MAC address
     byte defaultMac[] = DEFAULT_MAC_ADDRESS;
     memcpy(mac, defaultMac, 6);
@@ -20,7 +21,11 @@ void NetworkManager::init() {
     // Start the non-blocking initialization state machine
     initState = INIT_START;
     stateChangeTime = millis();
-    Serial.println("Starting non-blocking W5500 initialization...");
+    if (loggingService) {
+        loggingService->info("NETWORK", "Starting non-blocking W5500 initialization...");
+    } else {
+        Serial.println("Starting non-blocking W5500 initialization...");
+    }
     
     // Hardware status detailed check
     Serial.print("Hardware status: ");

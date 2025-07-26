@@ -38,12 +38,17 @@ void LoggingService::init(const LogConfig& configuration) {
         globalLogger = this;
     }
     
-    Serial.print("LoggingService initialized - Min Level: ");
-    Serial.print(getLevelName(config.minLevel));
-    Serial.print(", Syslog Server: ");
-    Serial.print(strlen(config.syslogServer) > 0 ? config.syslogServer : "Not configured");
-    Serial.print(":");
-    Serial.println(config.syslogPort);
+    // Use console format for initialization message
+    char initMessage[256];
+    snprintf(initMessage, sizeof(initMessage), 
+             "LoggingService initialized - Level: %s, Syslog: %s:%d", 
+             getLevelName(config.minLevel),
+             strlen(config.syslogServer) > 0 ? config.syslogServer : "Not configured",
+             config.syslogPort);
+    
+    char consoleBuffer[512];
+    formatConsoleMessage(consoleBuffer, sizeof(consoleBuffer), LOG_INFO, "SYSTEM", initMessage);
+    Serial.println(consoleBuffer);
 }
 
 void LoggingService::setSyslogServer(const char* server, uint16_t port) {
@@ -466,6 +471,9 @@ const char* LoggingService::getComponentName(const char* tag) const {
     if (strcmp(tag, "STORAGE") == 0) return "STORAGE    ";
     if (strcmp(tag, "ERROR_HDL") == 0) return "ERROR_HDL  ";
     if (strcmp(tag, "TEST") == 0) return "TEST       ";
+    if (strcmp(tag, "WEB") == 0) return "WEB        ";
+    if (strcmp(tag, "RTC") == 0) return "RTC        ";
+    if (strcmp(tag, "RESET") == 0) return "RESET      ";
     
     // For unknown tags, pad to 12 characters
     static char padded[13];
