@@ -6,6 +6,9 @@ DisplayManager::DisplayManager()
       lastDisplay(0), currentMode(DISPLAY_GPS_TIME), modeChangeTime(0), 
       errorState(false), errorMessage(""), buttonLastPressed(0),
       displayOn(true), sleepCounter(0) {
+    // Initialize frame buffer
+    frameBuffer.dirty = false;
+    frameBuffer.lastUpdate = 0;
 }
 
 bool DisplayManager::testI2CAddress(uint8_t address) {
@@ -131,6 +134,9 @@ void DisplayManager::update() {
             }
         }
     }
+    
+    // Performance optimization: Commit display updates with timing control
+    commitDisplayUpdate();
 }
 
 void DisplayManager::displayInfo(const GpsSummaryData& gpsSummaryData) {
@@ -491,5 +497,37 @@ void DisplayManager::sleepDisplay() {
             display->clear();
             display->display(); // Ensure the clear is shown
         }
+    }
+}
+
+// Performance optimization methods implementation
+bool DisplayManager::shouldUpdateDisplay() {
+    unsigned long currentTime = millis();
+    
+    // Check if enough time has passed since last update
+    if (currentTime - frameBuffer.lastUpdate < frameBuffer.UPDATE_INTERVAL_MS) {
+        return false;
+    }
+    
+    // Check if display needs updating
+    return frameBuffer.dirty && displayOn;
+}
+
+void DisplayManager::markDisplayDirty() {
+    frameBuffer.dirty = true;
+}
+
+void DisplayManager::commitDisplayUpdate() {
+    if (initialized && display && shouldUpdateDisplay()) {
+        // Perform the actual I2C update
+        display->display();
+        
+        // Update timing and reset dirty flag
+        frameBuffer.lastUpdate = millis();
+        frameBuffer.dirty = false;
+        
+        #ifdef DEBUG_DISPLAY_PERFORMANCE
+        Serial.printf("Display updated at %lu ms\n", frameBuffer.lastUpdate);
+        #endif
     }
 }

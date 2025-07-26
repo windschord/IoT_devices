@@ -12,6 +12,19 @@ private:
     UdpSocketManager udpManager;
     EthernetUDP* ntpUdp;
     byte mac[6];
+    
+    // Performance optimization: Non-blocking initialization state machine
+    enum InitState {
+        INIT_START,
+        RESET_LOW,
+        RESET_HIGH,
+        STABILIZE_WAIT,
+        SPI_INIT,
+        ETHERNET_INIT,
+        INIT_COMPLETE
+    };
+    InitState initState;
+    unsigned long stateChangeTime;
 
 public:
     NetworkManager(EthernetUDP* udpInstance);
@@ -20,6 +33,9 @@ public:
     void monitorConnection();
     void attemptReconnection();
     void manageUdpSockets();
+    
+    // Performance optimization: Non-blocking initialization
+    bool updateInitialization(); // Returns true when complete
     
     bool isConnected() const { return networkMonitor.isConnected; }
     bool isNtpServerActive() const { return networkMonitor.ntpServerActive; }

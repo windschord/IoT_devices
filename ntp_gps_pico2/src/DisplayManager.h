@@ -35,6 +35,13 @@ private:
     bool displayOn;
     int sleepCounter;
     static const int SLEEP_TIMEOUT_COUNT = 30; // 30 update cycles (approximately 30 seconds)
+    
+    // Performance optimization: Frame buffering
+    struct DisplayBuffer {
+        bool dirty;
+        unsigned long lastUpdate;
+        static const int UPDATE_INTERVAL_MS = 100; // Minimum 100ms between I2C updates
+    } frameBuffer;
 
 public:
     DisplayManager();
@@ -82,6 +89,11 @@ private:
     void drawProgressBar(int x, int y, int width, int height, int value, int maxValue);
     void drawSignalBars(int x, int y, int signalStrength);
     const char* getGnssName(int gnssId);
+    
+    // Performance optimization methods
+    bool shouldUpdateDisplay();
+    void markDisplayDirty();
+    void commitDisplayUpdate();
 };
 
 #endif // DISPLAY_MANAGER_H

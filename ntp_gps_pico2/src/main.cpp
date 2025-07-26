@@ -33,25 +33,33 @@ WebServer webServer;
 GpsClient gpsClient(Serial);
 RTC_DS3231 rtc;
 
-// Global system instances
-ConfigManager configManager;
-TimeSync timeSync = {0, 0, 0, 0, false, 1.0};
-TimeManager timeManager(&rtc, &timeSync, nullptr);
-NetworkManager networkManager(&ntpUdp);
-SystemMonitor* systemMonitor = nullptr;
-NtpServer* ntpServer = nullptr;
-DisplayManager displayManager;
-LoggingService* loggingService = nullptr;
-PrometheusMetrics* prometheusMetrics = nullptr;
-SystemController systemController;
-ErrorHandler errorHandler;
-PhysicalReset physicalReset;
-
-// Global state variables
+// Global state variables (declare first for static initialization)
 volatile unsigned long lastPps = 0;
 volatile bool ppsReceived = false;
 bool gpsConnected = false;
 bool webServerStarted = false;
+
+// Global system instances - Performance optimization: Static allocation
+ConfigManager configManager;
+TimeSync timeSync = {0, 0, 0, 0, false, 1.0};
+TimeManager timeManager(&rtc, &timeSync, nullptr);
+NetworkManager networkManager(&ntpUdp);
+
+// Static instances instead of dynamic allocation (memory optimization)
+static SystemMonitor systemMonitorInstance(&gpsClient, &gpsConnected, &ppsReceived);
+static LoggingService loggingServiceInstance(&ntpUdp);  
+static PrometheusMetrics prometheusMetricsInstance;
+static NtpServer ntpServerInstance(&ntpUdp, &timeManager, nullptr);
+
+SystemMonitor* systemMonitor = &systemMonitorInstance;
+NtpServer* ntpServer = &ntpServerInstance;
+LoggingService* loggingService = &loggingServiceInstance;
+PrometheusMetrics* prometheusMetrics = &prometheusMetricsInstance;
+
+DisplayManager displayManager;
+SystemController systemController;
+ErrorHandler errorHandler;
+PhysicalReset physicalReset;
 
 // LED Blinking State Variables
 unsigned long lastGnssLedUpdate = 0;
@@ -313,8 +321,7 @@ void setup()
   // Initialize system modules  
   networkManager.init();
   
-  // Initialize logging service
-  loggingService = new LoggingService(&ntpUdp);
+  // Initialize logging service (now using static instance)
   LogConfig logConfig;
   logConfig.minLevel = LOG_INFO;
   logConfig.facility = FACILITY_NTP;
@@ -326,8 +333,7 @@ void setup()
   logConfig.syslogPort = 514;
   loggingService->init(logConfig);
   
-  // Initialize Prometheus metrics
-  prometheusMetrics = new PrometheusMetrics();
+  // Initialize Prometheus metrics (now using static instance)
   prometheusMetrics->init();
   LOG_INFO_MSG("SYSTEM", "PrometheusMetrics initialized");
 
@@ -336,8 +342,7 @@ void setup()
   LOG_INFO_F("SYSTEM", "RAM: %lu bytes, Flash: %lu bytes", 
              (unsigned long)17856, (unsigned long)406192);
 
-  // Initialize system monitor with references FIRST
-  systemMonitor = new SystemMonitor(&gpsClient, &gpsConnected, &ppsReceived);
+  // Initialize system monitor (now using static instance)
   systemMonitor->init();
   LOG_INFO_MSG("SYSTEM", "SystemMonitor initialized");
   
@@ -346,9 +351,10 @@ void setup()
   timeManager.setGpsMonitor(&systemMonitor->getGpsMonitor());
   LOG_INFO_MSG("SYSTEM", "TimeManager initialized with GPS monitor reference");
 
-  // Initialize NTP server
+  // Initialize NTP server (now using static instance)
   const UdpSocketManager& udpStatus = networkManager.getUdpStatus();
-  ntpServer = new NtpServer(&ntpUdp, &timeManager, const_cast<UdpSocketManager*>(&udpStatus));
+  // Update the static instance with the UDP socket manager
+  ntpServerInstance = NtpServer(&ntpUdp, &timeManager, const_cast<UdpSocketManager*>(&udpStatus));
   ntpServer->init();
   LOG_INFO_MSG("NTP", "NTP Server initialized and listening on port 123");
   
@@ -412,25 +418,53 @@ unsigned long ledOffTime = 0;
 
 void loop()
 {
-  // Error handler update (error monitoring and recovery)
-  errorHandler.update();
+  // Performance optimization: 3-tier timing control
+  static unsigned long lastLowPriorityUpdate = 0;
+  static unsigned long lastMediumPriorityUpdate = 0;
+  unsigned long currentTime = millis();
   
-  // Physical reset button handling (high priority)
+  // ====== HIGH PRIORITY (every loop) ======
+  // Critical operations that must run immediately
+  errorHandler.update();
   physicalReset.update();
   
-  // Display manager update (auto-sleep management)
-  displayManager.update();
+  // ====== MEDIUM PRIORITY (100ms interval) ======
+  // Operations that need regular updates but not every loop
+  if (currentTime - lastMediumPriorityUpdate >= 100) {
+    displayManager.update();
+    systemController.update();
+    
+    // GPS signal monitoring and fallback management
+    if (systemMonitor) {
+      systemMonitor->monitorGpsSignal();
+    }
+    
+    lastMediumPriorityUpdate = currentTime;
+  }
   
-  // System controller update (system-wide health monitoring and state management)
-  systemController.update();
-  
-  // Update hardware status in SystemController
-  systemController.updateGpsStatus(gpsConnected);
-  systemController.updateNetworkStatus(networkManager.isConnected());
-  
-  // GPS signal monitoring and fallback management
-  if (systemMonitor) {
-    systemMonitor->monitorGpsSignal();
+  // ====== LOW PRIORITY (1000ms interval) ======
+  // Status updates and non-critical monitoring
+  if (currentTime - lastLowPriorityUpdate >= 1000) {
+    // Update hardware status in SystemController
+    systemController.updateGpsStatus(gpsConnected);
+    systemController.updateNetworkStatus(networkManager.isConnected());
+    
+    // Network monitoring and recovery
+    networkManager.monitorConnection();
+    networkManager.attemptReconnection();
+    
+    // Update Prometheus metrics (moved to low priority for performance)
+    if (prometheusMetrics && ntpServer && systemMonitor) {
+      GpsSummaryData gpsData = gpsClient.getGpsSummaryData();
+      const NtpStatistics& ntpStats = ntpServer->getStatistics();
+      const GpsMonitor& gpsMonitor = systemMonitor->getGpsMonitor();
+      extern TimeManager timeManager;
+      unsigned long ppsCount = timeManager.getPpsCount();
+      
+      prometheusMetrics->update(&ntpStats, &gpsData, &gpsMonitor, ppsCount);
+    }
+    
+    lastLowPriorityUpdate = currentTime;
   }
   
   if (gpsConnected) {
@@ -480,7 +514,7 @@ void loop()
 
   // Display management
   // Note: Button handling is now managed by PhysicalReset class
-  displayManager.update();
+  // displayManager.update() moved to medium priority (100ms interval)
   
   if (displayManager.shouldDisplay()) {
     GpsSummaryData gpsData = gpsClient.getGpsSummaryData();
@@ -517,9 +551,22 @@ void loop()
     }
   }
 
-  // Network connection monitoring and automatic recovery
-  networkManager.monitorConnection();
-  networkManager.attemptReconnection();
+  // ====== CRITICAL OPERATIONS (every loop) ======
+  // Time-sensitive operations that cannot be delayed
+  
+  // UDP socket management and NTP request processing (high priority)
+  networkManager.manageUdpSockets();
+  if (ntpServer) {
+    ntpServer->processRequests();
+  }
+
+  // Process logging service (syslog transmission and retries)
+  if (loggingService) {
+    loggingService->processLogs();
+  }
+
+  // ====== LOW PRIORITY OPERATIONS (already moved above) ======
+  // Network monitoring, status updates moved to 1-second interval
   
   // Debug network status every 30 seconds (reduced frequency)
   static unsigned long lastNetworkDebug = 0;
@@ -548,28 +595,6 @@ void loop()
     }
     Serial.println();
 #endif
-  }
-  
-  // UDP socket management and NTP request processing
-  networkManager.manageUdpSockets();
-  if (ntpServer) {
-    ntpServer->processRequests();
-  }
-
-  // Process logging service (syslog transmission and retries)
-  if (loggingService) {
-    loggingService->processLogs();
-  }
-
-  // Update Prometheus metrics
-  if (prometheusMetrics && ntpServer && systemMonitor) {
-    GpsSummaryData gpsData = gpsClient.getGpsSummaryData();
-    const NtpStatistics& ntpStats = ntpServer->getStatistics();
-    const GpsMonitor& gpsMonitor = systemMonitor->getGpsMonitor();
-    extern TimeManager timeManager;
-    unsigned long ppsCount = timeManager.getPpsCount();
-    
-    prometheusMetrics->update(&ntpStats, &gpsData, &gpsMonitor, ppsCount);
   }
 
 #if defined(DEBUG_CONSOLE_GPS)

@@ -10,10 +10,17 @@ NetworkManager::NetworkManager(EthernetUDP* udpInstance) : ntpUdp(udpInstance) {
     // Initialize monitoring structures
     networkMonitor = {false, false, 0, 5000, 0, 5, 0, 30000, 0, 0, 0, false};
     udpManager = {false, 0, 10000, 0};
+    
+    // Initialize non-blocking state machine
+    initState = INIT_START;
+    stateChangeTime = 0;
 }
 
 void NetworkManager::init() {
-    initializeW5500();
+    // Start the non-blocking initialization state machine
+    initState = INIT_START;
+    stateChangeTime = millis();
+    Serial.println("Starting non-blocking W5500 initialization...");
     
     // Hardware status detailed check
     Serial.print("Hardware status: ");
@@ -80,26 +87,67 @@ void NetworkManager::init() {
 }
 
 void NetworkManager::initializeW5500() {
-    // W5500 SPI setup and hardware reset
-    pinMode(W5500_RST_PIN, OUTPUT);
-    pinMode(W5500_INT_PIN, INPUT);
-    pinMode(W5500_CS_PIN, OUTPUT);
+    // Legacy blocking initialization - replaced by updateInitialization()
+    // This method is kept for compatibility but should call the new method
+    while (!updateInitialization()) {
+        // Keep calling until initialization is complete
+        delay(1); // Minimal delay to prevent tight loop
+    }
+}
+
+// Performance optimization: Non-blocking W5500 initialization
+bool NetworkManager::updateInitialization() {
+    unsigned long currentTime = millis();
     
-    // W5500 hardware reset
-    Serial.println("Resetting W5500 module...");
-    digitalWrite(W5500_CS_PIN, HIGH); // CS High
-    digitalWrite(W5500_RST_PIN, LOW);  // Reset Low
-    delay(50);
-    digitalWrite(W5500_RST_PIN, HIGH); // Reset High
-    delay(200); // Wait for stabilization after reset
-    
-    // SPI initialization (Raspberry Pi Pico 2 compatible)
-    SPI.begin();
-    SPI.setCS(W5500_CS_PIN);
-    
-    // Initialize Ethernet library with CS pin
-    Ethernet.init(W5500_CS_PIN);
-    Serial.println("W5500 initialization completed");
+    switch (initState) {
+        case INIT_START:
+            // W5500 SPI setup and hardware reset
+            pinMode(W5500_RST_PIN, OUTPUT);
+            pinMode(W5500_INT_PIN, INPUT);
+            pinMode(W5500_CS_PIN, OUTPUT);
+            digitalWrite(W5500_CS_PIN, HIGH); // CS High
+            
+            Serial.println("Starting non-blocking W5500 reset...");
+            digitalWrite(W5500_RST_PIN, LOW);  // Reset Low
+            stateChangeTime = currentTime;
+            initState = RESET_LOW;
+            return false;
+            
+        case RESET_LOW:
+            if (currentTime - stateChangeTime >= 50) { // 50ms reset low
+                digitalWrite(W5500_RST_PIN, HIGH); // Reset High
+                stateChangeTime = currentTime;
+                initState = RESET_HIGH;
+            }
+            return false;
+            
+        case RESET_HIGH:
+            if (currentTime - stateChangeTime >= 200) { // 200ms stabilization
+                initState = SPI_INIT;
+            }
+            return false;
+            
+        case SPI_INIT:
+            // SPI initialization (Raspberry Pi Pico 2 compatible)
+            SPI.begin();
+            SPI.setCS(W5500_CS_PIN);
+            initState = ETHERNET_INIT;
+            return false;
+            
+        case ETHERNET_INIT:
+            // Initialize Ethernet library with CS pin
+            Ethernet.init(W5500_CS_PIN);
+            Serial.println("Non-blocking W5500 initialization completed");
+            initState = INIT_COMPLETE;
+            return true;
+            
+        case INIT_COMPLETE:
+            return true; // Already completed
+            
+        default:
+            initState = INIT_START; // Reset on unknown state
+            return false;
+    }
 }
 
 bool NetworkManager::attemptDhcp() {
