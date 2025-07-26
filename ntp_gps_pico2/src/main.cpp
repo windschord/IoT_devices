@@ -311,19 +311,7 @@ void setup()
   // Initialize configuration manager
   configManager.init();
 
-  // Initialize DisplayManager first (before any other I2C operations)
-  if (!displayManager.initialize()) {
-    // Note: Can't use LOG_ERR_MSG yet as LoggingService is not initialized
-    Serial.println("❌ DisplayManager initialization failed - continuing without display");
-  } else {
-    // Note: Can't use LOG_INFO_MSG yet as LoggingService is not initialized  
-    Serial.println("✅ DisplayManager initialized successfully");
-  }
-  
-  // Initialize system modules  
-  networkManager.init();
-  
-  // Initialize logging service (now using static instance)
+  // Initialize logging service first (required for unified log format)
   LogConfig logConfig;
   logConfig.minLevel = LOG_INFO;
   logConfig.facility = FACILITY_NTP;
@@ -338,6 +326,16 @@ void setup()
   // Set LoggingService references for components
   displayManager.setLoggingService(loggingService);
   networkManager.setLoggingService(loggingService);
+
+  // Initialize DisplayManager with unified logging
+  if (!displayManager.initialize()) {
+    LOG_ERR_MSG("DISPLAY", "DisplayManager initialization failed - continuing without display");
+  } else {
+    LOG_INFO_MSG("DISPLAY", "DisplayManager initialized successfully");
+  }
+  
+  // Initialize system modules  
+  networkManager.init();
   
   // Initialize Prometheus metrics (now using static instance)
   prometheusMetrics->init();
@@ -523,7 +521,7 @@ void loop()
     GpsSummaryData gpsData = gpsClient.getGpsSummaryData();
     
     // Display content based on current mode
-    Serial.printf("Main loop: shouldDisplay=YES, currentMode=%d\n", displayManager.getCurrentMode());
+    // Note: Removed verbose main loop logging for cleaner output
     switch (displayManager.getCurrentMode()) {
       case DISPLAY_GPS_TIME:
       case DISPLAY_GPS_SATS:

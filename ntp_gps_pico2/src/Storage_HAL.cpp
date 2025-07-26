@@ -116,7 +116,7 @@ bool StorageHAL::initialize() {
     
     initialized = true;
     
-    LOG_INFO_F("STORAGE", "StorageHAL: 初期化完了 (%dKB利用可能)", STORAGE_SECTOR_SIZE / 1024);
+    LOG_INFO_F("STORAGE", "StorageHAL initialization completed (%dKB available)", STORAGE_SECTOR_SIZE / 1024);
     return true;
 }
 
@@ -408,5 +408,5 @@ void StorageHAL::disablePowerSafeMode() {
 
 void StorageHAL::initializeCRC32Table() {
     // テーブルは静的に定義されているため、初期化不要
-    LOG_DEBUG_MSG("STORAGE", "StorageHAL: CRC32テーブル初期化完了");
+    LOG_DEBUG_MSG("STORAGE", "StorageHAL: CRC32 table initialization completed");
 }

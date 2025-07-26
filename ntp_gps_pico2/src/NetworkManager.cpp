@@ -28,28 +28,57 @@ void NetworkManager::init() {
     }
     
     // Hardware status detailed check
-    Serial.print("Hardware status: ");
+    if (loggingService) {
+        loggingService->info("NETWORK", "Checking hardware status...");
+    } else {
+        Serial.print("Hardware status: ");
+    }
     checkHardwareStatus();
     
     // Force alternative approach - matching original main.cpp logic
-    Serial.println("Trying alternative approach - forcing DHCP initialization");
+    if (loggingService) {
+        loggingService->info("NETWORK", "Trying alternative approach - forcing DHCP initialization");
+    } else {
+        Serial.println("Trying alternative approach - forcing DHCP initialization");
+    }
     bool hardwareDetected = true; // Force to true to continue like original code
     
     if (!hardwareDetected) {
-        Serial.println("ERROR: W5500 Ethernet hardware not found after 3 attempts");
-        Serial.println("This may be a library compatibility issue");
+        if (loggingService) {
+            loggingService->error("NETWORK", "W5500 Ethernet hardware not found after 3 attempts");
+            loggingService->error("NETWORK", "This may be a library compatibility issue");
+        } else {
+            Serial.println("ERROR: W5500 Ethernet hardware not found after 3 attempts");
+            Serial.println("This may be a library compatibility issue");
+        }
 #ifdef DEBUG_NETWORK_INIT
-        Serial.println("Continuing without Ethernet (GPS-only mode)");
+        if (loggingService) {
+            loggingService->warning("NETWORK", "Continuing without Ethernet (GPS-only mode)");
+        } else {
+            Serial.println("Continuing without Ethernet (GPS-only mode)");
+        }
 #endif
         digitalWrite(LED_ERROR_PIN, HIGH); // Turn on error LED (常時点灯)
         networkMonitor.isConnected = false;
     } else {
-        Serial.println("W5500 hardware detected");
+        if (loggingService) {
+            loggingService->info("NETWORK", "W5500 hardware detected");
+        } else {
+            Serial.println("W5500 hardware detected");
+        }
         
         // DHCP attempt
-        Serial.println("Attempting DHCP configuration...");
+        if (loggingService) {
+            loggingService->info("NETWORK", "Attempting DHCP configuration...");
+        } else {
+            Serial.println("Attempting DHCP configuration...");
+        }
         if (Ethernet.begin(mac) == 0) {
-            Serial.println("DHCP failed, trying static IP fallback");
+            if (loggingService) {
+                loggingService->warning("NETWORK", "DHCP failed, trying static IP fallback");
+            } else {
+                Serial.println("DHCP failed, trying static IP fallback");
+            }
             
             // Static IP configuration fallback (example: 192.168.1.100)
             IPAddress ip(192, 168, 1, 100);

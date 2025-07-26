@@ -190,7 +190,9 @@ void DisplayManager::update() {
 
 void DisplayManager::displayInfo(const GpsSummaryData& gpsSummaryData) {
     if (!initialized || !display) {
-        Serial.println("DisplayManager::displayInfo - Not initialized or no display");
+        if (loggingService) {
+            loggingService->warning("DISPLAY", "DisplayInfo called but not initialized or no display");
+        }
         return;
     }
     
@@ -198,12 +200,12 @@ void DisplayManager::displayInfo(const GpsSummaryData& gpsSummaryData) {
     // This ensures data structures stay updated
     
     if (errorState) {
-        Serial.println("DisplayManager::displayInfo - Error state, showing error screen");
+        // Note: Removed verbose error state logging for cleaner output
         displayErrorScreen();
         return;
     }
     
-    Serial.printf("DisplayManager::displayInfo - Mode: %d, displayCount: %d\n", currentMode, displayCount);
+    // Note: Removed verbose mode logging for cleaner output
     
     switch (currentMode) {
         case DISPLAY_GPS_TIME:
