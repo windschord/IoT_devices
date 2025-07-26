@@ -243,6 +243,9 @@ void setup()
   pinMode(LED_ONBOARD_PIN, OUTPUT);
   pinMode(LED_ERROR_PIN, OUTPUT);
 
+  // Note: Button initialization is handled by PhysicalReset via ButtonHAL
+  // GPIO 11 is managed centrally to avoid conflicts
+
   // I2C for OLED (Wire0 bus - GPIO 0/1)
   Wire.setSDA(0);  // GPIO 0 for SDA
   Wire.setSCL(1);  // GPIO 1 for SCL
@@ -413,7 +416,7 @@ void loop()
   webServer.handleClient(Serial, server, gpsClient.getUbxNavSatData_t(), gpsClient.getGpsSummaryData());
 
   // Display management
-  displayManager.checkDisplayButton();
+  // Note: Button handling is now managed by PhysicalReset class
   displayManager.update();
   
   if (displayManager.shouldDisplay()) {

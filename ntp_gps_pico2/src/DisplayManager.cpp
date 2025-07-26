@@ -98,31 +98,8 @@ void DisplayManager::init() {
     Serial.println("OLED Display initialization completed");
 }
 
-void DisplayManager::checkDisplayButton() {
-    static bool lastButtonState = HIGH;
-    static unsigned long buttonPressTime = 0;
-    
-    bool currentButtonState = digitalRead(BTN_DISPLAY_PIN);
-    unsigned long now = millis();
-    
-    // Detect button press (falling edge)
-    if (lastButtonState == HIGH && currentButtonState == LOW) {
-        buttonPressTime = now;
-    }
-    
-    // Detect button release with debounce (rising edge)
-    if (lastButtonState == LOW && currentButtonState == HIGH) {
-        // Check if button was pressed for at least 50ms (debounce)
-        if (now - buttonPressTime > 50 && now - buttonLastPressed > 200) {
-            Serial.println("Display button pressed - switching mode");
-            nextDisplayMode();
-            triggerDisplay(); // Immediate display update
-            buttonLastPressed = now;
-        }
-    }
-    
-    lastButtonState = currentButtonState;
-}
+// Button handling removed - now managed centrally by PhysicalReset class
+// PhysicalReset::handleShortPress() calls nextDisplayMode() and triggerDisplay()
 
 void DisplayManager::update() {
     // Simple display management - just ensure displayCount stays active

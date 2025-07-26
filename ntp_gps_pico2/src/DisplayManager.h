@@ -45,7 +45,7 @@ public:
     void displayNtpStats(const NtpStatistics& ntpStats);
     void displaySystemStatus(bool gpsConnected, bool networkConnected, uint32_t uptimeSeconds);
     void displayError(const String& message);
-    void checkDisplayButton();
+    // Button handling removed - managed by PhysicalReset class
     void clearDisplay();
     void nextDisplayMode();
     
