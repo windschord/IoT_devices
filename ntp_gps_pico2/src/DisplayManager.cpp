@@ -56,15 +56,26 @@ bool DisplayManager::initialize() {
         return false;
     }
     
+    Serial.println("Calling display->begin()...");
     display->begin();
+    Serial.println("display->begin() completed");
     
     // Enable SH1106 offset for 132x64 -> 128x64 conversion
+    Serial.println("Setting SH1106 offset...");
     display->useOffset(true);
+    Serial.println("SH1106 offset set");
     
-    Serial.println("Displaying startup screen...");
+    // Set initialized flag BEFORE calling display methods
+    initialized = true;
+    Serial.println("DisplayManager marked as initialized");
+    
+    // Display startup screen
     displayStartupScreen();
     
-    initialized = true;
+    // Trigger display to start updating after 3 seconds
+    displayCount = 1;
+    lastDisplay = micros();
+    
     Serial.println("OLED display initialized successfully");
     
     return true;
