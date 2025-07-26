@@ -290,10 +290,101 @@ Note: Both I2C buses require 4.7kΩ pull-up resistors on SDA and SCL lines
 - **Interfaces**:
   - UDP Syslogプロトコル
   - ローカルログバッファ
+  - シリアルコンソール出力
 - **Key Functions**:
   - 構造化ログ生成
   - Syslog RFC3164準拠
   - ログレベル管理
+  - コンソールログフォーマット管理
+
+#### Console Log Format Specification
+
+**基本フォーマット**:
+```
+[YYYY-MM-DD HH:MM:SS.mmm] [LEVEL] [COMPONENT] Message text
+```
+
+**フォーマット要素**:
+- **タイムスタンプ**: `[YYYY-MM-DD HH:MM:SS.mmm]` 年-月-日 時:分:秒.ミリ秒（ISO 8601形式）
+- **ログレベル**: `[LEVEL]` 8文字固定幅、左詰め
+- **コンポーネント**: `[COMPONENT]` 12文字固定幅、左詰め
+- **メッセージ**: 自由テキスト、改行で終了
+
+**ログレベル表記**:
+```
+[DEBUG   ] - デバッグ情報（開発時のみ）
+[INFO    ] - 一般的な情報メッセージ
+[NOTICE  ] - 重要な情報メッセージ
+[WARNING ] - 警告メッセージ
+[ERROR   ] - エラーメッセージ
+[CRITICAL] - クリティカルエラー
+[ALERT   ] - アラートメッセージ
+[EMERGENC] - 緊急事態メッセージ
+```
+
+**コンポーネント表記**:
+```
+[SYSTEM     ] - システム全体関連
+[GPS        ] - GPS/GNSS関連
+[NTP        ] - NTPサーバー関連
+[NETWORK    ] - ネットワーク関連
+[DISPLAY    ] - ディスプレイ関連
+[CONFIG     ] - 設定管理関連
+[METRICS    ] - メトリクス関連
+[HARDWARE   ] - ハードウェア関連
+[BUTTON     ] - ボタン制御関連
+[STORAGE    ] - ストレージ関連
+[ERROR_HDL  ] - エラーハンドラ関連
+[TEST       ] - テスト関連
+```
+
+**フォーマット例**:
+```
+[2025-07-26 12:34:56.789] [INFO    ] [SYSTEM     ] GPS NTP Server starting up...
+[2025-07-26 12:34:56.801] [INFO    ] [GPS        ] ZED-F9T initialization successful
+[2025-07-26 12:34:56.812] [DEBUG   ] [GPS        ] Scanning for satellites: GPS=12, GLONASS=8, Galileo=6
+[2025-07-26 12:34:56.823] [INFO    ] [NETWORK    ] W5500 Ethernet link established
+[2025-07-26 12:34:56.834] [INFO    ] [NTP        ] NTP server listening on port 123
+[2025-07-26 12:34:57.845] [WARNING ] [GPS        ] PPS signal not detected within 1 second
+[2025-07-26 12:34:58.856] [INFO    ] [GPS        ] PPS signal acquired, system synchronized
+[2025-07-26 12:34:58.867] [ERROR   ] [DISPLAY    ] OLED initialization failed: I2C error code 5
+[2025-07-26 12:34:58.878] [CRITICAL] [HARDWARE   ] Critical hardware failure detected
+[2025-07-26 12:34:58.889] [NOTICE  ] [CONFIG     ] Factory reset initiated by long button press
+```
+
+**特殊フォーマット（統計情報）**:
+```
+[YYYY-MM-DD HH:MM:SS.mmm] [INFO    ] [COMPONENT] STAT: metric_name=value unit [additional_info]
+```
+
+**統計情報例**:
+```
+[2025-07-26 12:35:00.000] [INFO    ] [GPS        ] STAT: satellites=26 total [GPS:12 GLO:8 GAL:6]
+[2025-07-26 12:35:00.000] [INFO    ] [NTP        ] STAT: requests=1247 req/h [avg_response=2.3ms]
+[2025-07-26 12:35:00.000] [INFO    ] [SYSTEM     ] STAT: uptime=3600 seconds [health=98%]
+[2025-07-26 12:35:00.000] [INFO    ] [NETWORK    ] STAT: rx_bytes=45678 bytes [tx_bytes=12345]
+```
+
+**エラーフォーマット（詳細情報付き）**:
+```
+[YYYY-MM-DD HH:MM:SS.mmm] [ERROR] [COMPONENT] ERROR_CODE: Error description [context_info]
+```
+
+**エラー例**:
+```
+[2025-07-26 12:34:58.867] [ERROR   ] [DISPLAY    ] I2C_ERR_5: Buffer overflow during OLED write [addr=0x3C]
+[2025-07-26 12:34:58.878] [ERROR   ] [GPS        ] UBX_TIMEOUT: NAV-PVT message timeout [retry=3/5]
+[2025-07-26 12:34:58.889] [ERROR   ] [NETWORK    ] W5500_FAIL: SPI communication failure [reg=0x00]
+```
+
+**起動シーケンスフォーマット**:
+```
+[2025-07-26 12:34:56.789] [INFO    ] [SYSTEM     ] === GPS NTP Server v1.0 ===
+[2025-07-26 12:34:56.790] [INFO    ] [SYSTEM     ] Hardware: Raspberry Pi Pico 2 (RP2350)
+[2025-07-26 12:34:56.791] [INFO    ] [SYSTEM     ] Firmware: Built 2025-07-26 10:15:30
+[2025-07-26 12:34:56.792] [INFO    ] [SYSTEM     ] Initializing hardware components...
+[2025-07-26 12:34:56.800] [INFO    ] [SYSTEM     ] System ready, entering main loop
+```
 
 ### Metrics Service
 - **Purpose**: Prometheus監視メトリクス

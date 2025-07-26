@@ -1,4 +1,5 @@
 #include "LoggingService.h"
+#include "TimeManager.h"
 #include <Ethernet.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -6,8 +7,8 @@
 // Global logger instance pointer
 LoggingService* globalLogger = nullptr;
 
-LoggingService::LoggingService(EthernetUDP* udpInstance) 
-    : udp(udpInstance), logBuffer(nullptr), bufferTail(nullptr), 
+LoggingService::LoggingService(EthernetUDP* udpInstance, TimeManager* timeManagerInstance) 
+    : udp(udpInstance), timeManager(timeManagerInstance), logBuffer(nullptr), bufferTail(nullptr), 
       bufferCount(0), lastRetransmit(0) {
     
     // Initialize default configuration
@@ -65,13 +66,10 @@ void LoggingService::log(LogLevel level, LogFacility facility, const char* tag, 
         return;
     }
     
-    // Always output to serial for debugging
-    Serial.print("[");
-    Serial.print(getLevelName(level));
-    Serial.print("] ");
-    Serial.print(tag);
-    Serial.print(": ");
-    Serial.println(message);
+    // Always output to serial using the console format
+    char consoleBuffer[512];
+    formatConsoleMessage(consoleBuffer, sizeof(consoleBuffer), level, tag, message);
+    Serial.println(consoleBuffer);
     
     // Add to buffer if local buffering is enabled
     if (config.localBuffering) {
@@ -372,15 +370,15 @@ void LoggingService::clearBuffers() {
 
 const char* LoggingService::getLevelName(LogLevel level) const {
     switch (level) {
-        case LOG_EMERG: return "EMERG";
-        case LOG_ALERT: return "ALERT";
-        case LOG_CRIT: return "CRIT";
-        case LOG_ERR: return "ERROR";
-        case LOG_WARNING: return "WARN";
-        case LOG_NOTICE: return "NOTICE";
-        case LOG_INFO: return "INFO";
-        case LOG_DEBUG: return "DEBUG";
-        default: return "UNKNOWN";
+        case LOG_EMERG: return "EMERGENC";
+        case LOG_ALERT: return "ALERT   ";
+        case LOG_CRIT: return "CRITICAL";
+        case LOG_ERR: return "ERROR   ";
+        case LOG_WARNING: return "WARNING ";
+        case LOG_NOTICE: return "NOTICE  ";
+        case LOG_INFO: return "INFO    ";
+        case LOG_DEBUG: return "DEBUG   ";
+        default: return "UNKNOWN ";
     }
 }
 
@@ -412,4 +410,80 @@ const char* LoggingService::getFacilityName(LogFacility facility) const {
         case FACILITY_LOCAL7: return "LOCAL7";
         default: return "UNKNOWN";
     }
+}
+
+void LoggingService::getConsoleTimestamp(char* buffer, size_t bufferSize) {
+    if (timeManager) {
+        // Use GPS-synchronized time when available
+        time_t unixTime = timeManager->getUnixTimestamp();
+        uint32_t microseconds = timeManager->getMicrosecondFraction();
+        uint32_t milliseconds = microseconds / 1000;
+        
+        if (unixTime > 0) {
+            // Convert Unix timestamp to UTC time
+            struct tm* timeinfo = gmtime(&unixTime);
+            if (timeinfo) {
+                snprintf(buffer, bufferSize, "%04d-%02d-%02d %02d:%02d:%02d.%03lu",
+                         timeinfo->tm_year + 1900,
+                         timeinfo->tm_mon + 1,
+                         timeinfo->tm_mday,
+                         timeinfo->tm_hour,
+                         timeinfo->tm_min,
+                         timeinfo->tm_sec,
+                         milliseconds);
+                return;
+            }
+        }
+    }
+    
+    // Fallback to millis() based time when GPS time is not available
+    unsigned long now = millis();
+    unsigned long totalSeconds = now / 1000;
+    unsigned long milliseconds = now % 1000;
+    
+    // Convert to hours, minutes, seconds (simple calculation for demo)
+    unsigned long hours = (totalSeconds / 3600) % 24;
+    unsigned long minutes = (totalSeconds % 3600) / 60;
+    unsigned long seconds = totalSeconds % 60;
+    
+    // Use placeholder date when GPS time is not synchronized
+    // Format: YYYY-MM-DD HH:MM:SS.mmm
+    snprintf(buffer, bufferSize, "2025-07-26 %02lu:%02lu:%02lu.%03lu", 
+             hours, minutes, seconds, milliseconds);
+}
+
+const char* LoggingService::getComponentName(const char* tag) const {
+    // Map tag names to 12-character fixed-width component names
+    if (strcmp(tag, "SYSTEM") == 0) return "SYSTEM     ";
+    if (strcmp(tag, "GPS") == 0) return "GPS        ";
+    if (strcmp(tag, "NTP") == 0) return "NTP        ";
+    if (strcmp(tag, "NETWORK") == 0) return "NETWORK    ";
+    if (strcmp(tag, "DISPLAY") == 0) return "DISPLAY    ";
+    if (strcmp(tag, "CONFIG") == 0) return "CONFIG     ";
+    if (strcmp(tag, "METRICS") == 0) return "METRICS    ";
+    if (strcmp(tag, "HARDWARE") == 0) return "HARDWARE   ";
+    if (strcmp(tag, "BUTTON") == 0) return "BUTTON     ";
+    if (strcmp(tag, "STORAGE") == 0) return "STORAGE    ";
+    if (strcmp(tag, "ERROR_HDL") == 0) return "ERROR_HDL  ";
+    if (strcmp(tag, "TEST") == 0) return "TEST       ";
+    
+    // For unknown tags, pad to 12 characters
+    static char padded[13];
+    snprintf(padded, sizeof(padded), "%-11s", tag);
+    padded[11] = ' ';
+    padded[12] = '\0';
+    return padded;
+}
+
+void LoggingService::formatConsoleMessage(char* buffer, size_t bufferSize, LogLevel level, 
+                                        const char* tag, const char* message) {
+    char timestamp[32];
+    getConsoleTimestamp(timestamp, sizeof(timestamp));
+    
+    const char* levelName = getLevelName(level);
+    const char* componentName = getComponentName(tag);
+    
+    // Format: [YYYY-MM-DD HH:MM:SS.mmm] [LEVEL] [COMPONENT] Message
+    snprintf(buffer, bufferSize, "[%s] [%s] [%s] %s", 
+             timestamp, levelName, componentName, message);
 }

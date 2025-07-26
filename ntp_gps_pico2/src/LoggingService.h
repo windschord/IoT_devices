@@ -5,6 +5,9 @@
 #include <EthernetUdp.h>
 #include <time.h>
 
+// Forward declaration for TimeManager
+class TimeManager;
+
 // RFC 3164 Syslog severity levels
 enum LogLevel {
     LOG_EMERG = 0,     // Emergency: system is unusable
@@ -72,6 +75,7 @@ class LoggingService {
 private:
     LogConfig config;
     EthernetUDP* udp;
+    TimeManager* timeManager;    // TimeManager for GPS time sync
     LogEntry* logBuffer;         // Linked list of log entries
     LogEntry* bufferTail;        // Tail of linked list
     uint16_t bufferCount;        // Current number of buffered entries
@@ -85,11 +89,15 @@ private:
                            const char* timestamp, const char* hostname, 
                            const char* tag, const char* message);
     void getCurrentTimestamp(char* buffer, size_t bufferSize);
+    void getConsoleTimestamp(char* buffer, size_t bufferSize);
+    void formatConsoleMessage(char* buffer, size_t bufferSize, LogLevel level, 
+                            const char* tag, const char* message);
+    const char* getComponentName(const char* tag) const;
     bool transmitLogEntry(const LogEntry* entry);
     void processRetransmissions();
     
 public:
-    LoggingService(EthernetUDP* udpInstance);
+    LoggingService(EthernetUDP* udpInstance, TimeManager* timeManagerInstance = nullptr);
     ~LoggingService();
     
     // Configuration methods
@@ -97,6 +105,7 @@ public:
     void setMinLevel(LogLevel level) { config.minLevel = level; }
     void setSyslogServer(const char* server, uint16_t port = 514);
     void setFacility(LogFacility facility) { config.facility = facility; }
+    void setTimeManager(TimeManager* timeManagerInstance) { timeManager = timeManagerInstance; }
     LogLevel getMinLevel() const { return config.minLevel; }
     
     // Logging methods
