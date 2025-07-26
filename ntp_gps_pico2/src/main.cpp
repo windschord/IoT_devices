@@ -297,32 +297,8 @@ void setup()
     Serial.println("  6. OLED power LED should be ON");
   }
   
-  // Test GPIO pins as digital outputs to check connectivity
-  Serial.println("\n=== GPIO Connectivity Test ===");
-  pinMode(0, OUTPUT);
-  pinMode(1, OUTPUT);
-  Serial.println("Testing GPIO 0 and 1 as digital outputs...");
-  for (int i = 0; i < 3; i++) {
-    digitalWrite(0, HIGH);
-    digitalWrite(1, HIGH);
-    delay(100);
-    digitalWrite(0, LOW);
-    digitalWrite(1, LOW);
-    delay(100);
-  }
-  Serial.println("GPIO test completed - check if OLED shows any activity");
-  
-  // Restore I2C mode with explicit pin assignment
-  Wire.setSDA(0);  // GPIO 0 for SDA
-  Wire.setSCL(1);  // GPIO 1 for SCL
-  
-  // Re-enable internal pull-ups
-  pinMode(0, INPUT_PULLUP);  // SDA pull-up
-  pinMode(1, INPUT_PULLUP);  // SCL pull-up
-  
-  Wire.begin();
-  Wire.setClock(100000); // Use slower 100kHz for more reliable communication
-  Serial.println("Wire0 restored to I2C mode");
+  // Skip GPIO connectivity test to avoid I2C interference
+  Serial.println("\n=== Skipping GPIO Test (can interfere with I2C) ===");
 
   // Initialize error handler first (for early error reporting)
   errorHandler.init();
@@ -330,26 +306,7 @@ void setup()
   // Initialize configuration manager
   configManager.init();
 
-  // Initialize system modules  
-  networkManager.init();
-  // Test both possible OLED I2C addresses before DisplayManager init
-  Serial.println("=== Testing OLED I2C addresses ===");
-  for (uint8_t testAddr = 0x3C; testAddr <= 0x3D; testAddr++) {
-    Serial.printf("Testing I2C address 0x%02X:\n", testAddr);
-    Wire.beginTransmission(testAddr);
-    Wire.write(0x00); // Command mode
-    Wire.write(0xAE); // Display OFF command
-    int result = Wire.endTransmission();
-    Serial.printf("  Result: %d ", result);
-    if (result == 0) {
-      Serial.println("(SUCCESS - Device responds!)");
-      Serial.printf("Updating SCREEN_ADDRESS to 0x%02X\n", testAddr);
-      // Note: We cannot change the #define at runtime, but we can note which works
-    } else {
-      Serial.printf("(FAILED - Error %d)\n", result);
-    }
-  }
-  
+  // Initialize DisplayManager first (before any other I2C operations)
   if (!displayManager.initialize()) {
     Serial.println("❌ DisplayManager initialization failed - continuing without display");
     LOG_ERR_MSG("DISPLAY", "DisplayManager initialization failed");
@@ -357,6 +314,9 @@ void setup()
     Serial.println("✅ DisplayManager initialized successfully");
     LOG_INFO_MSG("DISPLAY", "OLED display initialized with auto-detected I2C address");
   }
+  
+  // Initialize system modules  
+  networkManager.init();
   
   // Initialize logging service
   loggingService = new LoggingService(&ntpUdp);
