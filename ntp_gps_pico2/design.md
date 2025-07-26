@@ -117,6 +117,31 @@ Status LEDs:
 - LED3 (Red)    → GPIO 14 via 330Ω resistor (Error Status)
 - LED4 (Yellow) → GPIO 15 via 330Ω resistor (PPS Status)
 
+LED Status Patterns:
+- **LED1 (Green) - GNSS Fix Status**:
+  - OFF: GPS module not connected or no GPS signal
+  - DIM (25%): GPS connected but no fix (fixType < 2)
+  - MEDIUM (50%): 2D fix available (fixType = 2)
+  - BRIGHT (100%): 3D fix or better (fixType ≥ 3)
+
+- **LED2 (Blue) - Network Status**:
+  - OFF: No network connection, Ethernet cable disconnected
+  - BRIGHT (100%): Network connected, IP address assigned (DHCP or static)
+
+- **LED3 (Red) - Error Status**:
+  - OFF: Normal operation, no errors
+  - BRIGHT (100%): Critical errors (GPS module failure, network hardware failure)
+  - Controlled by SystemMonitor fallback mode and hardware error detection
+
+- **LED4 (Yellow) - PPS Status**:
+  - OFF: No PPS signal
+  - BRIEF FLASH (50ms): PPS pulse received from GPS module
+  - Flashes once per second when GPS PPS signal is active
+
+- **LED5 (Onboard) - General Status**:
+  - Available for general purpose indication
+  - Typically used for power-on indication or general system status
+
 GNSS Antenna:
 - ZED-F9T ANT → External GNSS antenna (supports GPS L1/L2, GLONASS L1/L2, Galileo E1/E5b, BeiDou B1I/B2I, QZSS L1/L2)
 - Active antenna recommended for QZSS L1S signal reception

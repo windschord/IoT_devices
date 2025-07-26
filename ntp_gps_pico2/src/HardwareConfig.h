@@ -6,9 +6,11 @@
 #define GPS_SDA_PIN 6  // I2C1 bus shared with RTC
 #define GPS_SCL_PIN 7  // I2C1 bus shared with RTC
 #define BTN_DISPLAY_PIN 11
-#define LED_ERROR_PIN 14
-#define LED_PPS_PIN 15
-#define LED_ONBOARD_PIN 25
+#define LED_GNSS_FIX_PIN 4   // GNSS Fix Status LED (Green)
+#define LED_NETWORK_PIN 5    // Network Status LED (Blue)
+#define LED_ERROR_PIN 14     // Error Status LED (Red)
+#define LED_PPS_PIN 15       // PPS Status LED (Yellow)
+#define LED_ONBOARD_PIN 25   // Onboard LED
 
 // W5500 SPI Pins
 #define W5500_RST_PIN 20

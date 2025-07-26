@@ -59,7 +59,7 @@ void NetworkManager::init() {
             networkMonitor.isConnected = false;
         } else {
             networkMonitor.isConnected = true;
-            digitalWrite(LED_ONBOARD_PIN, HIGH); // Turn on network LED
+            analogWrite(LED_NETWORK_PIN, 255); // Turn on network status LED (Blue)
             
             Serial.print("Ethernet initialized successfully");
             Serial.print(" - IP: ");
@@ -224,10 +224,10 @@ void NetworkManager::monitorConnection() {
     // Detect connection status changes
     if (wasConnected && !networkMonitor.isConnected) {
         Serial.println("Network connection lost");
-        digitalWrite(LED_ONBOARD_PIN, LOW); // Turn off network LED
+        analogWrite(LED_NETWORK_PIN, 0); // Turn off network status LED (Blue)
     } else if (!wasConnected && networkMonitor.isConnected) {
         Serial.println("Network connection established");
-        digitalWrite(LED_ONBOARD_PIN, HIGH); // Turn on network LED
+        analogWrite(LED_NETWORK_PIN, 255); // Turn on network status LED (Blue)
         Serial.print("IP: ");
         Serial.print(Ethernet.localIP());
         Serial.print(", Gateway: ");

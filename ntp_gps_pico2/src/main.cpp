@@ -133,6 +133,7 @@ void setupGps()
     LOG_ERR_MSG("GPS", "u-blox GNSS not detected at I2C address 0x42");
     LOG_ERR_MSG("GPS", "Check wiring - SDA=GPIO6, SCL=GPIO7 (GPS/RTC I2C bus) and power supply");
     analogWrite(LED_ERROR_PIN, 255);
+    analogWrite(LED_GNSS_FIX_PIN, 0); // Turn off GNSS fix LED (no GPS connection)
     displayManager.displayError("GPS Module not detected. Check wiring.");
     gpsConnected = false;
     return; // エラーで停止せず、続行する
@@ -144,6 +145,7 @@ void setupGps()
 #endif
   LOG_INFO_MSG("GPS", "u-blox GNSS module connected successfully at I2C 0x42");
   LOG_INFO_MSG("GPS", "QZSS L1S signal reception enabled for disaster alerts");
+  analogWrite(LED_GNSS_FIX_PIN, 64);  // Turn on GNSS fix LED dimly (GPS connected but no fix yet)
   gpsConnected = true;
   
   myGNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output both NMEA and UBX messages
@@ -263,9 +265,11 @@ void setup()
   Serial.println("Start");
 
   // LED initialization
-  pinMode(LED_PPS_PIN, OUTPUT);
-  pinMode(LED_ONBOARD_PIN, OUTPUT);
-  pinMode(LED_ERROR_PIN, OUTPUT);
+  pinMode(LED_GNSS_FIX_PIN, OUTPUT);  // GNSS Fix Status LED (Green)
+  pinMode(LED_NETWORK_PIN, OUTPUT);   // Network Status LED (Blue)
+  pinMode(LED_ERROR_PIN, OUTPUT);     // Error Status LED (Red)
+  pinMode(LED_PPS_PIN, OUTPUT);       // PPS Status LED (Yellow)
+  pinMode(LED_ONBOARD_PIN, OUTPUT);   // Onboard LED
 
   // Note: Button initialization is handled by PhysicalReset via ButtonHAL
   // GPIO 11 is managed centrally to avoid conflicts
@@ -425,6 +429,18 @@ void loop()
     // PPS signal processing
     GpsSummaryData gpsData = gpsClient.getGpsSummaryData();
     timeManager.processPpsSync(gpsData);
+    
+    // GNSS Fix Status LED control based on GPS fix quality
+    if (gpsData.fixType >= 3) { // 3D fix or better
+      analogWrite(LED_GNSS_FIX_PIN, 255); // BRIGHT (100%): 3D fix or better
+    } else if (gpsData.fixType >= 2) { // 2D fix
+      analogWrite(LED_GNSS_FIX_PIN, 128); // MEDIUM (50%): 2D fix available
+    } else { // GPS connected but no fix
+      analogWrite(LED_GNSS_FIX_PIN, 64);  // DIM (25%): GPS connected but no fix
+    }
+  } else {
+    // GPS not connected - turn off GNSS fix LED
+    analogWrite(LED_GNSS_FIX_PIN, 0);
   }
   
   // LED management (non-blocking)
