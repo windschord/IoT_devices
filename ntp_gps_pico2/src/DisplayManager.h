@@ -50,7 +50,7 @@ public:
     void nextDisplayMode();
     
     bool shouldDisplay() const { return displayCount > 0; }
-    void triggerDisplay() { displayCount = 1; }
+    void triggerDisplay() { displayCount = 1; lastDisplay = 0; }
     void setErrorState(const String& message);
     void clearErrorState();
     DisplayMode getCurrentMode() const { return currentMode; }

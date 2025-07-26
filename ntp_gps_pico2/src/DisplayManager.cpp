@@ -99,29 +99,35 @@ void DisplayManager::init() {
 }
 
 void DisplayManager::checkDisplayButton() {
+    static bool lastButtonState = HIGH;
+    static unsigned long buttonPressTime = 0;
+    
+    bool currentButtonState = digitalRead(BTN_DISPLAY_PIN);
     unsigned long now = millis();
-    if (digitalRead(BTN_DISPLAY_PIN) == LOW && (now - buttonLastPressed > 500)) {
-        Serial.println("Display button pressed - switching mode");
-        nextDisplayMode();
-        displayCount = 1;
-        buttonLastPressed = now;
+    
+    // Detect button press (falling edge)
+    if (lastButtonState == HIGH && currentButtonState == LOW) {
+        buttonPressTime = now;
     }
+    
+    // Detect button release with debounce (rising edge)
+    if (lastButtonState == LOW && currentButtonState == HIGH) {
+        // Check if button was pressed for at least 50ms (debounce)
+        if (now - buttonPressTime > 50 && now - buttonLastPressed > 200) {
+            Serial.println("Display button pressed - switching mode");
+            nextDisplayMode();
+            triggerDisplay(); // Immediate display update
+            buttonLastPressed = now;
+        }
+    }
+    
+    lastButtonState = currentButtonState;
 }
 
 void DisplayManager::update() {
-    // Non-blocking display management
-    if (displayCount > 0) {
-        unsigned long now = micros();
-        if (now - lastDisplay > 1000) { // 1ms minimum interval
-            if (displayCount < 10) {
-                // Display will be updated by main loop with GPS data
-                displayCount++;
-                lastDisplay = now;
-            } else {
-                displayCount = 0;
-                clearDisplay();
-            }
-        }
+    // Simple display management - just ensure displayCount stays active
+    if (displayCount > 0 && displayCount < 100) {
+        displayCount++;
     }
 }
 

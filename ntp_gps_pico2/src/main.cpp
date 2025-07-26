@@ -416,7 +416,7 @@ void loop()
   displayManager.checkDisplayButton();
   displayManager.update();
   
-  if (displayManager.shouldDisplay() && micros() - lastPps > 1000) {
+  if (displayManager.shouldDisplay()) {
     GpsSummaryData gpsData = gpsClient.getGpsSummaryData();
     
     // Display content based on current mode
