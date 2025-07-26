@@ -1,18 +1,48 @@
 #include "DisplayManager.h"
 #include "HardwareConfig.h"
 
-DisplayManager::DisplayManager(Adafruit_SH1106* displayInstance)
+DisplayManager::DisplayManager(Adafruit_SSD1306* displayInstance)
     : display(displayInstance), displayCount(0), lastDisplay(0), 
       currentMode(DISPLAY_GPS_TIME), modeChangeTime(0), errorState(false), 
       errorMessage(""), buttonLastPressed(0) {
 }
 
 void DisplayManager::init() {
-    display->begin(SH1106_SWITCHCAPVCC, SCREEN_ADDRESS, false);
+    Serial.println("=== OLED Display Initialization ===");
+    Serial.printf("Display address: 0x%02X\n", SCREEN_ADDRESS);
+    Serial.printf("Display instance: %p\n", display);
+    
+    if (display == nullptr) {
+        Serial.println("❌ ERROR: Display instance is NULL!");
+        return;
+    }
+    
+    Serial.println("Calling display->begin()...");
+    if (!display->begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+        Serial.println("❌ SSD1306 allocation failed");
+        return;
+    }
+    Serial.println("✅ display->begin() succeeded");
+    
+    Serial.println("Clearing display...");
     display->clearDisplay();
     display->display();
     
-    // Button pin initialization moved to PhysicalReset (Button HAL)
+    Serial.println("Testing pixel drawing...");
+    display->drawPixel(10, 10, WHITE);
+    display->drawPixel(20, 20, WHITE);
+    display->drawPixel(30, 30, WHITE);
+    display->display();
+    delay(2000);
+    
+    Serial.println("Testing text...");
+    display->clearDisplay();
+    display->setTextSize(1);
+    display->setTextColor(WHITE);
+    display->setCursor(0, 0);
+    display->println("OLED TEST");
+    display->display();
+    delay(2000);
     
     displayCount = 0;
     lastDisplay = 0;
@@ -21,9 +51,7 @@ void DisplayManager::init() {
     errorState = false;
     buttonLastPressed = 0;
     
-    // Show startup screen
-    displayStartupScreen();
-    Serial.println("OLED Display initialized successfully");
+    Serial.println("✅ OLED Display test completed");
 }
 
 void DisplayManager::checkDisplayButton() {

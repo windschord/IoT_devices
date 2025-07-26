@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SH1106.h>
+#include <Adafruit_SSD1306.h>
 #include "Gps_model.h"
 #include "SystemTypes.h"
 #include "NtpTypes.h"
@@ -20,7 +20,7 @@ enum DisplayMode {
 
 class DisplayManager {
 private:
-    Adafruit_SH1106* display;
+    Adafruit_SSD1306* display;
     int displayCount;
     unsigned long lastDisplay;
     DisplayMode currentMode;
@@ -30,7 +30,7 @@ private:
     unsigned long buttonLastPressed;
 
 public:
-    DisplayManager(Adafruit_SH1106* displayInstance);
+    DisplayManager(Adafruit_SSD1306* displayInstance);
     
     void init();
     void update();

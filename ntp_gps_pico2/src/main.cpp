@@ -31,7 +31,7 @@ EthernetServer server(80);
 EthernetUDP ntpUdp;
 WebServer webServer;
 GpsClient gpsClient(Serial);
-Adafruit_SH1106 display(OLED_RESET);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 RTC_DS3231 rtc;
 
 // Global system instances
@@ -244,8 +244,73 @@ void setup()
   pinMode(LED_ONBOARD_PIN, OUTPUT);
   pinMode(LED_ERROR_PIN, OUTPUT);
 
-  // I2C for OLED and RTC
+  // I2C for OLED (Wire0 bus - GPIO 0/1)
+  Wire.setSDA(0);  // GPIO 0 for SDA
+  Wire.setSCL(1);  // GPIO 1 for SCL
   Wire.begin();
+  Serial.println("Wire0 initialized for OLED display - SDA: GPIO 0, SCL: GPIO 1");
+  
+  // I2C scan on Wire0 bus to detect OLED
+  Serial.println("=== Detailed I2C0 Bus Diagnosis ===");
+  Serial.printf("Wire0 Bus - SDA: GPIO %d, SCL: GPIO %d\n", SDA, SCL);
+  Serial.println("Scanning I2C devices on Wire0 bus (OLED):");
+  
+  int oledDeviceCount = 0;
+  for (byte address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    byte error = Wire.endTransmission();
+    if (error == 0) {
+      Serial.printf("  ✅ Device found at address 0x%02X", address);
+      if (address == SCREEN_ADDRESS) {
+        Serial.print(" <- OLED Display (Expected)");
+      }
+      Serial.println();
+      oledDeviceCount++;
+    } else if (address == SCREEN_ADDRESS) {
+      Serial.printf("  ❌ Address 0x%02X (OLED Expected): ", address);
+      switch(error) {
+        case 1: Serial.println("Data too long to fit in transmit buffer"); break;
+        case 2: Serial.println("NACK on transmit of address"); break;
+        case 3: Serial.println("NACK on transmit of data"); break;
+        case 4: Serial.println("Other error"); break;
+        case 5: Serial.println("Timeout"); break;
+        default: Serial.printf("Unknown error: %d\n", error); break;
+      }
+    }
+  }
+  
+  Serial.printf("Total I2C devices found on Wire0: %d\n", oledDeviceCount);
+  if (oledDeviceCount == 0) {
+    Serial.println("⚠️  No I2C devices found on Wire0 bus!");
+    Serial.println("Check the following:");
+    Serial.println("  1. OLED VCC connected to 3.3V");
+    Serial.println("  2. OLED GND connected to GND");
+    Serial.println("  3. OLED SDA connected to GPIO 0 (Pin 1)");
+    Serial.println("  4. OLED SCL connected to GPIO 1 (Pin 2)");
+    Serial.println("  5. 4.7kΩ pull-up resistors on both SDA and SCL lines");
+    Serial.println("  6. OLED power LED should be ON");
+  }
+  
+  // Test GPIO pins as digital outputs to check connectivity
+  Serial.println("\n=== GPIO Connectivity Test ===");
+  pinMode(0, OUTPUT);
+  pinMode(1, OUTPUT);
+  Serial.println("Testing GPIO 0 and 1 as digital outputs...");
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(0, HIGH);
+    digitalWrite(1, HIGH);
+    delay(100);
+    digitalWrite(0, LOW);
+    digitalWrite(1, LOW);
+    delay(100);
+  }
+  Serial.println("GPIO test completed - check if OLED shows any activity");
+  
+  // Restore I2C mode with explicit pin assignment
+  Wire.setSDA(0);  // GPIO 0 for SDA
+  Wire.setSCL(1);  // GPIO 1 for SCL
+  Wire.begin();
+  Serial.println("Wire0 restored to I2C mode");
 
   // Initialize error handler first (for early error reporting)
   errorHandler.init();

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pio build:*)",
+      "Bash(pio run:*)",
+      "Bash(pio device monitor:*)",
+      "Bash(platformio run:*)",
+      "Bash(pio test:*)",
+      "Bash(rm:*)",
+      "WebFetch(domain:learn.adafruit.com)"
+    ],
+    "deny": []
+  }
+}
