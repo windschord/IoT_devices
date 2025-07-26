@@ -17,29 +17,143 @@ void DisplayManager::init() {
         return;
     }
     
+    Serial.println("=== Manual I2C Test ===");
+    
+    // Test basic I2C communication with raw commands
+    Serial.println("Testing raw I2C commands...");
+    
+    // Try to turn display off and on manually
+    Wire.beginTransmission(SCREEN_ADDRESS);
+    Wire.write(0x00); // Command mode
+    Wire.write(0xAE); // Display OFF
+    int result1 = Wire.endTransmission();
+    Serial.printf("Display OFF command result: %d\n", result1);
+    delay(100);
+    
+    Wire.beginTransmission(SCREEN_ADDRESS);
+    Wire.write(0x00); // Command mode  
+    Wire.write(0xAF); // Display ON
+    int result2 = Wire.endTransmission();
+    Serial.printf("Display ON command result: %d\n", result2);
+    delay(100);
+    
+    // Try to fill entire display with pattern
+    Serial.println("Attempting to fill display with test pattern...");
+    for (int page = 0; page < 8; page++) {
+        // Set page
+        Wire.beginTransmission(SCREEN_ADDRESS);
+        Wire.write(0x00); // Command mode
+        Wire.write(0xB0 + page); // Page address
+        Wire.endTransmission();
+        
+        // Set column start (SH1106 starts at column 2)
+        Wire.beginTransmission(SCREEN_ADDRESS);
+        Wire.write(0x00); // Command mode
+        Wire.write(0x02); // Column low nibble
+        Wire.endTransmission();
+        
+        Wire.beginTransmission(SCREEN_ADDRESS);
+        Wire.write(0x00); // Command mode
+        Wire.write(0x10); // Column high nibble
+        Wire.endTransmission();
+        
+        // Send test pattern data (1 byte at a time)
+        for (int col = 0; col < 128; col++) {
+            Wire.beginTransmission(SCREEN_ADDRESS);
+            Wire.write(0x40); // Data mode
+            Wire.write(0xFF); // All pixels on
+            int result = Wire.endTransmission();
+            if (result != 0) {
+                Serial.printf("Data write error page %d col %d: %d\n", page, col, result);
+                break; // Stop on first error
+            }
+        }
+    }
+    
+    Serial.println("Manual test completed - check display");
+    delay(3000);
+    
+    // Test alternative I2C address 0x3D
+    Serial.println("Testing alternative I2C address 0x3D...");
+    Wire.beginTransmission(0x3D);
+    Wire.write(0x00); // Command mode
+    Wire.write(0xAF); // Display ON
+    int result_alt = Wire.endTransmission();
+    Serial.printf("Alternative address (0x3D) test result: %d\n", result_alt);
+    
+    if (result_alt == 0) {
+        Serial.println("SUCCESS: Device responds to 0x3D! Trying test pattern...");
+        // Try test pattern on 0x3D
+        for (int page = 0; page < 8; page++) {
+            Wire.beginTransmission(0x3D);
+            Wire.write(0x00); // Command mode
+            Wire.write(0xB0 + page); // Page address
+            Wire.endTransmission();
+            
+            Wire.beginTransmission(0x3D);
+            Wire.write(0x00); // Command mode
+            Wire.write(0x02); // Column low nibble
+            Wire.endTransmission();
+            
+            Wire.beginTransmission(0x3D);
+            Wire.write(0x00); // Command mode
+            Wire.write(0x10); // Column high nibble
+            Wire.endTransmission();
+            
+            for (int col = 0; col < 128; col++) {
+                Wire.beginTransmission(0x3D);
+                Wire.write(0x40); // Data mode
+                Wire.write(0xAA); // Alternating pattern
+                int result = Wire.endTransmission();
+                if (result != 0) {
+                    Serial.printf("0x3D write error page %d col %d: %d\n", page, col, result);
+                    break;
+                }
+            }
+        }
+        Serial.println("Alternative address test pattern sent");
+    }
+    
+    delay(2000);
+    
     Serial.println("Calling display->begin()...");
     display->begin(SH1106_SWITCHCAPVCC, SCREEN_ADDRESS);
     Serial.println("✅ display->begin() completed");
     
-    Serial.println("Clearing display...");
+    Serial.println("=== Simple Display Test ===");
+    
+    // First, just clear the display
+    Serial.println("Step 1: Clearing display buffer");
     display->clearDisplay();
-    display->display();
     
-    Serial.println("Testing pixel drawing...");
-    display->drawPixel(10, 10, WHITE);
-    display->drawPixel(20, 20, WHITE);
-    display->drawPixel(30, 30, WHITE);
-    display->display();
-    delay(2000);
+    // Try to draw a single pixel
+    Serial.println("Step 2: Drawing single pixel at (0,0)");
+    display->drawPixel(0, 0, WHITE);
     
-    Serial.println("Testing text...");
+    // Call display() to transfer buffer to screen
+    Serial.println("Step 3: Calling display() method");
+    display->display();
+    Serial.println("Step 3 completed");
+    delay(3000);
+    
+    // Try a simple filled rectangle
+    Serial.println("Step 4: Drawing filled rectangle");
+    display->clearDisplay();
+    display->fillRect(0, 0, 20, 20, WHITE);
+    display->display();
+    Serial.println("Step 4 completed");
+    delay(3000);
+    
+    // Try text
+    Serial.println("Step 5: Drawing text");
     display->clearDisplay();
     display->setTextSize(1);
     display->setTextColor(WHITE);
     display->setCursor(0, 0);
-    display->println("OLED TEST");
+    display->print("Hello");
     display->display();
-    delay(2000);
+    Serial.println("Step 5 completed");
+    delay(3000);
     
     displayCount = 0;
     lastDisplay = 0;

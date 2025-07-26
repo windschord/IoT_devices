@@ -186,6 +186,9 @@ Adafruit_GFX(SH1106_LCDWIDTH, SH1106_LCDHEIGHT) {
   
 
 void Adafruit_SH1106::begin(uint8_t vccstate, uint8_t i2caddr, bool reset) {
+  Serial.println("=== SH1106 begin() method called ===");
+  Serial.printf("vccstate: 0x%02X, i2caddr: 0x%02X, reset: %s\n", vccstate, i2caddr, reset ? "true" : "false");
+  
   _vccstate = vccstate;
   _i2caddr = i2caddr;
 
@@ -360,6 +363,7 @@ void Adafruit_SH1106::begin(uint8_t vccstate, uint8_t i2caddr, bool reset) {
   #endif
 
   SH1106_command(SH1106_DISPLAYON);//--turn on oled panel
+  Serial.println("=== SH1106 initialization completed ===");
 }
 
 
@@ -536,178 +540,73 @@ void Adafruit_SH1106::SH1106_data(uint8_t c) {
 #define SH1106_SETSTARTLINE 0x40*/
 
 void Adafruit_SH1106::display(void) {
+	Serial.println("=== SH1106 display() method called ===");
+	Serial.printf("sid value: %d (I2C mode: %s)\n", sid, (sid == -1) ? "YES" : "NO");
 	
-    SH1106_command(SH1106_SETLOWCOLUMN | 0x0);  // low col = 0
-    SH1106_command(SH1106_SETHIGHCOLUMN | 0x0);  // hi col = 0
-    SH1106_command(SH1106_SETSTARTLINE | 0x0); // line #0
-	
-  
-
-
-    //Serial.println(TWBR, DEC);
-    //Serial.println(TWSR & 0x3, DEC);
-
-    // I2C
-    //height >>= 3;
-    //width >>= 3;
-	byte height=64;
-	byte width=132; 
-	byte m_row = 0;
-	byte m_col = 2;
-	
-	
-	height >>= 3;
-	width >>= 3;
-	//Serial.println(width);
-	
-	int p = 0;
-	
-	byte i, j, k =0;
-	
-	if(sid != -1)
-	{
-			
-		for ( i = 0; i < height; i++) {
+	// SH1106 specific implementation - page addressing mode only
+	if(sid != -1) {
+		Serial.println("Using SPI mode for display");
+		// SPI implementation (not used in this project)
+		// ... SPI code would go here
+	} else {
+		Serial.println("Using I2C mode for display");
 		
-		// send a bunch of data in one xmission
-        SH1106_command(0xB0 + i + m_row);//set page address
-        SH1106_command(m_col & 0xf);//set lower column address
-        SH1106_command(0x10 | (m_col >> 4));//set higher column address
+		// SH1106 uses page addressing mode only
+		// The display is organized in 8 pages (rows) of 128 columns each
+		// Each page is 8 pixels high
 		
-        for( j = 0; j < 8; j++){        
-			// SPI
-#if defined(ARDUINO_ARCH_RP2040) || defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_RASPBERRY_PI_PICO2)
-			// RP2040/RP2350: Use digitalWrite
-			digitalWrite(cs, HIGH);
-			digitalWrite(dc, HIGH);
-			digitalWrite(cs, LOW);
-#else
-			*csport |= cspinmask;
-			*dcport |= dcpinmask;
-			*csport &= ~cspinmask;
-#endif
+		uint8_t *ptr = buffer;
+		
+		for (uint8_t page = 0; page < 8; page++) {
+			// Set page address (0xB0-0xB7)
+			SH1106_command(0xB0 + page);
 			
-            for ( k = 0; k < width; k++, p++) {
-					fastSPIwrite(buffer[p]);
-            }
-#if defined(ARDUINO_ARCH_RP2040) || defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_RASPBERRY_PI_PICO2)
-			digitalWrite(cs, HIGH);
-#else
-            *csport |= cspinmask;
-#endif
-        }
+			// Set column start address to 2 (SH1106 has 132 columns, starts at column 2)
+			SH1106_command(0x00 + 2);  // Lower 4 bits of column address  
+			SH1106_command(0x10 + 0);  // Upper 4 bits of column address
+			
+			// Send 128 bytes of data for this page (optimized approach)
+			// Try sending multiple bytes per transaction to reduce overhead
+			for (uint8_t col = 0; col < 128; col += 8) {
+				uint8_t bytesToSend = min(8, 128 - col);
+				
+				Wire.beginTransmission(_i2caddr);
+				Wire.write(0x40); // Data mode
+				
+				for (uint8_t i = 0; i < bytesToSend; i++) {
+					Wire.write(*ptr++);
+				}
+				
+				int result = Wire.endTransmission();
+				if (result != 0) {
+					Serial.printf("I2C error page %d col %d: %d (bytes: %d)\n", page, col, result, bytesToSend);
+					// Fall back to 1-byte-at-a-time if multi-byte fails
+					if (bytesToSend > 1) {
+						Serial.println("Falling back to 1-byte transmission");
+						ptr -= bytesToSend; // Reset pointer
+						
+						for (uint8_t j = 0; j < bytesToSend; j++) {
+							Wire.beginTransmission(_i2caddr);
+							Wire.write(0x40); // Data mode
+							Wire.write(*ptr++); // Send 1 byte only
+							
+							int singleResult = Wire.endTransmission();
+							if (singleResult != 0) {
+								Serial.printf("Single byte I2C error page %d col %d: %d\n", page, col + j, singleResult);
+								return; // Complete failure
+							}
+						}
+					} else {
+						return; // Even 1-byte transmission failed
+					}
+				}
+			}
 		}
-		
 	}
-	else{
-		
-	 // save I2C bitrate
-	#if defined(__AVR__) && !defined(__SAM3X8E__)
-    		uint8_t twbrbackup = TWBR;
-    		TWBR = 12; // upgrade to 400KHz!
-	#endif
-	
-	for ( i = 0; i < height; i++) {
-		
-		// send a bunch of data in one xmission
-        SH1106_command(0xB0 + i + m_row);//set page address
-        SH1106_command(m_col & 0xf);//set lower column address
-        SH1106_command(0x10 | (m_col >> 4));//set higher column address
-		
-        for( j = 0; j < 8; j++){        
-			Wire.beginTransmission(_i2caddr);
-            Wire.write(0x40);
-            for ( k = 0; k < width; k++, p++) {
-		Wire.write(buffer[p]);
-            }
-            Wire.endTransmission();
-        	}
-	}
-	
-	#if defined(__AVR__) && !defined(__SAM3X8E__)
-    		TWBR = twbrbackup;
-	#endif
-	}
+	Serial.println("=== SH1106 display() method completed ===");
 }
 
-/*void Adafruit_SH1106::display(void) {
-  SH1106_command(SH1106_COLUMNADDR);
-  SH1106_command(0);   // Column start address (0 = reset)
-  SH1106_command(SH1106_LCDWIDTH-1); // Column end address (127 = reset)
-
-  SH1106_command(SH1106_PAGEADDR);
-  SH1106_command(0); // Page start address (0 = reset)
-  #if SH1106_LCDHEIGHT == 64
-    SH1106_command(7); // Page end address
-  #endif
-  #if SH1106_LCDHEIGHT == 32
-    SH1106_command(3); // Page end address
-  #endif
-  #if SH1106_LCDHEIGHT == 16
-    SH1106_command(1); // Page end address
-  #endif
-
-  if (sid != -1)
-  {
-    // SPI
-#if defined(ARDUINO_ARCH_RP2040) || defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_RASPBERRY_PI_PICO2)
-    // RP2040/RP2350: Use digitalWrite
-    digitalWrite(cs, HIGH);
-    digitalWrite(dc, HIGH);
-    digitalWrite(cs, LOW);
-
-    for (uint16_t i=0; i<(SH1106_LCDWIDTH*SH1106_LCDHEIGHT/8); i++) {
-      fastSPIwrite(buffer[i]);
-      //SH1106_data(buffer[i]);
-    }
-    digitalWrite(cs, HIGH);
-#else
-    *csport |= cspinmask;
-    *dcport |= dcpinmask;
-    *csport &= ~cspinmask;
-
-    for (uint16_t i=0; i<(SH1106_LCDWIDTH*SH1106_LCDHEIGHT/8); i++) {
-      fastSPIwrite(buffer[i]);
-      //SH1106_data(buffer[i]);
-    }
-    *csport |= cspinmask;
-#endif
-  }
-  else
-  {
-    // save I2C bitrate
-#if defined(__AVR__) && !defined(__SAM3X8E__)
-    uint8_t twbrbackup = TWBR;
-    TWBR = 12; // upgrade to 400KHz!
-#endif
-
-    //Serial.println(TWBR, DEC);
-    //Serial.println(TWSR & 0x3, DEC);
-
-    // I2C
-	int k = 0;
-    for (uint16_t i=0; i<(SH1106_LCDWIDTH*SH1106_LCDHEIGHT/8); i++) {
-      // send a bunch of data in one xmission
-	  if(k < 2)
-	  {
-		k++;
-		continue;
-	  }
-      Wire.beginTransmission(_i2caddr);
-      WIRE_WRITE(0x40);
-      for (uint8_t x=0; x<16; x++) {
-  WIRE_WRITE(buffer[i]);
-  i++;
-      }
-      i--;
-      Wire.endTransmission();
-    }
-#if defined(__AVR__) && !defined(__SAM3X8E__)
-    TWBR = twbrbackup;
-#endif
-  }
-}
-*/
+// Old display() method removed - using new 1-byte-at-a-time implementation above
 // clear everything
 void Adafruit_SH1106::clearDisplay(void) {
   memset(buffer, 0, (SH1106_LCDWIDTH*SH1106_LCDHEIGHT/8));

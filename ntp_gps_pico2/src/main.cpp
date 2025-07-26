@@ -247,7 +247,14 @@ void setup()
   // I2C for OLED (Wire0 bus - GPIO 0/1)
   Wire.setSDA(0);  // GPIO 0 for SDA
   Wire.setSCL(1);  // GPIO 1 for SCL
+  
+  // Enable internal pull-ups (in case external pull-ups are missing)
+  pinMode(0, INPUT_PULLUP);  // SDA pull-up
+  pinMode(1, INPUT_PULLUP);  // SCL pull-up
+  
+  Serial.println("I2C pull-ups enabled, starting I2C...");
   Wire.begin();
+  Wire.setClock(100000); // Use slower 100kHz for more reliable communication
   Serial.println("Wire0 initialized for OLED display - SDA: GPIO 0, SCL: GPIO 1");
   
   // I2C scan on Wire0 bus to detect OLED
@@ -309,7 +316,13 @@ void setup()
   // Restore I2C mode with explicit pin assignment
   Wire.setSDA(0);  // GPIO 0 for SDA
   Wire.setSCL(1);  // GPIO 1 for SCL
+  
+  // Re-enable internal pull-ups
+  pinMode(0, INPUT_PULLUP);  // SDA pull-up
+  pinMode(1, INPUT_PULLUP);  // SCL pull-up
+  
   Wire.begin();
+  Wire.setClock(100000); // Use slower 100kHz for more reliable communication
   Serial.println("Wire0 restored to I2C mode");
 
   // Initialize error handler first (for early error reporting)
@@ -320,6 +333,24 @@ void setup()
 
   // Initialize system modules  
   networkManager.init();
+  // Test both possible OLED I2C addresses before DisplayManager init
+  Serial.println("=== Testing OLED I2C addresses ===");
+  for (uint8_t testAddr = 0x3C; testAddr <= 0x3D; testAddr++) {
+    Serial.printf("Testing I2C address 0x%02X:\n", testAddr);
+    Wire.beginTransmission(testAddr);
+    Wire.write(0x00); // Command mode
+    Wire.write(0xAE); // Display OFF command
+    int result = Wire.endTransmission();
+    Serial.printf("  Result: %d ", result);
+    if (result == 0) {
+      Serial.println("(SUCCESS - Device responds!)");
+      Serial.printf("Updating SCREEN_ADDRESS to 0x%02X\n", testAddr);
+      // Note: We cannot change the #define at runtime, but we can note which works
+    } else {
+      Serial.printf("(FAILED - Error %d)\n", result);
+    }
+  }
+  
   displayManager.init();
   
   // Initialize logging service
