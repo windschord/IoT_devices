@@ -120,17 +120,17 @@ Status LEDs:
 LED Status Patterns:
 - **LED1 (Green) - GNSS Fix Status**:
   - OFF: GPS module not connected or no GPS signal
-  - DIM (25%): GPS connected but no fix (fixType < 2)
-  - MEDIUM (50%): 2D fix available (fixType = 2)
-  - BRIGHT (100%): 3D fix or better (fixType ≥ 3)
+  - SLOW BLINK (2秒間隔): GPS connected but no fix (fixType < 2)
+  - FAST BLINK (0.5秒間隔): 2D fix available (fixType = 2)
+  - ON (常時点灯): 3D fix or better (fixType ≥ 3)
 
 - **LED2 (Blue) - Network Status**:
   - OFF: No network connection, Ethernet cable disconnected
-  - BRIGHT (100%): Network connected, IP address assigned (DHCP or static)
+  - ON (常時点灯): Network connected, IP address assigned (DHCP or static)
 
 - **LED3 (Red) - Error Status**:
   - OFF: Normal operation, no errors
-  - BRIGHT (100%): Critical errors (GPS module failure, network hardware failure)
+  - ON (常時点灯): Critical errors (GPS module failure, network hardware failure)
   - Controlled by SystemMonitor fallback mode and hardware error detection
 
 - **LED4 (Yellow) - PPS Status**:
