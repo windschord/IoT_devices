@@ -7,20 +7,22 @@
 #include "PhysicalReset.h"
 #include "ConfigManager.h"
 #include "ErrorHandler.h"
+#include "DisplayManager.h"
 
 // テスト用のモッククラス
-class MockDisplayManager {
+class MockDisplayManager : public DisplayManager {
 public:
     int next_mode_calls = 0;
     int trigger_display_calls = 0;
     String error_message = "";
     
-    void nextDisplayMode() { next_mode_calls++; }
+    void nextDisplayMode() override { next_mode_calls++; }
     void triggerDisplay() { trigger_display_calls++; }
     void setErrorState(const String& msg) { error_message = msg; }
+    void wakeDisplay() override {}
 };
 
-class MockConfigManager {
+class MockConfigManager : public ConfigManager {
 public:
     bool reset_called = false;
     

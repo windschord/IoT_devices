@@ -3182,7 +3182,7 @@ private:
         uint32_t localIP;
         uint32_t gateway;
         uint32_t dnsServer;
-        byte macAddress[6];
+        uint8_t macAddress[6];
         bool socketOpen[8];  // W5500 has 8 sockets
         int lastError;
     };
@@ -3291,7 +3291,7 @@ public:
     uint32_t getGateway() const { return state.gateway; }
     uint32_t getDNS() const { return state.dnsServer; }
     bool isDHCPActive() const { return state.dhcpActive; }
-    const byte* getMACAddress() const { return state.macAddress; }
+    const uint8_t* getMACAddress() const { return state.macAddress; }
     bool isSPIInitialized() const { return state.spiInitialized; }
     bool isHardwareDetected() const { return state.hardwareDetected; }
 };
