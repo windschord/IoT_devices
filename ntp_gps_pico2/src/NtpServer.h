@@ -7,11 +7,15 @@
 #include "TimeManager.h"
 #include "NtpTypes.h"
 
+// Forward declaration for LoggingService
+class LoggingService;
+
 class NtpServer {
 private:
     EthernetUDP* ntpUdp;
     TimeManager* timeManager;
     UdpSocketManager* udpManager;
+    LoggingService* loggingService;
     
     // NTP packet buffers
     byte packetBuffer[NTP_PACKET_SIZE];
@@ -31,6 +35,9 @@ private:
     
 public:
     NtpServer(EthernetUDP* udpInstance, TimeManager* timeManagerInstance, UdpSocketManager* udpManagerInstance);
+    
+    // LoggingService integration
+    void setLoggingService(LoggingService* loggingServiceInstance);
     
     void init();
     void processRequests();
@@ -64,6 +71,9 @@ private:
     // Statistics update
     void updateStatistics(bool validRequest, float processingTimeMs);
     void logRequest(IPAddress clientIP, bool valid);
+    
+    // Logging helper
+    void logMessage(const char* level, const char* message);
 };
 
 #endif // NTP_SERVER_H

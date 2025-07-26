@@ -326,6 +326,7 @@ void setup()
   // Set LoggingService references for components
   displayManager.setLoggingService(loggingService);
   networkManager.setLoggingService(loggingService);
+  ntpServer->setLoggingService(loggingService);
 
   // Initialize DisplayManager with unified logging
   if (!displayManager.initialize()) {

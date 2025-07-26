@@ -1,5 +1,6 @@
 #include "PrometheusMetrics.h"
 #include "HardwareConfig.h"
+#include "LoggingService.h"
 #include <Ethernet.h>
 
 // Prometheusメトリクス名定数の定義
@@ -51,7 +52,7 @@ PrometheusMetrics::PrometheusMetrics()
 }
 
 void PrometheusMetrics::init() {
-    Serial.println("PrometheusMetrics初期化完了");
+    LOG_INFO_MSG("METRICS", "PrometheusMetrics initialization completed");
     
     // 初期システムメトリクスを計算
     updateSystemMetrics();
@@ -395,45 +396,42 @@ void PrometheusMetrics::resetAllCounters() {
 }
 
 void PrometheusMetrics::printNtpMetrics() const {
-    Serial.println("=== NTPメトリクス ===");
-    Serial.printf("総要求数: %lu\n", ntpMetrics.totalRequests);
-    Serial.printf("総応答数: %lu\n", ntpMetrics.totalResponses);
-    Serial.printf("破棄数: %lu\n", ntpMetrics.totalDropped);
-    Serial.printf("平均応答時間: %.3fms\n", ntpMetrics.averageResponseTimeMs);
-    Serial.printf("Stratumレベル: %d\n", ntpMetrics.currentStratum);
-    Serial.printf("アクティブクライアント: %lu\n", ntpMetrics.activeClients);
+    LOG_INFO_MSG("METRICS", "=== NTP Metrics ===");
+    LOG_INFO_F("METRICS", "Total requests: %lu", ntpMetrics.totalRequests);
+    LOG_INFO_F("METRICS", "Total responses: %lu", ntpMetrics.totalResponses);
+    LOG_INFO_F("METRICS", "Dropped requests: %lu", ntpMetrics.totalDropped);
+    LOG_INFO_F("METRICS", "Average response time: %.3fms", ntpMetrics.averageResponseTimeMs);
+    LOG_INFO_F("METRICS", "Stratum level: %d", ntpMetrics.currentStratum);
+    LOG_INFO_F("METRICS", "Active clients: %lu", ntpMetrics.activeClients);
 }
 
 void PrometheusMetrics::printGpsMetrics() const {
 #ifdef DEBUG_PROMETHEUS_GPS
-    Serial.println("=== GPSメトリクス ===");
-    Serial.printf("総衛星数: %d\n", gpsMetrics.totalSatellites);
-    Serial.printf("GPS: %d, GLONASS: %d, Galileo: %d, BeiDou: %d, QZSS: %d\n",
-                 gpsMetrics.gpsSatellites, gpsMetrics.glonassSatellites,
-                 gpsMetrics.galileoSatellites, gpsMetrics.beidouSatellites,
-                 gpsMetrics.qzssSatellites);
-    Serial.printf("HDOP: %.2f, VDOP: %.2f\n", gpsMetrics.hdop, gpsMetrics.vdop);
-    Serial.printf("PPS総数: %lu\n", gpsMetrics.totalPpsPulses);
-    Serial.printf("信号品質: %d/10\n", gpsMetrics.signalQuality);
-    Serial.printf("フォールバックモード: %s\n", gpsMetrics.inFallbackMode ? "はい" : "いいえ");
+    LOG_INFO_MSG("METRICS", "=== GPS Metrics ===");
+    LOG_INFO_F("METRICS", "Total satellites: %d", gpsMetrics.totalSatellites);
+    LOG_INFO_F("METRICS", "GPS: %d, GLONASS: %d, Galileo: %d, BeiDou: %d, QZSS: %d",
+               gpsMetrics.gpsSatellites, gpsMetrics.glonassSatellites,
+               gpsMetrics.galileoSatellites, gpsMetrics.beidouSatellites,
+               gpsMetrics.qzssSatellites);
+    LOG_INFO_F("METRICS", "HDOP: %.2f, VDOP: %.2f", gpsMetrics.hdop, gpsMetrics.vdop);
+    LOG_INFO_F("METRICS", "Total PPS pulses: %lu", gpsMetrics.totalPpsPulses);
+    LOG_INFO_F("METRICS", "Signal quality: %d/10", gpsMetrics.signalQuality);
+    LOG_INFO_F("METRICS", "Fallback mode: %s", gpsMetrics.inFallbackMode ? "Yes" : "No");
 #endif
 }
 
 void PrometheusMetrics::printSystemMetrics() const {
-    Serial.println("=== システムメトリクス ===");
-    Serial.printf("稼働時間: %lu秒\n", systemMetrics.uptimeSeconds);
-    Serial.printf("RAM使用率: %.2f%%\n", systemMetrics.ramUsagePercent);
-    Serial.printf("フラッシュ使用率: %.2f%%\n", systemMetrics.flashUsagePercent);
-    Serial.printf("CPU温度: %.2f°C\n", systemMetrics.cpuTemperature);
-    Serial.printf("イーサネット接続: %s\n", systemMetrics.ethernetConnected ? "接続" : "切断");
+    LOG_INFO_MSG("METRICS", "=== System Metrics ===");
+    LOG_INFO_F("METRICS", "Uptime: %lu seconds", systemMetrics.uptimeSeconds);
+    LOG_INFO_F("METRICS", "RAM usage: %.2f%%", systemMetrics.ramUsagePercent);
+    LOG_INFO_F("METRICS", "Flash usage: %.2f%%", systemMetrics.flashUsagePercent);
+    LOG_INFO_F("METRICS", "CPU temperature: %.2f°C", systemMetrics.cpuTemperature);
+    LOG_INFO_F("METRICS", "Ethernet connected: %s", systemMetrics.ethernetConnected ? "Yes" : "No");
 }
 
 void PrometheusMetrics::printAllMetrics() const {
     printNtpMetrics();
-    Serial.println();
     printGpsMetrics();
-    Serial.println();
     printSystemMetrics();
-    Serial.println();
-    Serial.printf("システム健全性: %.1f%%\n", getSystemHealth());
+    LOG_INFO_F("METRICS", "System health: %.1f%%", getSystemHealth());
 }

@@ -1,8 +1,9 @@
 #include "NtpServer.h"
 #include "HardwareConfig.h"
+#include "LoggingService.h"
 
 NtpServer::NtpServer(EthernetUDP* udpInstance, TimeManager* timeManagerInstance, UdpSocketManager* udpManagerInstance)
-    : ntpUdp(udpInstance), timeManager(timeManagerInstance), udpManager(udpManagerInstance) {
+    : ntpUdp(udpInstance), timeManager(timeManagerInstance), udpManager(udpManagerInstance), loggingService(nullptr) {
     
     // Initialize packet buffers
     memset(packetBuffer, 0, NTP_PACKET_SIZE);
@@ -19,7 +20,27 @@ NtpServer::NtpServer(EthernetUDP* udpInstance, TimeManager* timeManagerInstance,
 
 void NtpServer::init() {
     resetStatistics();
-    Serial.println("NTP Server initialized - Ready to serve time");
+    logMessage("INFO", "NTP Server initialized - Ready to serve time");
+}
+
+void NtpServer::setLoggingService(LoggingService* loggingServiceInstance) {
+    loggingService = loggingServiceInstance;
+}
+
+void NtpServer::logMessage(const char* level, const char* message) {
+    if (loggingService) {
+        if (strcmp(level, "ERROR") == 0) {
+            loggingService->error("NTP", message);
+        } else if (strcmp(level, "WARN") == 0) {
+            loggingService->warning("NTP", message);
+        } else if (strcmp(level, "DEBUG") == 0) {
+            loggingService->debug("NTP", message);
+        } else {
+            loggingService->info("NTP", message);
+        }
+    } else {
+        Serial.printf("[NTP] %s: %s\n", level, message);
+    }
 }
 
 void NtpServer::processRequests() {
@@ -87,7 +108,9 @@ void NtpServer::processRequests() {
     
     // Debug log if we processed multiple packets
     if (packetsProcessed > 1) {
-        Serial.printf("NTP: Processed %d packets in batch\n", packetsProcessed);
+        if (loggingService) {
+            loggingService->debugf("NTP", "Processed %d packets in batch", packetsProcessed);
+        }
     }
 }
 
@@ -258,8 +281,10 @@ bool NtpServer::sendNtpResponse() {
     // NTP timestamp conversion
     NtpTimestamp ntpTs = unixToNtpTimestamp(transmitUnixTime, transmitMicroseconds);
 #ifdef DEBUG_NTP_TIMESTAMPS
-    Serial.printf("NTP Timestamp Debug - Unix: %lu, NTP: %lu (0x%08X), Expected: %lu\n", 
-                  transmitUnixTime, ntpTs.seconds, ntpTs.seconds, transmitUnixTime + 2208988800UL);
+    if (loggingService) {
+        loggingService->debugf("NTP", "Timestamp Debug - Unix: %lu, NTP: %lu (0x%08X), Expected: %lu", 
+                              transmitUnixTime, ntpTs.seconds, ntpTs.seconds, transmitUnixTime + 2208988800UL);
+    }
 #endif
     
     responsePacket.transmit_timestamp = htonTimestamp(ntpTs);
@@ -287,10 +312,14 @@ bool NtpServer::sendNtpResponse() {
                 // Force flush to ensure packet is sent immediately
                 ntpUdp->flush();
             } else {
-                Serial.printf("NTP send attempt %d failed - endPacket() returned false\n", retryCount + 1);
+                if (loggingService) {
+                    loggingService->warningf("NTP", "Send attempt %d failed - endPacket() returned false", retryCount + 1);
+                }
             }
         } else {
-            Serial.printf("NTP send attempt %d failed - beginPacket() returned false\n", retryCount + 1);
+            if (loggingService) {
+                loggingService->warningf("NTP", "Send attempt %d failed - beginPacket() returned false", retryCount + 1);
+            }
         }
         
         if (!success) {
@@ -300,13 +329,15 @@ bool NtpServer::sendNtpResponse() {
     }
     
     if (success) {
-        Serial.print("NTP response sent to ");
-        Serial.print(currentClientIP);
-        Serial.print(" (Stratum ");
-        Serial.print(responsePacket.stratum);
-        Serial.println(")");
+        if (loggingService) {
+            loggingService->infof("NTP", "Response sent to %d.%d.%d.%d (Stratum %d)", 
+                                 currentClientIP[0], currentClientIP[1], currentClientIP[2], currentClientIP[3], 
+                                 responsePacket.stratum);
+        }
     } else {
-        Serial.printf("Failed to send NTP response after %d attempts\n", maxRetries);
+        if (loggingService) {
+            loggingService->errorf("NTP", "Failed to send response after %d attempts", maxRetries);
+        }
     }
     
     return success;
@@ -378,8 +409,10 @@ NtpTimestamp NtpServer::getReferenceTimestamp() {
     
 #ifdef DEBUG_NTP_TIMESTAMPS
     // Debug reference timestamp
-    Serial.printf("Reference Timestamp Debug - Unix: %lu, NTP: %lu (0x%08X)\n", 
-                  refTime, refTimestamp.seconds, refTimestamp.seconds);
+    if (loggingService) {
+        loggingService->debugf("NTP", "Reference Timestamp Debug - Unix: %lu, NTP: %lu (0x%08X)", 
+                              refTime, refTimestamp.seconds, refTimestamp.seconds);
+    }
 #endif
     
     return refTimestamp;
@@ -404,20 +437,15 @@ void NtpServer::updateStatistics(bool validRequest, float processingTimeMs) {
 }
 
 void NtpServer::logRequest(IPAddress clientIP, bool valid) {
-    Serial.print("NTP ");
-    Serial.print(valid ? "VALID" : "INVALID");
-    Serial.print(" request from ");
-    Serial.print(clientIP);
-    Serial.print(" - Total: ");
-    Serial.print(stats.requests_total);
-    Serial.print(", Valid: ");
-    Serial.print(stats.requests_valid);
-    Serial.print(", Avg processing: ");
-    Serial.print(stats.avg_processing_time, 2);
-    Serial.println("ms");
+    if (loggingService) {
+        loggingService->infof("NTP", "%s request from %d.%d.%d.%d - Total: %lu, Valid: %lu, Avg: %.2fms", 
+                             valid ? "VALID" : "INVALID", 
+                             clientIP[0], clientIP[1], clientIP[2], clientIP[3],
+                             stats.requests_total, stats.requests_valid, stats.avg_processing_time);
+    }
 }
 
 void NtpServer::resetStatistics() {
     memset(&stats, 0, sizeof(NtpStatistics));
-    Serial.println("NTP Server statistics reset");
+    logMessage("INFO", "NTP Server statistics reset");
 }
