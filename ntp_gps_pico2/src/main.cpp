@@ -255,50 +255,6 @@ void setup()
   Wire.begin();
   Wire.setClock(100000); // Use slower 100kHz for more reliable communication
   Serial.println("Wire0 initialized for OLED display - SDA: GPIO 0, SCL: GPIO 1");
-  
-  // I2C scan on Wire0 bus to detect OLED
-  Serial.println("=== Detailed I2C0 Bus Diagnosis ===");
-  Serial.printf("Wire0 Bus - SDA: GPIO %d, SCL: GPIO %d\n", SDA, SCL);
-  Serial.println("Scanning I2C devices on Wire0 bus (OLED):");
-  
-  int oledDeviceCount = 0;
-  for (byte address = 1; address < 127; address++) {
-    Wire.beginTransmission(address);
-    byte error = Wire.endTransmission();
-    if (error == 0) {
-      Serial.printf("  ✅ Device found at address 0x%02X", address);
-      if (address == SCREEN_ADDRESS) {
-        Serial.print(" <- OLED Display (Expected)");
-      }
-      Serial.println();
-      oledDeviceCount++;
-    } else if (address == SCREEN_ADDRESS) {
-      Serial.printf("  ❌ Address 0x%02X (OLED Expected): ", address);
-      switch(error) {
-        case 1: Serial.println("Data too long to fit in transmit buffer"); break;
-        case 2: Serial.println("NACK on transmit of address"); break;
-        case 3: Serial.println("NACK on transmit of data"); break;
-        case 4: Serial.println("Other error"); break;
-        case 5: Serial.println("Timeout"); break;
-        default: Serial.printf("Unknown error: %d\n", error); break;
-      }
-    }
-  }
-  
-  Serial.printf("Total I2C devices found on Wire0: %d\n", oledDeviceCount);
-  if (oledDeviceCount == 0) {
-    Serial.println("⚠️  No I2C devices found on Wire0 bus!");
-    Serial.println("Check the following:");
-    Serial.println("  1. OLED VCC connected to 3.3V");
-    Serial.println("  2. OLED GND connected to GND");
-    Serial.println("  3. OLED SDA connected to GPIO 0 (Pin 1)");
-    Serial.println("  4. OLED SCL connected to GPIO 1 (Pin 2)");
-    Serial.println("  5. 4.7kΩ pull-up resistors on both SDA and SCL lines");
-    Serial.println("  6. OLED power LED should be ON");
-  }
-  
-  // Skip GPIO connectivity test to avoid I2C interference
-  Serial.println("\n=== Skipping GPIO Test (can interfere with I2C) ===");
 
   // Initialize error handler first (for early error reporting)
   errorHandler.init();

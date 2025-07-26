@@ -8,24 +8,20 @@ DisplayManager::DisplayManager()
 }
 
 bool DisplayManager::testI2CAddress(uint8_t address) {
-    Serial.printf("Testing I2C address 0x%02X...\n", address);
-    
     Wire.beginTransmission(address);
     Wire.write(0x00); // Command mode
     Wire.write(0xAE); // Display OFF command
     int result = Wire.endTransmission();
     
     if (result == 0) {
-        Serial.printf("✅ Device responds at address 0x%02X\n", address);
+        Serial.printf("OLED found at I2C address 0x%02X\n", address);
         return true;
-    } else {
-        Serial.printf("❌ No response at address 0x%02X (error: %d)\n", address, result);
-        return false;
     }
+    return false;
 }
 
 bool DisplayManager::initialize() {
-    Serial.println("=== DisplayManager Initialization ===");
+    Serial.println("Initializing OLED display...");
     
     // Try common OLED I2C addresses
     uint8_t testAddresses[] = {0x3C, 0x3D};
@@ -40,7 +36,7 @@ bool DisplayManager::initialize() {
     }
     
     if (!found) {
-        Serial.println("❌ No OLED display found at common I2C addresses");
+        Serial.println("No OLED display found");
         return false;
     }
     
@@ -50,44 +46,34 @@ bool DisplayManager::initialize() {
         display = nullptr;
     }
     
-    Serial.printf("Creating OLED instance at address 0x%02X...\n", i2cAddress);
+    Serial.printf("Creating OLED instance at address 0x%02X\n", i2cAddress);
     
     // Create OLED instance: OLED(SDA, SCL, RESET, WIDTH, HEIGHT, CONTROLLER, ADDRESS)
     display = new OLED(0, 1, 255, OLED::W_128, OLED::H_64, OLED::CTRL_SH1106, i2cAddress);
     
     if (!display) {
-        Serial.println("❌ Failed to create OLED instance");
+        Serial.println("Failed to create OLED instance");
         return false;
     }
     
-    Serial.println("Initializing OLED display...");
     display->begin();
     
     // Enable SH1106 offset for 132x64 -> 128x64 conversion
     display->useOffset(true);
     
-    Serial.println("Testing display with initial message...");
-    display->clear();
-    display->draw_string(0, 0, "GPS NTP Server");
-    display->draw_string(0, 10, "Initializing...");
-    char addrStr[20];
-    sprintf(addrStr, "I2C: 0x%02X", i2cAddress);
-    display->draw_string(0, 20, addrStr);
-    display->display();
+    Serial.println("Displaying startup screen...");
+    displayStartupScreen();
     
     initialized = true;
-    Serial.println("✅ DisplayManager initialized successfully");
+    Serial.println("OLED display initialized successfully");
     
     return true;
 }
 
 void DisplayManager::init() {
-    Serial.println("=== OLED Display Initialization ===");
-    Serial.printf("Display address: 0x%02X\n", SCREEN_ADDRESS);
-    
     // Use the new initialize method
     if (!initialize()) {
-        Serial.println("❌ DisplayManager initialization failed");
+        Serial.println("DisplayManager initialization failed");
         return;
     }
     
@@ -98,7 +84,7 @@ void DisplayManager::init() {
     errorState = false;
     buttonLastPressed = 0;
     
-    Serial.println("✅ OLED Display initialization completed");
+    Serial.println("OLED Display initialization completed");
 }
 
 void DisplayManager::checkDisplayButton() {
@@ -215,7 +201,6 @@ void DisplayManager::displayStartupScreen() {
     display->draw_string(25, 25, "Server v1.0");
     display->draw_string(10, 40, "Initializing...");
     display->display();
-    delay(2000);
 }
 
 void DisplayManager::displayGpsTimeScreen(const GpsSummaryData& gpsData) {
