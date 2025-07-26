@@ -418,6 +418,9 @@ void loop()
   // Physical reset button handling (high priority)
   physicalReset.update();
   
+  // Display manager update (auto-sleep management)
+  displayManager.update();
+  
   // System controller update (system-wide health monitoring and state management)
   systemController.update();
   

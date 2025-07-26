@@ -4,7 +4,8 @@
 DisplayManager::DisplayManager() 
     : display(nullptr), i2cAddress(0), initialized(false), displayCount(0), 
       lastDisplay(0), currentMode(DISPLAY_GPS_TIME), modeChangeTime(0), 
-      errorState(false), errorMessage(""), buttonLastPressed(0) {
+      errorState(false), errorMessage(""), buttonLastPressed(0),
+      displayOn(true), sleepCounter(0) {
 }
 
 bool DisplayManager::testI2CAddress(uint8_t address) {
@@ -76,6 +77,10 @@ bool DisplayManager::initialize() {
     displayCount = 1;
     lastDisplay = micros();
     
+    // Initialize auto-sleep state
+    displayOn = true;
+    sleepCounter = 0;
+    
     Serial.println("OLED display initialized successfully");
     
     return true;
@@ -95,6 +100,10 @@ void DisplayManager::init() {
     errorState = false;
     buttonLastPressed = 0;
     
+    // Initialize auto-sleep state
+    displayOn = true;
+    sleepCounter = 0;
+    
     Serial.println("OLED Display initialization completed");
 }
 
@@ -106,6 +115,22 @@ void DisplayManager::update() {
     if (displayCount > 0 && displayCount < 100) {
         displayCount++;
     }
+    
+    // Auto-sleep management (controlled by millis instead of update counter)
+    static unsigned long lastSleepCheck = 0;
+    unsigned long currentTime = millis();
+    
+    if (displayOn) {
+        // Check every 1000ms (1 second)
+        if (currentTime - lastSleepCheck >= 1000) {
+            sleepCounter++;
+            lastSleepCheck = currentTime;
+            
+            if (sleepCounter >= SLEEP_TIMEOUT_COUNT) {
+                sleepDisplay();
+            }
+        }
+    }
 }
 
 void DisplayManager::displayInfo(const GpsSummaryData& gpsSummaryData) {
@@ -113,6 +138,9 @@ void DisplayManager::displayInfo(const GpsSummaryData& gpsSummaryData) {
         Serial.println("DisplayManager::displayInfo - Not initialized or no display");
         return;
     }
+    
+    // Continue to process data but skip actual display when sleeping
+    // This ensures data structures stay updated
     
     if (errorState) {
         Serial.println("DisplayManager::displayInfo - Error state, showing error screen");
@@ -187,6 +215,10 @@ void DisplayManager::nextDisplayMode() {
     DisplayMode oldMode = currentMode;
     currentMode = static_cast<DisplayMode>((currentMode + 1) % DISPLAY_MODE_COUNT);
     modeChangeTime = millis();
+    
+    // Wake display when mode changes
+    wakeDisplay();
+    
     Serial.printf("Display mode changed from %d to %d\n", oldMode, currentMode);
     Serial.printf("DisplayManager state: displayCount=%d, shouldDisplay=%s, initialized=%s\n", 
                   displayCount, shouldDisplay() ? "YES" : "NO", initialized ? "YES" : "NO");
@@ -217,6 +249,11 @@ void DisplayManager::displayStartupScreen() {
 void DisplayManager::displayGpsTimeScreen(const GpsSummaryData& gpsData) {
     if (!initialized || !display) return;
     
+    // Skip actual drawing when display is sleeping
+    if (!displayOn) {
+        return;
+    }
+    
     display->clear();
     
     // Title
@@ -244,6 +281,11 @@ void DisplayManager::displayGpsTimeScreen(const GpsSummaryData& gpsData) {
 
 void DisplayManager::displayGpsSatsScreen(const GpsSummaryData& gpsData) {
     if (!initialized || !display) return;
+    
+    // Skip actual drawing when display is sleeping
+    if (!displayOn) {
+        return;
+    }
     
     display->clear();
     
@@ -274,6 +316,11 @@ void DisplayManager::displayGpsSatsScreen(const GpsSummaryData& gpsData) {
 
 void DisplayManager::displayNtpStatsScreen(const NtpStatistics& stats) {
     if (!initialized || !display) return;
+    
+    // Skip actual drawing when display is sleeping
+    if (!displayOn) {
+        return;
+    }
     
     display->clear();
     
@@ -306,6 +353,11 @@ void DisplayManager::displayNtpStatsScreen(const NtpStatistics& stats) {
 
 void DisplayManager::displaySystemStatusScreen(bool gpsConnected, bool networkConnected, uint32_t uptimeSeconds) {
     if (!initialized || !display) return;
+    
+    // Skip actual drawing when display is sleeping
+    if (!displayOn) {
+        return;
+    }
     
     display->clear();
     
@@ -343,6 +395,11 @@ void DisplayManager::displaySystemStatusScreen(bool gpsConnected, bool networkCo
 
 void DisplayManager::displayErrorScreen() {
     if (!initialized || !display) return;
+    
+    // Skip actual drawing when display is sleeping
+    if (!displayOn) {
+        return;
+    }
     
     display->clear();
     
@@ -403,5 +460,36 @@ const char* DisplayManager::getGnssName(int gnssId) {
         case 5: return "QZSS";
         case 6: return "GLONASS";
         default: return "Unknown";
+    }
+}
+
+// Auto-sleep control methods
+void DisplayManager::wakeDisplay() {
+    if (!displayOn) {
+        Serial.println("Waking display from sleep");
+        displayOn = true;
+        sleepCounter = 0;
+        
+        // Turn on display (refresh current screen)
+        if (initialized && display) {
+            // Display will be refreshed on next update cycle
+        }
+    } else {
+        // Reset sleep counter to extend display time
+        sleepCounter = 0;
+    }
+}
+
+void DisplayManager::sleepDisplay() {
+    if (displayOn) {
+        Serial.println("Putting display to sleep after 30 seconds of inactivity");
+        displayOn = false;
+        sleepCounter = 0;
+        
+        // Turn off display to save OLED lifetime (clear screen once)
+        if (initialized && display) {
+            display->clear();
+            display->display(); // Ensure the clear is shown
+        }
     }
 }

@@ -158,6 +158,7 @@ void PhysicalReset::handleShortPress() {
     
     // DisplayManagerのnextDisplayMode()を呼び出し
     if (display_manager) {
+        display_manager->wakeDisplay(); // Explicitly wake display on button press
         display_manager->nextDisplayMode();
         display_manager->triggerDisplay();
     }

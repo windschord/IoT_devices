@@ -30,6 +30,11 @@ private:
     bool errorState;
     String errorMessage;
     unsigned long buttonLastPressed;
+    
+    // Auto-sleep functionality (simple counter-based)
+    bool displayOn;
+    int sleepCounter;
+    static const int SLEEP_TIMEOUT_COUNT = 30; // 30 update cycles (approximately 30 seconds)
 
 public:
     DisplayManager();
@@ -53,8 +58,14 @@ public:
     void triggerDisplay() { 
         displayCount = 1; 
         lastDisplay = 0; 
+        wakeDisplay(); // Wake display when triggered
         Serial.printf("triggerDisplay() called - displayCount set to %d\n", displayCount);
     }
+    
+    // Auto-sleep control methods
+    void wakeDisplay();
+    void sleepDisplay();
+    bool isDisplayOn() const { return displayOn; }
     void setErrorState(const String& message);
     void clearErrorState();
     DisplayMode getCurrentMode() const { return currentMode; }
