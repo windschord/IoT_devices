@@ -4,8 +4,8 @@
 #include <Arduino.h>
 #include <EthernetUdp.h>
 #include "SystemTypes.h"
-#include "Gps_model.h"
-#include "NtpServer.h"
+#include "../gps/Gps_model.h"
+#include "../network/NtpServer.h"
 #include "SystemMonitor.h"
 
 // メトリクス統計構造体

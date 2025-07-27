@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <time.h>
 #include "RTClib.h"
-#include "SystemTypes.h"
+#include "../system/SystemTypes.h"
 #include "Gps_model.h"
 
 // Forward declaration for LoggingService

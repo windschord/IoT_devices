@@ -1,6 +1,6 @@
 #include "TimeManager.h"
-#include "HardwareConfig.h"
-#include "LoggingService.h"
+#include "../hal/HardwareConfig.h"
+#include "../config/LoggingService.h"
 
 // UTC時刻からUnixタイムスタンプを計算する関数
 time_t gpsTimeToUnixTimestamp(uint16_t year, uint8_t month, uint8_t day, 

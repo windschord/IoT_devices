@@ -1,5 +1,5 @@
 #include "SystemController.h"
-#include "LoggingService.h"
+#include "../config/LoggingService.h"
 
 SystemController::SystemController() 
     : currentState(SystemState::INITIALIZING),

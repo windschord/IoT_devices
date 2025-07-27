@@ -1,6 +1,6 @@
 #include "DisplayManager.h"
-#include "HardwareConfig.h"
-#include "LoggingService.h"
+#include "../hal/HardwareConfig.h"
+#include "../config/LoggingService.h"
 
 DisplayManager::DisplayManager() 
     : display(nullptr), loggingService(nullptr), i2cAddress(0), initialized(false), displayCount(0), 

@@ -1,5 +1,5 @@
 #include "Storage_HAL.h"
-#include "LoggingService.h"
+#include "../config/LoggingService.h"
 #include <EEPROM.h>
 #include <hardware/flash.h>
 

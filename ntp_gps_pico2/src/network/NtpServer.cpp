@@ -1,6 +1,6 @@
 #include "NtpServer.h"
-#include "HardwareConfig.h"
-#include "LoggingService.h"
+#include "../hal/HardwareConfig.h"
+#include "../config/LoggingService.h"
 
 NtpServer::NtpServer(EthernetUDP* udpInstance, TimeManager* timeManagerInstance, UdpSocketManager* udpManagerInstance)
     : ntpUdp(udpInstance), timeManager(timeManagerInstance), udpManager(udpManagerInstance), loggingService(nullptr) {

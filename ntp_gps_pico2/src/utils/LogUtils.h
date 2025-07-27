@@ -2,7 +2,7 @@
 #define LOG_UTILS_H
 
 #include <Arduino.h>
-#include "LoggingService.h"
+#include "../config/LoggingService.h"
 
 /**
  * @brief ログ出力の統一化を行うユーティリティクラス

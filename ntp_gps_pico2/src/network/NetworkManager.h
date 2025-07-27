@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <Ethernet.h>
 #include <EthernetUdp.h>
-#include "SystemTypes.h"
+#include "../system/SystemTypes.h"
 
 // Forward declarations
 class LoggingService;

@@ -3,13 +3,13 @@
 
 #include <Arduino.h>
 #include "SystemTypes.h"
-#include "TimeManager.h"
-#include "NetworkManager.h"
+#include "../gps/TimeManager.h"
+#include "../network/NetworkManager.h"
 #include "SystemMonitor.h"
-#include "NtpServer.h"
-#include "DisplayManager.h"
-#include "ConfigManager.h"
-#include "LoggingService.h"
+#include "../network/NtpServer.h"
+#include "../display/DisplayManager.h"
+#include "../config/ConfigManager.h"
+#include "../config/LoggingService.h"
 #include "PrometheusMetrics.h"
 
 // システム全体の状態を管理する列挙型

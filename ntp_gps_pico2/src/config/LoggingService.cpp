@@ -1,5 +1,5 @@
 #include "LoggingService.h"
-#include "TimeManager.h"
+#include "../gps/TimeManager.h"
 #include <Ethernet.h>
 #include <stdarg.h>
 #include <stdio.h>

@@ -3,8 +3,8 @@
 
 #include <Arduino.h>
 #include <EthernetUdp.h>
-#include "SystemTypes.h"
-#include "TimeManager.h"
+#include "../system/SystemTypes.h"
+#include "../gps/TimeManager.h"
 #include "NtpTypes.h"
 
 // Forward declaration for LoggingService

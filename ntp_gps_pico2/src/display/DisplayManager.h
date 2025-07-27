@@ -4,9 +4,9 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <oled.h>
-#include "Gps_model.h"
-#include "SystemTypes.h"
-#include "NtpTypes.h"
+#include "../gps/Gps_model.h"
+#include "../system/SystemTypes.h"
+#include "../network/NtpTypes.h"
 
 // Forward declaration for LoggingService
 class LoggingService;

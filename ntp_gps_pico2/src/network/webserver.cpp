@@ -1,8 +1,8 @@
 #include <webserver.h>
 #include "NtpServer.h"
-#include "ConfigManager.h"
-#include "PrometheusMetrics.h"
-#include "LoggingService.h"
+#include "../config/ConfigManager.h"
+#include "../system/PrometheusMetrics.h"
+#include "../config/LoggingService.h"
 
 void WebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData)
 {

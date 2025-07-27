@@ -1,5 +1,5 @@
 #include "ErrorHandler.h"
-#include "LoggingService.h"
+#include "../config/LoggingService.h"
 
 // グローバルエラーハンドラーのインスタンス
 ErrorHandler* globalErrorHandler = nullptr;

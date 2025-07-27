@@ -1,7 +1,7 @@
 #include "NetworkManager.h"
-#include "HardwareConfig.h"
-#include "LoggingService.h"
-#include "ConfigManager.h"
+#include "../hal/HardwareConfig.h"
+#include "../config/LoggingService.h"
+#include "../config/ConfigManager.h"
 #include <SPI.h>
 
 NetworkManager::NetworkManager(EthernetUDP* udpInstance) : ntpUdp(udpInstance), loggingService(nullptr), configManager(nullptr) {

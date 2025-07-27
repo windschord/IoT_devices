@@ -1,6 +1,6 @@
 
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
-#include <Gps_model.h>
+#include "Gps_model.h"
 #include <QZQSM.h>
 #include <QZSSDCX.h>
 

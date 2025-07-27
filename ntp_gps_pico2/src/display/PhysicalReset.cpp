@@ -1,7 +1,7 @@
 #include "PhysicalReset.h"
 #include "DisplayManager.h"
-#include "ConfigManager.h"
-#include "LoggingService.h"
+#include "../config/ConfigManager.h"
+#include "../config/LoggingService.h"
 
 // グローバルインスタンス
 PhysicalReset g_physical_reset;

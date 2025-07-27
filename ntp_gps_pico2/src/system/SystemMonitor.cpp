@@ -1,7 +1,7 @@
 #include "SystemMonitor.h"
-#include "HardwareConfig.h"
-#include "TimeManager.h"
-#include "LoggingService.h"
+#include "../hal/HardwareConfig.h"
+#include "../gps/TimeManager.h"
+#include "../config/LoggingService.h"
 
 SystemMonitor::SystemMonitor(GpsClient* gpsClientInstance, bool* gpsConnectedPtr, volatile bool* ppsReceivedPtr)
     : gpsClient(gpsClientInstance), gpsConnected(gpsConnectedPtr), ppsReceived(ppsReceivedPtr), loggingService(nullptr) {

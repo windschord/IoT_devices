@@ -1,5 +1,5 @@
 #include "ConfigManager.h"
-#include "HardwareConfig.h"
+#include "../hal/HardwareConfig.h"
 #include "LoggingService.h"
 #include <ArduinoJson.h>
 

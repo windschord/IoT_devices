@@ -1,6 +1,6 @@
 #include "PrometheusMetrics.h"
-#include "HardwareConfig.h"
-#include "LoggingService.h"
+#include "../hal/HardwareConfig.h"
+#include "../config/LoggingService.h"
 #include <Ethernet.h>
 
 // Prometheusメトリクス名定数の定義

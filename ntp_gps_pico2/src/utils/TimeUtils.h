@@ -2,7 +2,7 @@
 #define TIME_UTILS_H
 
 #include <Arduino.h>
-#include "NtpTypes.h"
+#include "../network/NtpTypes.h"
 
 /**
  * @brief 時刻処理の共通機能を提供するユーティリティクラス

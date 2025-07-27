@@ -7,21 +7,25 @@
 #include <time.h>
 #include <EthernetUdp.h>
 
-// Refactored modules
-#include "HardwareConfig.h"
-#include "SystemTypes.h"
-#include "TimeManager.h"
-#include "NetworkManager.h"
-#include "SystemMonitor.h"
-#include "NtpServer.h"
-#include "NtpTypes.h"
-#include "DisplayManager.h"
-#include "ConfigManager.h"
-#include "LoggingService.h"
-#include "PrometheusMetrics.h"
-#include "SystemController.h"
-#include "ErrorHandler.h"
-#include "PhysicalReset.h"
+// GPS Client import
+#include "gps/Gps_Client.h"
+#include "network/webserver.h"
+
+// Refactored modules with new directory structure
+#include "hal/HardwareConfig.h"
+#include "system/SystemTypes.h"
+#include "gps/TimeManager.h"
+#include "network/NetworkManager.h"
+#include "system/SystemMonitor.h"
+#include "network/NtpServer.h"
+#include "network/NtpTypes.h"
+#include "display/DisplayManager.h"
+#include "config/ConfigManager.h"
+#include "config/LoggingService.h"
+#include "system/PrometheusMetrics.h"
+#include "system/SystemController.h"
+#include "system/ErrorHandler.h"
+#include "display/PhysicalReset.h"
 
 // Hardware configuration moved to HardwareConfig.h
 

@@ -2,7 +2,7 @@
 #define CONFIG_MANAGER_H
 
 #include <Arduino.h>
-#include "Storage_HAL.h"
+#include "../hal/Storage_HAL.h"
 
 // Configuration structure matching design.md specifications
 struct SystemConfig {
