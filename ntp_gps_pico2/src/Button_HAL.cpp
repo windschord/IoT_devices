@@ -30,7 +30,7 @@ bool ButtonHAL::initialize() {
     
     initialized = true;
     
-    LOG_INFO_F("BUTTON", "ButtonHAL: 初期化完了 (GPIO %d)", BUTTON_PIN);
+    LOG_INFO_F("BUTTON", "ButtonHAL initialization completed (GPIO %d)", BUTTON_PIN);
     return true;
 }
 
@@ -48,7 +48,7 @@ void ButtonHAL::shutdown() {
     
     initialized = false;
     
-    LOG_INFO_MSG("BUTTON", "ButtonHAL: シャットダウン完了");
+    LOG_INFO_MSG("BUTTON", "ButtonHAL shutdown completed");
 }
 
 void ButtonHAL::update() {
@@ -65,9 +65,9 @@ void ButtonHAL::update() {
     
     if (current_time - last_debug > 5000) {
         bool raw_state = digitalRead(BUTTON_PIN);
-        Serial.printf("ButtonHAL DEBUG: GPIO %d = %s (RAW), cooldown=%s, state=%d, update_calls=%d\n", 
-                      BUTTON_PIN, raw_state ? "HIGH" : "LOW", 
-                      isInCooldown() ? "YES" : "NO", control.state, update_call_count);
+        LOG_DEBUG_F("BUTTON", "GPIO %d = %s (RAW), cooldown=%s, state=%d, update_calls=%d", 
+                    BUTTON_PIN, raw_state ? "HIGH" : "LOW", 
+                    isInCooldown() ? "YES" : "NO", control.state, update_call_count);
         last_debug = current_time;
         update_call_count = 0; // Reset counter
     }
@@ -77,7 +77,7 @@ void ButtonHAL::update() {
         static uint32_t last_cooldown_debug = 0;
         if (current_time - last_cooldown_debug > 1000) {
             uint32_t remaining = control.cooldown_until - current_time;
-            Serial.printf("ButtonHAL: Still in cooldown, %ums remaining\n", remaining);
+            LOG_DEBUG_F("BUTTON", "Still in cooldown, %ums remaining", remaining);
             last_cooldown_debug = current_time;
         }
         return;
@@ -96,9 +96,9 @@ void ButtonHAL::update() {
     static uint32_t last_state_change = 0;
     if (current_pressed != last_pressed_debug) {
         uint32_t time_since_last = current_time - last_state_change;
-        Serial.printf("ButtonHAL: Button state changed from %s to %s (after %ums)\n", 
-                      last_pressed_debug ? "PRESSED" : "RELEASED",
-                      current_pressed ? "PRESSED" : "RELEASED", time_since_last);
+        LOG_DEBUG_F("BUTTON", "Button state changed from %s to %s (after %ums)", 
+                    last_pressed_debug ? "PRESSED" : "RELEASED",
+                    current_pressed ? "PRESSED" : "RELEASED", time_since_last);
         last_pressed_debug = current_pressed;
         last_state_change = current_time;
     }
@@ -114,7 +114,7 @@ void ButtonHAL::update() {
                 control.long_press_triggered = false;
                 control.debounce_count = 0;
                 
-                LOG_DEBUG_MSG("BUTTON", "ButtonHAL: ボタン押下検出");
+                LOG_DEBUG_MSG("BUTTON", "Button press detected");
             }
             break;
             
@@ -126,9 +126,9 @@ void ButtonHAL::update() {
                     control.state = BUTTON_SHORT_PRESS;
                     triggerCallback(BUTTON_SHORT_PRESS);
                     
-                    LOG_INFO_F("BUTTON", "ButtonHAL: 短押し検出 (%ums)", duration);
+                    LOG_INFO_F("BUTTON", "Short press detected (%ums)", duration);
                 } else {
-                    LOG_DEBUG_F("BUTTON", "ButtonHAL: 押下時間が短すぎる (%ums < %ums)", duration, SHORT_PRESS_THRESHOLD);
+                    LOG_DEBUG_F("BUTTON", "Press duration too short (%ums < %ums)", duration, SHORT_PRESS_THRESHOLD);
                 }
                 resetState();
             } else {
@@ -139,7 +139,7 @@ void ButtonHAL::update() {
                     control.long_press_triggered = true;
                     triggerCallback(BUTTON_LONG_PRESS);
                     
-                    LOG_WARN_F("BUTTON", "ButtonHAL: 長押し検出 (%ums)", duration);
+                    LOG_WARN_F("BUTTON", "Long press detected (%ums)", duration);
                 }
             }
             break;
@@ -163,12 +163,12 @@ void ButtonHAL::update() {
 
 void ButtonHAL::setShortPressCallback(ButtonCallback callback) {
     short_press_callback = callback;
-    LOG_DEBUG_MSG("BUTTON", "ButtonHAL: 短押しコールバック設定");
+    LOG_DEBUG_MSG("BUTTON", "Short press callback configured");
 }
 
 void ButtonHAL::setLongPressCallback(ButtonCallback callback) {
     long_press_callback = callback;
-    LOG_DEBUG_MSG("BUTTON", "ButtonHAL: 長押しコールバック設定");
+    LOG_DEBUG_MSG("BUTTON", "Long press callback configured");
 }
 
 ButtonState ButtonHAL::getState() const {

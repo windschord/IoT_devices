@@ -52,7 +52,7 @@ void SystemController::init() {
     currentState = SystemState::STARTUP;
     stateChangedTime = millis();
     
-    Serial.println("SystemController: Initialization started");
+    // Note: LoggingService initialization message already handled
     LOG_INFO_MSG("SYSTEM", "System controller initialization started");
     
     // 初期化完了をマーク
@@ -72,7 +72,7 @@ void SystemController::setServices(TimeManager* tm, NetworkManager* nm, SystemMo
     loggingService = ls;
     prometheusMetrics = pm;
     
-    Serial.println("SystemController: All services registered");
+    // Note: LoggingService message already handled
     LOG_INFO_MSG("SYSTEM", "All system services registered with controller");
 }
 
@@ -244,8 +244,7 @@ void SystemController::handleStateTransition(SystemState newState) {
         "INITIALIZING", "STARTUP", "RUNNING", "DEGRADED", "ERROR", "RECOVERY", "SHUTDOWN"
     };
     
-    Serial.printf("SystemController: State transition %s -> %s\n", 
-                  stateNames[(int)previousState], stateNames[(int)newState]);
+    // Use LoggingService for state transitions (handled below)
     LOG_INFO_F("SYSTEM", "State transition %s -> %s", 
                stateNames[(int)previousState], stateNames[(int)newState]);
     
@@ -341,26 +340,26 @@ unsigned long SystemController::getStateTime() const {
 
 void SystemController::printSystemStatus() {
 #ifdef DEBUG_SYSTEM_STATUS
-    Serial.println("=== System Status ===");
-    Serial.printf("State: %d, Health: %d%%, Uptime: %lu ms\n", 
-                  (int)currentState, healthScore.overall, getUptime());
-    Serial.printf("GPS: %s, Network: %s, Display: %s\n",
-                  gpsConnected ? "OK" : "FAIL",
-                  networkConnected ? "OK" : "FAIL", 
-                  displayConnected ? "OK" : "FAIL");
+    LOG_DEBUG_MSG("SYSTEM", "=== System Status ===");
+    LOG_DEBUG_F("SYSTEM", "State: %d, Health: %d%%, Uptime: %lu ms", 
+                (int)currentState, healthScore.overall, getUptime());
+    LOG_DEBUG_F("SYSTEM", "GPS: %s, Network: %s, Display: %s",
+                gpsConnected ? "OK" : "FAIL",
+                networkConnected ? "OK" : "FAIL", 
+                displayConnected ? "OK" : "FAIL");
 #endif
 }
 
 void SystemController::printServiceStatus() {
-    Serial.println("=== Service Status ===");
+    LOG_INFO_MSG("SYSTEM", "=== Service Status ===");
     const char* healthNames[] = {"HEALTHY", "WARNING", "CRITICAL", "UNKNOWN"};
     
     for (int i = 0; i < 8; i++) {
-        Serial.printf("%s: %s - %s (errors: %lu)\n", 
-                      services[i].name,
-                      healthNames[(int)services[i].health],
-                      services[i].description,
-                      services[i].errorCount);
+        LOG_INFO_F("SYSTEM", "%s: %s - %s (errors: %lu)", 
+                   services[i].name,
+                   healthNames[(int)services[i].health],
+                   services[i].description,
+                   services[i].errorCount);
     }
 }
 

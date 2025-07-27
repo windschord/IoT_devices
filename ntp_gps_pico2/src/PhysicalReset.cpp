@@ -58,7 +58,7 @@ bool PhysicalReset::initialize(DisplayManager* displayMgr, ConfigManager* config
     
     initialized = true;
     
-    LOG_INFO_MSG("RESET", "PhysicalReset: 初期化完了");
+    LOG_INFO_MSG("RESET", "PhysicalReset initialization completed");
     return true;
 }
 

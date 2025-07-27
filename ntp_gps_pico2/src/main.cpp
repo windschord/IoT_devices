@@ -326,7 +326,6 @@ void setup()
   // Set LoggingService references for components
   displayManager.setLoggingService(loggingService);
   networkManager.setLoggingService(loggingService);
-  ntpServer->setLoggingService(loggingService);
 
   // Initialize DisplayManager with unified logging
   if (!displayManager.initialize()) {
@@ -360,6 +359,8 @@ void setup()
   const UdpSocketManager& udpStatus = networkManager.getUdpStatus();
   // Update the static instance with the UDP socket manager
   ntpServerInstance = NtpServer(&ntpUdp, &timeManager, const_cast<UdpSocketManager*>(&udpStatus));
+  // Set LoggingService BEFORE calling init()
+  ntpServer->setLoggingService(loggingService);
   ntpServer->init();
   LOG_INFO_MSG("NTP", "NTP Server initialized and listening on port 123");
   
