@@ -1,5 +1,6 @@
 #include "TimeManager.h"
 #include "HardwareConfig.h"
+#include "LoggingService.h"
 
 // UTC時刻からUnixタイムスタンプを計算する関数
 time_t gpsTimeToUnixTimestamp(uint16_t year, uint8_t month, uint8_t day, 
@@ -48,7 +49,11 @@ time_t gpsTimeToUnixTimestamp(uint16_t year, uint8_t month, uint8_t day,
 
 TimeManager::TimeManager(RTC_DS3231* rtcInstance, TimeSync* timeSyncInstance, const GpsMonitor* gpsMonitorInstance)
     : rtc(rtcInstance), timeSync(timeSyncInstance), gpsMonitor(gpsMonitorInstance),
-      ppsReceived(false), ppsTimestamp(0), ppsCount(0) {
+      loggingService(nullptr), ppsReceived(false), ppsTimestamp(0), ppsCount(0) {
+}
+
+void TimeManager::setLoggingService(LoggingService* loggingServiceInstance) {
+    loggingService = loggingServiceInstance;
 }
 
 void TimeManager::init() {
@@ -140,7 +145,9 @@ unsigned long TimeManager::getHighPrecisionTime() {
         if (result64 > ULONG_MAX) {
             // オーバーフローの場合は秒単位で計算
             result = timeSync->gpsTime * 1000UL; // 注意：まだオーバーフローする可能性
-            Serial.printf("WARNING: 64-bit overflow detected, using approximate calculation\n");
+            if (loggingService) {
+                loggingService->warning("TIME", "64-bit overflow detected, using approximate calculation");
+            }
         } else {
             result = (unsigned long)result64;
         }

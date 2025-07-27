@@ -7,11 +7,15 @@
 #include "SystemTypes.h"
 #include "Gps_model.h"
 
+// Forward declaration for LoggingService
+class LoggingService;
+
 class TimeManager {
 private:
     RTC_DS3231* rtc;
     TimeSync* timeSync;
     const GpsMonitor* gpsMonitor;
+    LoggingService* loggingService;
     volatile bool ppsReceived;
     volatile unsigned long ppsTimestamp;
     volatile unsigned long ppsCount;
@@ -23,6 +27,9 @@ public:
     void processPpsSync(const GpsSummaryData& gpsData);
     void onPpsInterrupt();
     void setGpsMonitor(const GpsMonitor* gpsMonitorInstance) { gpsMonitor = gpsMonitorInstance; }
+    
+    // LoggingService integration
+    void setLoggingService(LoggingService* loggingServiceInstance);
     
     unsigned long getHighPrecisionTime();
     time_t getUnixTimestamp();  // GPS時刻を秒単位で取得（オーバーフロー回避）
