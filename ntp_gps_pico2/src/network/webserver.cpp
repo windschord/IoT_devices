@@ -3,6 +3,8 @@
 #include "../config/ConfigManager.h"
 #include "../system/PrometheusMetrics.h"
 #include "../config/LoggingService.h"
+#include "../gps/Gps_Client.h"
+#include <ArduinoJson.h>
 
 void GpsWebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData)
 {
@@ -60,6 +62,13 @@ void GpsWebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_
         loggingService->info("WEB", "Serving configuration page");
       }
       configPage(client);
+    }
+    else if (s.indexOf("GET /api/gps ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Serving GPS API GET");
+      }
+      gpsApiGet(client);
     }
     else if (s.indexOf("GET /api/config ") >= 0)
     {
@@ -494,6 +503,98 @@ void GpsWebServer::configApiReset(EthernetClient &client) {
   
   configManager->resetToDefaults();
   sendJsonResponse(client, "{\"success\": true, \"message\": \"Configuration reset to defaults\"}");
+}
+
+void GpsWebServer::gpsApiGet(EthernetClient &client) {
+  if (!gpsClient) {
+    sendJsonResponse(client, "{\"error\": \"GPS Client not available\"}", 500);
+    return;
+  }
+  
+  // Get Web GPS data
+  web_gps_data_t gpsData = gpsClient->getWebGpsData();
+  
+  // Create JSON document (using a large buffer for satellite data)
+  DynamicJsonDocument doc(8192);
+  
+  // Position and Time Information
+  doc["latitude"] = gpsData.latitude;
+  doc["longitude"] = gpsData.longitude;
+  doc["altitude"] = gpsData.altitude;
+  doc["speed"] = gpsData.speed;
+  doc["course"] = gpsData.course;
+  doc["utc_time"] = gpsData.utc_time;
+  doc["ttff"] = gpsData.ttff;
+  
+  // Fix Information
+  doc["fix_type"] = gpsData.fix_type;
+  doc["pdop"] = gpsData.pdop;
+  doc["hdop"] = gpsData.hdop;
+  doc["vdop"] = gpsData.vdop;
+  doc["accuracy_3d"] = gpsData.accuracy_3d;
+  doc["accuracy_2d"] = gpsData.accuracy_2d;
+  
+  // Constellation Statistics
+  JsonObject stats = doc.createNestedObject("constellation_stats");
+  stats["satellites_total"] = gpsData.satellites_total;
+  stats["satellites_used"] = gpsData.satellites_used;
+  
+  JsonObject gps_stats = stats.createNestedObject("gps");
+  gps_stats["total"] = gpsData.satellites_gps_total;
+  gps_stats["used"] = gpsData.satellites_gps_used;
+  
+  JsonObject glonass_stats = stats.createNestedObject("glonass");
+  glonass_stats["total"] = gpsData.satellites_glonass_total;
+  glonass_stats["used"] = gpsData.satellites_glonass_used;
+  
+  JsonObject galileo_stats = stats.createNestedObject("galileo");
+  galileo_stats["total"] = gpsData.satellites_galileo_total;
+  galileo_stats["used"] = gpsData.satellites_galileo_used;
+  
+  JsonObject beidou_stats = stats.createNestedObject("beidou");
+  beidou_stats["total"] = gpsData.satellites_beidou_total;
+  beidou_stats["used"] = gpsData.satellites_beidou_used;
+  
+  JsonObject sbas_stats = stats.createNestedObject("sbas");
+  sbas_stats["total"] = gpsData.satellites_sbas_total;
+  sbas_stats["used"] = gpsData.satellites_sbas_used;
+  
+  JsonObject qzss_stats = stats.createNestedObject("qzss");
+  qzss_stats["total"] = gpsData.satellites_qzss_total;
+  qzss_stats["used"] = gpsData.satellites_qzss_used;
+  
+  // Individual Satellite Information
+  JsonArray satellites = doc.createNestedArray("satellites");
+  for (uint8_t i = 0; i < gpsData.satellite_count; i++) {
+    JsonObject sat = satellites.createNestedObject();
+    sat["prn"] = gpsData.satellites[i].prn;
+    sat["constellation"] = gpsData.satellites[i].constellation;
+    sat["azimuth"] = gpsData.satellites[i].azimuth;
+    sat["elevation"] = gpsData.satellites[i].elevation;
+    sat["signal_strength"] = gpsData.satellites[i].signal_strength;
+    sat["used_in_nav"] = gpsData.satellites[i].used_in_nav;
+    sat["tracked"] = gpsData.satellites[i].tracked;
+  }
+  
+  // Constellation Enable Status
+  JsonObject enables = doc.createNestedObject("constellation_enables");
+  enables["gps"] = gpsData.gps_enabled;
+  enables["glonass"] = gpsData.glonass_enabled;
+  enables["galileo"] = gpsData.galileo_enabled;
+  enables["beidou"] = gpsData.beidou_enabled;
+  enables["sbas"] = gpsData.sbas_enabled;
+  enables["qzss"] = gpsData.qzss_enabled;
+  
+  // System Status
+  doc["data_valid"] = gpsData.data_valid;
+  doc["last_update"] = gpsData.last_update;
+  
+  // Serialize to string
+  String jsonString;
+  serializeJson(doc, jsonString);
+  
+  // Send response
+  sendJsonResponse(client, jsonString);
 }
 
 void GpsWebServer::sendJsonResponse(EthernetClient &client, const String& json, int statusCode) {

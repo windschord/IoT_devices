@@ -221,6 +221,7 @@ void initializeWebServer() {
   webServer.setPrometheusMetrics(prometheusMetrics);
   webServer.setLoggingService(loggingService);
   webServer.setNtpServer(ntpServer);
+  webServer.setGpsClient(&gpsClient);
   
   LOG_INFO_MSG("WEB", "Web server configured with all services");
   
