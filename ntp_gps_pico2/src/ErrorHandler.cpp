@@ -32,7 +32,7 @@ ErrorHandler::ErrorHandler()
 }
 
 void ErrorHandler::init() {
-    Serial.println("ErrorHandler: Initialization started");
+    LOG_INFO_MSG("ERROR_HDL", "ErrorHandler initialization started");
     
     // グローバル参照を設定
     globalErrorHandler = this;
@@ -41,7 +41,7 @@ void ErrorHandler::init() {
     resetStatistics();
     
     LOG_INFO_MSG("ERROR", "Error handler initialized successfully");
-    Serial.println("ErrorHandler: Initialization completed");
+    LOG_INFO_MSG("ERROR_HDL", "ErrorHandler initialization completed");
 }
 
 void ErrorHandler::reset() {
@@ -412,7 +412,7 @@ void ErrorHandler::cleanupOldErrors(unsigned long maxAge) {
 
 void ErrorHandler::emergencyStop(const char* reason) {
     LOG_EMERG_F("ERROR", "EMERGENCY STOP: %s", reason);
-    Serial.printf("🚨 EMERGENCY STOP: %s\n", reason);
+    LOG_EMERG_F("ERROR_HDL", "EMERGENCY STOP: %s", reason);
     
     // 全システムを安全に停止
     // 実装は慎重に行う必要がある
@@ -420,7 +420,7 @@ void ErrorHandler::emergencyStop(const char* reason) {
 
 void ErrorHandler::safeMode(const char* reason) {
     LOG_WARN_F("ERROR", "Entering safe mode: %s", reason);
-    Serial.printf("⚠️ SAFE MODE: %s\n", reason);
+    LOG_WARN_F("ERROR_HDL", "SAFE MODE: %s", reason);
     
     // 最小限の機能のみで動作
 }
@@ -432,30 +432,30 @@ void ErrorHandler::resetStatistics() {
 }
 
 void ErrorHandler::printErrorHistory() const {
-    Serial.println("=== Error History ===");
+    LOG_INFO_MSG("ERROR_HDL", "=== Error History ===");
     
     for (int i = 0; i < errorCount; i++) {
         int index = (nextErrorIndex - 1 - i + MAX_ERROR_HISTORY) % MAX_ERROR_HISTORY;
         const ErrorInfo& error = errorHistory[index];
         
-        Serial.printf("[%lu] %s: %s - %s (%s)\n",
-                      error.timestamp,
-                      error.component,
-                      error.message,
-                      error.resolved ? "RESOLVED" : "UNRESOLVED",
-                      error.details);
+        LOG_INFO_F("ERROR_HDL", "[%lu] %s: %s - %s (%s)",
+                   error.timestamp,
+                   error.component,
+                   error.message,
+                   error.resolved ? "RESOLVED" : "UNRESOLVED",
+                   error.details);
     }
 }
 
 void ErrorHandler::printStatistics() const {
 #ifdef DEBUG_ERROR_STATS
-    Serial.println("=== Error Statistics ===");
-    Serial.printf("Total: %lu, Resolved: %lu, Unresolved: %lu\n",
-                  statistics.totalErrors, statistics.resolvedErrors, statistics.unresolvedErrors);
-    Serial.printf("Hardware: %lu, Network: %lu, GPS: %lu, NTP: %lu\n",
-                  statistics.hardwareErrors, statistics.networkErrors, 
-                  statistics.gpsErrors, statistics.ntpErrors);
-    Serial.printf("Resolution Rate: %.1f%%\n", statistics.resolutionRate);
+    LOG_INFO_MSG("ERROR_HDL", "=== Error Statistics ===");
+    LOG_INFO_F("ERROR_HDL", "Total: %lu, Resolved: %lu, Unresolved: %lu",
+               statistics.totalErrors, statistics.resolvedErrors, statistics.unresolvedErrors);
+    LOG_INFO_F("ERROR_HDL", "Hardware: %lu, Network: %lu, GPS: %lu, NTP: %lu",
+               statistics.hardwareErrors, statistics.networkErrors, 
+               statistics.gpsErrors, statistics.ntpErrors);
+    LOG_INFO_F("ERROR_HDL", "Resolution Rate: %.1f%%", statistics.resolutionRate);
 #endif
 }
 

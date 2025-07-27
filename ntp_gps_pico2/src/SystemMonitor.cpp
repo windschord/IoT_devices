@@ -1,6 +1,7 @@
 #include "SystemMonitor.h"
 #include "HardwareConfig.h"
 #include "TimeManager.h"
+#include "LoggingService.h"
 
 SystemMonitor::SystemMonitor(GpsClient* gpsClientInstance, bool* gpsConnectedPtr, volatile bool* ppsReceivedPtr)
     : gpsClient(gpsClientInstance), gpsConnected(gpsConnectedPtr), ppsReceived(ppsReceivedPtr) {
@@ -68,39 +69,42 @@ void SystemMonitor::evaluateFallbackMode() {
     static unsigned long lastFallbackDebug = 0;
     if (now - lastFallbackDebug > 5000) { // Every 5 seconds
 #ifdef DEBUG_GPS_MONITOR
-        Serial.print("Fallback evaluation - ");
-        Serial.print("GPS Connected: "); Serial.print(*gpsConnected ? "YES" : "NO");
-        Serial.print(", GPS Time Valid: "); Serial.print(gpsMonitor.gpsTimeValid ? "YES" : "NO");
-        Serial.print(", PPS Active: "); Serial.print(gpsMonitor.ppsActive ? "YES" : "NO");
-        Serial.print(", Current Fallback: "); Serial.print(gpsMonitor.inFallbackMode ? "YES" : "NO");
+        LOG_DEBUG_F("GPS", "Fallback evaluation - GPS Connected: %s, GPS Time Valid: %s, PPS Active: %s, Current Fallback: %s",
+                    *gpsConnected ? "YES" : "NO", gpsMonitor.gpsTimeValid ? "YES" : "NO",
+                    gpsMonitor.ppsActive ? "YES" : "NO", gpsMonitor.inFallbackMode ? "YES" : "NO");
 #endif
     }
     
     if (!*gpsConnected) {
         shouldFallback = true;
 #ifdef DEBUG_GPS_MONITOR
-        if (now - lastFallbackDebug > 5000) Serial.print(" -> FALLBACK (GPS not connected)");
+        if (now - lastFallbackDebug > 5000) {
+            LOG_DEBUG_MSG("GPS", "-> FALLBACK (GPS not connected)");
+        }
 #endif
     } else if (!gpsMonitor.gpsTimeValid && (now - gpsMonitor.lastValidTime > gpsMonitor.gpsTimeoutMs)) {
         shouldFallback = true;
 #ifdef DEBUG_GPS_MONITOR
-        if (now - lastFallbackDebug > 5000) Serial.print(" -> FALLBACK (GPS time timeout)");
+        if (now - lastFallbackDebug > 5000) {
+            LOG_DEBUG_MSG("GPS", "-> FALLBACK (GPS time timeout)");
+        }
 #endif
     } else if (!gpsMonitor.ppsActive && (now - gpsMonitor.lastPpsTime > gpsMonitor.ppsTimeoutMs)) {
         shouldFallback = true;
 #ifdef DEBUG_GPS_MONITOR
-        if (now - lastFallbackDebug > 5000) Serial.print(" -> FALLBACK (PPS timeout)");
+        if (now - lastFallbackDebug > 5000) {
+            LOG_DEBUG_MSG("GPS", "-> FALLBACK (PPS timeout)");
+        }
 #endif
     } else {
 #ifdef DEBUG_GPS_MONITOR
-        if (now - lastFallbackDebug > 5000) Serial.print(" -> GPS OK");
+        if (now - lastFallbackDebug > 5000) {
+            LOG_DEBUG_MSG("GPS", "-> GPS OK");
+        }
 #endif
     }
     
     if (now - lastFallbackDebug > 5000) {
-#ifdef DEBUG_GPS_MONITOR
-        Serial.println();
-#endif
         lastFallbackDebug = now;
     }
     
@@ -111,7 +115,7 @@ void SystemMonitor::evaluateFallbackMode() {
         digitalWrite(LED_ERROR_PIN, HIGH); // Turn on error LED (常時点灯)
         
 #if defined(DEBUG_CONSOLE_GPS)
-        Serial.println("GPS signal lost - entering fallback mode (using RTC)");
+        LOG_WARN_MSG("GPS", "GPS signal lost - entering fallback mode (using RTC)");
 #endif
     } else if (!shouldFallback && gpsMonitor.inFallbackMode) {
         // Exit fallback mode
@@ -119,10 +123,10 @@ void SystemMonitor::evaluateFallbackMode() {
         digitalWrite(LED_ERROR_PIN, LOW); // Turn off error LED
         
 #ifdef DEBUG_GPS_FALLBACK
-        Serial.println("✅ GPS signal recovered - exiting fallback mode");
-        Serial.print("   GPS Connected: "); Serial.println(*gpsConnected ? "YES" : "NO");
-        Serial.print("   GPS Time Valid: "); Serial.println(gpsMonitor.gpsTimeValid ? "YES" : "NO");
-        Serial.print("   PPS Active: "); Serial.println(gpsMonitor.ppsActive ? "YES" : "NO");
+        LOG_INFO_MSG("GPS", "GPS signal recovered - exiting fallback mode");
+        LOG_INFO_F("GPS", "   GPS Connected: %s, GPS Time Valid: %s, PPS Active: %s",
+                   *gpsConnected ? "YES" : "NO", gpsMonitor.gpsTimeValid ? "YES" : "NO",
+                   gpsMonitor.ppsActive ? "YES" : "NO");
 #endif
     }
 }
@@ -136,14 +140,10 @@ void SystemMonitor::monitorGpsSignal() {
 #if defined(DEBUG_CONSOLE_GPS)
     unsigned long now = millis();
     if (now % 10000 < 100) { // Every 10 seconds
-        Serial.print("GPS Monitor - Sats: ");
-        Serial.print(gpsMonitor.satelliteCount);
-        Serial.print(" Quality: ");
-        Serial.print(gpsMonitor.signalQuality);
-        Serial.print(" PPS: ");
-        Serial.print(gpsMonitor.ppsActive ? "OK" : "FAIL");
-        Serial.print(" Mode: ");
-        Serial.println(gpsMonitor.inFallbackMode ? "FALLBACK" : "GPS");
+        LOG_INFO_F("GPS", "GPS Monitor - Sats: %d, Quality: %d, PPS: %s, Mode: %s",
+                   gpsMonitor.satelliteCount, gpsMonitor.signalQuality,
+                   gpsMonitor.ppsActive ? "OK" : "FAIL",
+                   gpsMonitor.inFallbackMode ? "FALLBACK" : "GPS");
     }
 #endif
 }
