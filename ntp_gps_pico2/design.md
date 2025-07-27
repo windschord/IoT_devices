@@ -251,6 +251,43 @@ Note: Both I2C buses require 4.7kΩ pull-up resistors on SDA and SCL lines
   - ソケット接続管理
   - ネットワーク状態監視
 
+### Web GPS Information Display Service
+- **Purpose**: Web インターフェース経由でのGNSS/GPS詳細情報表示
+- **Interfaces**:
+  - HTTP /gps エンドポイント
+  - JavaScript による動的情報更新
+  - JSON API によるリアルタイムデータ配信
+- **Key Functions**:
+  - **衛星位置ビュー（Satellite Position View）**:
+    - 円形レーダーチャート形式での衛星配置表示
+    - 方位角（Azimuth）と仰角（Elevation）による正確な位置表示
+    - 衛星番号（PRN）とコンステレーション別色分け表示
+    - 信号強度（C/N0）による衛星アイコンサイズ調整
+    - ナビゲーション使用衛星と非使用衛星の区別表示
+  - **日時・位置情報ビュー（Date View）**:
+    - 現在のGNSS Fix モード表示（No Fix, 2D Fix, 3D Fix, RTK）
+    - 高精度位置情報（緯度・経度・高度、度分秒とメートル表示）
+    - UTC時刻とローカル時刻の表示
+    - 速度情報（m/s）とコース情報
+    - TTFF（Time To First Fix）情報
+  - **コンステレーション別統計情報**:
+    - GPS（G）、SBAS（S）、Galileo（E）、BDS/BeiDou（B）、GLONASS（R）別の衛星数表示
+    - 各コンステレーションの有効/無効状態切り替え
+    - ナビゲーション使用衛星数の表示
+  - **精度情報（Accuracy Information）**:
+    - 3D精度（3D accuracy）と2D精度（2D accuracy）
+    - PDOP（Position Dilution of Precision）値
+    - HDOP（Horizontal Dilution of Precision）値
+    - 使用中衛星数と追跡中衛星数の表示
+  - **フィルタリング機能**:
+    - 追跡していない衛星の表示/非表示切り替え
+    - コンステレーション別フィルタリング
+    - ズームイン/アウト機能（スライダー制御）
+  - **リアルタイム更新機能**:
+    - 1秒間隔での自動データ更新
+    - WebSocket または定期的なXHR による非同期通信
+    - ユーザーインタラクション中の更新一時停止機能
+
 ### Display Service
 - **Purpose**: システム状態の視覚表示（QZSS災害情報含む）
 - **Interfaces**:
@@ -457,6 +494,66 @@ typedef struct {
     uint8_t  fix_type;        // Fix type (0=no fix, 1=dead reckoning, 2=2D, 3=3D, 4=GNSS+dead reckoning, 5=time only)
     uint32_t time_accuracy;   // Time accuracy estimate (nanoseconds)
 } gnss_status_t;
+```
+
+### Web GPS Display Data Structure
+```c
+#define MAX_SATELLITES 32
+
+typedef struct {
+    uint8_t  prn;             // Pseudo Random Number (satellite identifier)
+    uint8_t  constellation;   // Constellation type (0=GPS, 1=SBAS, 2=Galileo, 3=BeiDou, 4=GLONASS, 5=QZSS)
+    float    azimuth;         // Azimuth angle (0-359 degrees)
+    float    elevation;       // Elevation angle (0-90 degrees)
+    uint8_t  signal_strength; // Signal strength (C/N0 in dBHz)
+    bool     used_in_nav;     // Used in navigation solution
+    bool     tracked;         // Currently being tracked
+} satellite_info_t;
+
+typedef struct {
+    // Position and Time Information
+    double   latitude;        // Latitude in degrees
+    double   longitude;       // Longitude in degrees
+    float    altitude;        // Altitude in meters
+    float    speed;           // Speed in m/s
+    float    course;          // Course over ground in degrees
+    uint32_t utc_time;        // UTC time (Unix timestamp)
+    uint32_t ttff;            // Time to first fix in seconds
+    
+    // Fix Information  
+    uint8_t  fix_type;        // Fix type (0=no fix, 2=2D, 3=3D, 4=RTK)
+    float    pdop;            // Position dilution of precision
+    float    hdop;            // Horizontal dilution of precision
+    float    vdop;            // Vertical dilution of precision
+    float    accuracy_3d;     // 3D accuracy estimate (meters)
+    float    accuracy_2d;     // 2D accuracy estimate (meters)
+    
+    // Constellation Statistics
+    uint8_t  satellites_total;     // Total satellites visible
+    uint8_t  satellites_used;      // Satellites used in navigation
+    uint8_t  satellites_gps_total; // Total GPS satellites
+    uint8_t  satellites_gps_used;  // GPS satellites used
+    uint8_t  satellites_glonass_total; // Total GLONASS satellites
+    uint8_t  satellites_glonass_used;  // GLONASS satellites used
+    uint8_t  satellites_galileo_total; // Total Galileo satellites
+    uint8_t  satellites_galileo_used;  // Galileo satellites used
+    uint8_t  satellites_beidou_total;  // Total BeiDou satellites
+    uint8_t  satellites_beidou_used;   // BeiDou satellites used
+    uint8_t  satellites_sbas_total;    // Total SBAS satellites
+    uint8_t  satellites_sbas_used;     // SBAS satellites used
+    
+    // Individual Satellite Information
+    uint8_t  satellite_count;  // Number of satellites in array
+    satellite_info_t satellites[MAX_SATELLITES]; // Individual satellite data
+    
+    // Constellation Enable Status
+    bool     gps_enabled;      // GPS constellation enabled
+    bool     glonass_enabled;  // GLONASS constellation enabled
+    bool     galileo_enabled;  // Galileo constellation enabled
+    bool     beidou_enabled;   // BeiDou constellation enabled
+    bool     sbas_enabled;     // SBAS constellation enabled
+    bool     qzss_enabled;     // QZSS constellation enabled
+} web_gps_data_t;
 ```
 
 ### QZSS L1S Data Structure
