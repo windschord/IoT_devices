@@ -71,7 +71,7 @@ unsigned long gnssBlinkInterval = 0;
 // Function moved to SystemMonitor class
 
 // PPS interrupt handler - now delegates to TimeManager
-void trigerPps() {
+void triggerPps() {
   timeManager.onPpsInterrupt();
   lastPps = micros();
 }
@@ -85,6 +85,178 @@ void trigerPps() {
 // Function moved to NtpServer class
 
 // Function moved to DisplayManager class
+
+/**
+ * @brief シリアル通信の初期化
+ */
+void initializeSerial() {
+  Serial.begin(SERIAL_BAUD_RATE);
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB port only
+  }
+  Serial.println("=== GPS NTP Server v1.0 ===");
+}
+
+/**
+ * @brief LEDピンの初期化
+ */
+void initializeLEDs() {
+  pinMode(LED_GNSS_FIX_PIN, OUTPUT);  // GNSS Fix Status LED (Green)
+  pinMode(LED_NETWORK_PIN, OUTPUT);   // Network Status LED (Blue)
+  pinMode(LED_ERROR_PIN, OUTPUT);     // Error Status LED (Red)
+  pinMode(LED_PPS_PIN, OUTPUT);       // PPS Status LED (Yellow)
+  pinMode(LED_ONBOARD_PIN, OUTPUT);   // Onboard LED
+}
+
+/**
+ * @brief I2C（OLED用）の初期化
+ */
+void initializeI2C_OLED() {
+  // I2C for OLED (Wire0 bus - GPIO 0/1)
+  Wire.setSDA(0);  // GPIO 0 for SDA
+  Wire.setSCL(1);  // GPIO 1 for SCL
+  
+  // Enable internal pull-ups (in case external pull-ups are missing)
+  pinMode(0, INPUT_PULLUP);  // SDA pull-up
+  pinMode(1, INPUT_PULLUP);  // SCL pull-up
+  
+  Serial.println("I2C pull-ups enabled, starting I2C...");
+  Wire.begin();
+  Wire.setClock(100000); // Use slower 100kHz for more reliable communication
+  Serial.println("Wire0 initialized for OLED display - SDA: GPIO 0, SCL: GPIO 1");
+}
+
+/**
+ * @brief コアサービスの初期化（エラーハンドラ、設定管理、ログ）
+ */
+void initializeCoreServices() {
+  // Initialize error handler first (for early error reporting)
+  errorHandler.init();
+  
+  // Initialize configuration manager
+  configManager.init();
+
+  // Initialize logging service first (required for unified log format)
+  LogConfig logConfig;
+  logConfig.minLevel = LOG_INFO;
+  logConfig.facility = FACILITY_NTP;
+  logConfig.localBuffering = true;
+  logConfig.maxBufferEntries = 50;
+  logConfig.retransmitInterval = 30000;  // 30 seconds
+  logConfig.maxRetransmitAttempts = 3;
+  strcpy(logConfig.syslogServer, "");     // Will be configured later
+  logConfig.syslogPort = 514;
+  loggingService->init(logConfig);
+}
+
+/**
+ * @brief サービス間の依存関係設定
+ */
+void setupServiceDependencies() {
+  // Set LoggingService references for components
+  displayManager.setLoggingService(loggingService);
+  networkManager.setLoggingService(loggingService);
+  networkManager.setConfigManager(&configManager);
+  timeManager.setLoggingService(loggingService);
+  systemMonitor->setLoggingService(loggingService);
+}
+
+/**
+ * @brief システムモジュールの初期化
+ */
+void initializeSystemModules() {
+  // Initialize DisplayManager with unified logging
+  if (!displayManager.initialize()) {
+    LOG_ERR_MSG("DISPLAY", "DisplayManager initialization failed - continuing without display");
+  } else {
+    LOG_INFO_MSG("DISPLAY", "DisplayManager initialized successfully");
+  }
+  
+  // Initialize system modules  
+  networkManager.init();
+  
+  // Initialize Prometheus metrics (now using static instance)
+  prometheusMetrics->init();
+  LOG_INFO_MSG("SYSTEM", "PrometheusMetrics initialized");
+
+  // Log system startup
+  LOG_INFO_MSG("SYSTEM", "GPS NTP Server starting up");
+  LOG_INFO_F("SYSTEM", "RAM: %lu bytes, Flash: %lu bytes", 
+             (unsigned long)17856, (unsigned long)406192);
+
+  // Initialize system monitor (now using static instance)
+  systemMonitor->init();
+  LOG_INFO_MSG("SYSTEM", "SystemMonitor initialized");
+  
+  // Initialize TimeManager and set GpsMonitor reference
+  timeManager.init();
+  timeManager.setGpsMonitor(&systemMonitor->getGpsMonitor());
+  LOG_INFO_MSG("SYSTEM", "TimeManager initialized with GPS monitor reference");
+}
+
+/**
+ * @brief NTPサーバーの初期化
+ */
+void initializeNTPServer() {
+  // Initialize NTP server (now using static instance)
+  const UdpSocketManager& udpStatus = networkManager.getUdpStatus();
+  // Update the static instance with the UDP socket manager
+  ntpServerInstance = NtpServer(&ntpUdp, &timeManager, const_cast<UdpSocketManager*>(&udpStatus));
+  // Set LoggingService BEFORE calling init()
+  ntpServer->setLoggingService(loggingService);
+  ntpServer->init();
+  LOG_INFO_MSG("NTP", "NTP Server initialized and listening on port 123");
+}
+
+/**
+ * @brief Webサーバーの初期化
+ */
+void initializeWebServer() {
+  // Connect ConfigManager, PrometheusMetrics, and LoggingService to web server
+  webServer.setConfigManager(&configManager);
+  webServer.setPrometheusMetrics(prometheusMetrics);
+  webServer.setLoggingService(loggingService);
+  webServer.setNtpServer(ntpServer);
+  
+  LOG_INFO_MSG("WEB", "Web server configured with all services");
+  
+  if (networkManager.isConnected()) {
+    LOG_INFO_MSG("WEB", "Network connected - Web server will start after GPS");
+    webServerStarted = false;
+  } else {
+    LOG_INFO_MSG("WEB", "Network not connected - Web server will start when network is available");
+    webServerStarted = false;
+  }
+}
+
+// Forward declarations
+void setupGps();
+void setupRtc();
+
+/**
+ * @brief ハードウェア初期化（GPS/RTC）とPPS設定
+ */
+void initializeGPSAndRTC() {
+  // Initialize GPS and RTC
+  setupGps();
+  setupRtc();
+  
+  // PPS pin initialization
+  pinMode(GPS_PPS_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(GPS_PPS_PIN), triggerPps, RISING);
+  LOG_INFO_MSG("GPS", "PPS interrupt configured on GPIO 8");
+}
+
+/**
+ * @brief 物理リセット機能の初期化
+ */
+void initializePhysicalReset() {
+  if (physicalReset.initialize(&displayManager, &configManager)) {
+    LOG_INFO_MSG("SYSTEM", "Physical reset functionality initialized successfully");
+  } else {
+    LOG_ERR_MSG("SYSTEM", "Failed to initialize physical reset functionality");
+  }
+}
 
 // QZSSのL1S信号を受信するよう設定する
 bool enableQZSSL1S(void)
@@ -270,154 +442,62 @@ void setupRtc()
 #endif
 }
 
+/**
+ * @brief システム初期化のメイン関数
+ * 
+ * システム初期化を機能別に分割し、可読性と保守性を向上。
+ * 各初期化段階は独立した関数として実装され、
+ * 初期化順序の依存関係が明確になっている。
+ */
 void setup()
 {
-  // Open serial communications and wait for port to open:
-  Serial.begin(SERIAL_BAUD_RATE);
-  while (!Serial)
-  {
-    ; // wait for serial port to connect. Needed for native USB port only
-  }
-  // Note: Can't use LOG_INFO_MSG yet as LoggingService is not initialized
-  Serial.println("=== GPS NTP Server v1.0 ===");
+  // 1. 基本ハードウェア初期化
+  initializeSerial();
+  initializeLEDs();
+  initializeI2C_OLED();
 
-  // LED initialization
-  pinMode(LED_GNSS_FIX_PIN, OUTPUT);  // GNSS Fix Status LED (Green)
-  pinMode(LED_NETWORK_PIN, OUTPUT);   // Network Status LED (Blue)
-  pinMode(LED_ERROR_PIN, OUTPUT);     // Error Status LED (Red)
-  pinMode(LED_PPS_PIN, OUTPUT);       // PPS Status LED (Yellow)
-  pinMode(LED_ONBOARD_PIN, OUTPUT);   // Onboard LED
+  // 2. コアサービス初期化（エラーハンドラ、設定、ログ）
+  initializeCoreServices();
 
-  // Note: Button initialization is handled by PhysicalReset via ButtonHAL
-  // GPIO 11 is managed centrally to avoid conflicts
+  // 3. サービス間依存関係の設定
+  setupServiceDependencies();
 
-  // I2C for OLED (Wire0 bus - GPIO 0/1)
-  Wire.setSDA(0);  // GPIO 0 for SDA
-  Wire.setSCL(1);  // GPIO 1 for SCL
-  
-  // Enable internal pull-ups (in case external pull-ups are missing)
-  pinMode(0, INPUT_PULLUP);  // SDA pull-up
-  pinMode(1, INPUT_PULLUP);  // SCL pull-up
-  
-  // Note: Can't use LOG_INFO_MSG yet as LoggingService is not initialized
-  Serial.println("I2C pull-ups enabled, starting I2C...");
-  Wire.begin();
-  Wire.setClock(100000); // Use slower 100kHz for more reliable communication
-  Serial.println("Wire0 initialized for OLED display - SDA: GPIO 0, SCL: GPIO 1");
+  // 4. システムモジュール初期化
+  initializeSystemModules();
 
-  // Initialize error handler first (for early error reporting)
-  errorHandler.init();
-  
-  // Initialize configuration manager
-  configManager.init();
+  // 5. NTPサーバー初期化
+  initializeNTPServer();
 
-  // Initialize logging service first (required for unified log format)
-  LogConfig logConfig;
-  logConfig.minLevel = LOG_INFO;
-  logConfig.facility = FACILITY_NTP;
-  logConfig.localBuffering = true;
-  logConfig.maxBufferEntries = 50;
-  logConfig.retransmitInterval = 30000;  // 30 seconds
-  logConfig.maxRetransmitAttempts = 3;
-  strcpy(logConfig.syslogServer, "");     // Will be configured later
-  logConfig.syslogPort = 514;
-  loggingService->init(logConfig);
-  
-  // Set LoggingService references for components
-  displayManager.setLoggingService(loggingService);
-  networkManager.setLoggingService(loggingService);
-  networkManager.setConfigManager(&configManager);
-  timeManager.setLoggingService(loggingService);
-  systemMonitor->setLoggingService(loggingService);
-
-  // Initialize DisplayManager with unified logging
-  if (!displayManager.initialize()) {
-    LOG_ERR_MSG("DISPLAY", "DisplayManager initialization failed - continuing without display");
-  } else {
-    LOG_INFO_MSG("DISPLAY", "DisplayManager initialized successfully");
-  }
-  
-  // Initialize system modules  
-  networkManager.init();
-  
-  // Initialize Prometheus metrics (now using static instance)
-  prometheusMetrics->init();
-  LOG_INFO_MSG("SYSTEM", "PrometheusMetrics initialized");
-
-  // Log system startup
-  LOG_INFO_MSG("SYSTEM", "GPS NTP Server starting up");
-  LOG_INFO_F("SYSTEM", "RAM: %lu bytes, Flash: %lu bytes", 
-             (unsigned long)17856, (unsigned long)406192);
-
-  // Initialize system monitor (now using static instance)
-  systemMonitor->init();
-  LOG_INFO_MSG("SYSTEM", "SystemMonitor initialized");
-  
-  // Initialize TimeManager and set GpsMonitor reference
-  timeManager.init();
-  timeManager.setGpsMonitor(&systemMonitor->getGpsMonitor());
-  LOG_INFO_MSG("SYSTEM", "TimeManager initialized with GPS monitor reference");
-
-  // Initialize NTP server (now using static instance)
-  const UdpSocketManager& udpStatus = networkManager.getUdpStatus();
-  // Update the static instance with the UDP socket manager
-  ntpServerInstance = NtpServer(&ntpUdp, &timeManager, const_cast<UdpSocketManager*>(&udpStatus));
-  // Set LoggingService BEFORE calling init()
-  ntpServer->setLoggingService(loggingService);
-  ntpServer->init();
-  LOG_INFO_MSG("NTP", "NTP Server initialized and listening on port 123");
-  
-  // Connect ConfigManager, PrometheusMetrics, and LoggingService to web server
-  webServer.setConfigManager(&configManager);
-  webServer.setPrometheusMetrics(prometheusMetrics);
-  webServer.setLoggingService(loggingService);
-  LOG_INFO_MSG("WEB", "WebServer configured with ConfigManager, PrometheusMetrics, and LoggingService");
-
-  // Webサーバーを起動（ネットワーク接続状態に関わらず起動）
+  // 6. Webサーバー初期化と起動
+  initializeWebServer();
   server.begin();
   LOG_INFO_F("WEB", "Web server started on port 80 - Network connected: %s", 
              networkManager.isConnected() ? "YES" : "NO");
-  if (networkManager.isConnected()) {
-    LOG_INFO_F("WEB", "Web server accessible at http://%d.%d.%d.%d", 
-               Ethernet.localIP()[0], Ethernet.localIP()[1], 
-               Ethernet.localIP()[2], Ethernet.localIP()[3]);
-  } else {
-    LOG_INFO_MSG("WEB", "Web server accessible at http://0.0.0.0");
-  }
 
-  // setup GPS
+  // 7. GPS/RTC ハードウェア初期化
   LOG_INFO_MSG("GPS", "Starting GPS initialization");
   setupGps();
-
-  // Setup RTC after GPS initialization (they share Wire1 bus)
   LOG_INFO_MSG("RTC", "Starting RTC initialization on Wire1 bus");
   setupRtc();
 
-  // GPS PPS interrupt
-  attachInterrupt(digitalPinToInterrupt(GPS_PPS_PIN), trigerPps, FALLING);
+  // 8. PPS割り込み設定
+  attachInterrupt(digitalPinToInterrupt(GPS_PPS_PIN), triggerPps, FALLING);
   LOG_INFO_MSG("GPS", "PPS interrupt attached to GPIO pin");
 
-  // Initialize SystemController and register all services
+  // 9. システムコントローラ初期化
   systemController.init();
   systemController.setServices(&timeManager, &networkManager, systemMonitor,
                                ntpServer, &displayManager, &configManager,
                                loggingService, prometheusMetrics);
   
-  // Update hardware status in SystemController
   systemController.updateGpsStatus(gpsConnected);
   systemController.updateNetworkStatus(networkManager.isConnected());
-  systemController.updateDisplayStatus(true); // Display is always available
-  
+  systemController.updateDisplayStatus(true);
   LOG_INFO_MSG("SYSTEM", "SystemController initialized and services registered");
-  
-  // Initialize PhysicalReset with DisplayManager and ConfigManager
-  if (physicalReset.initialize(&displayManager, &configManager)) {
-    LOG_INFO_MSG("RESET", "PhysicalReset initialized successfully");
-  } else {
-    LOG_ERR_MSG("RESET", "PhysicalReset initialization failed");
-    REPORT_ERROR(ErrorType::SYSTEM_ERROR, "RESET", "PhysicalReset initialization failed");
-  }
-  
+
+  // 10. 物理リセット機能初期化
+  initializePhysicalReset();
+
   LOG_INFO_MSG("SYSTEM", "System initialization completed successfully");
 }
 
