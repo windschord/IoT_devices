@@ -21,8 +21,6 @@ bool DisplayManager::testI2CAddress(uint8_t address) {
     if (result == 0) {
         if (loggingService) {
             loggingService->infof("DISPLAY", "OLED found at I2C address 0x%02X", address);
-        } else {
-            Serial.printf("OLED found at I2C address 0x%02X\n", address);
         }
         return true;
     }
@@ -61,8 +59,6 @@ bool DisplayManager::initialize() {
     
     if (loggingService) {
         loggingService->infof("DISPLAY", "Creating OLED instance at address 0x%02X", i2cAddress);
-    } else {
-        Serial.printf("Creating OLED instance at address 0x%02X\n", i2cAddress);
     }
     
     // Create OLED instance: OLED(SDA, SCL, RESET, WIDTH, HEIGHT, CONTROLLER, ADDRESS)
@@ -208,7 +204,9 @@ void DisplayManager::displayInfo(const GpsSummaryData& gpsSummaryData) {
             break;
         default:
 #ifdef DEBUG_DISPLAY_GPS
-            Serial.printf("Displaying default GPS Time screen (mode: %d)\n", currentMode);
+            if (loggingService) {
+                loggingService->debugf("DISPLAY", "Displaying default GPS Time screen (mode: %d)", currentMode);
+            }
 #endif
             displayGpsTimeScreen(gpsSummaryData);
             break;
@@ -262,9 +260,11 @@ void DisplayManager::nextDisplayMode() {
     // Wake display when mode changes
     wakeDisplay();
     
-    Serial.printf("Display mode changed from %d to %d\n", oldMode, currentMode);
-    Serial.printf("DisplayManager state: displayCount=%d, shouldDisplay=%s, initialized=%s\n", 
-                  displayCount, shouldDisplay() ? "YES" : "NO", initialized ? "YES" : "NO");
+    if (loggingService) {
+        loggingService->debugf("DISPLAY", "Display mode changed from %d to %d", oldMode, currentMode);
+        loggingService->debugf("DISPLAY", "DisplayManager state: displayCount=%d, shouldDisplay=%s, initialized=%s", 
+                      displayCount, shouldDisplay() ? "YES" : "NO", initialized ? "YES" : "NO");
+    }
 }
 
 void DisplayManager::setErrorState(const String& message) {
@@ -564,7 +564,9 @@ void DisplayManager::commitDisplayUpdate() {
         frameBuffer.dirty = false;
         
         #ifdef DEBUG_DISPLAY_PERFORMANCE
-        Serial.printf("Display updated at %lu ms\n", frameBuffer.lastUpdate);
+        if (loggingService) {
+            loggingService->debugf("DISPLAY", "Display updated at %lu ms", frameBuffer.lastUpdate);
+        }
         #endif
     }
 }

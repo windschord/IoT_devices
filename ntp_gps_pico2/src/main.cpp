@@ -367,10 +367,11 @@ void setup()
   ntpServer->init();
   LOG_INFO_MSG("NTP", "NTP Server initialized and listening on port 123");
   
-  // Connect ConfigManager and PrometheusMetrics to web server
+  // Connect ConfigManager, PrometheusMetrics, and LoggingService to web server
   webServer.setConfigManager(&configManager);
   webServer.setPrometheusMetrics(prometheusMetrics);
-  LOG_INFO_MSG("WEB", "WebServer configured with ConfigManager and PrometheusMetrics");
+  webServer.setLoggingService(loggingService);
+  LOG_INFO_MSG("WEB", "WebServer configured with ConfigManager, PrometheusMetrics, and LoggingService");
 
   // Webサーバーを起動（ネットワーク接続状態に関わらず起動）
   server.begin();

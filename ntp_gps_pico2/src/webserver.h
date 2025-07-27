@@ -9,6 +9,7 @@
 class NtpServer; // Forward declaration
 class ConfigManager; // Forward declaration
 class PrometheusMetrics; // Forward declaration
+class LoggingService; // Forward declaration
 
 class WebServer
 {
@@ -17,11 +18,13 @@ public:
     void setNtpServer(NtpServer* ntpServerInstance) { ntpServer = ntpServerInstance; }
     void setConfigManager(ConfigManager* configManagerInstance) { configManager = configManagerInstance; }
     void setPrometheusMetrics(PrometheusMetrics* prometheusMetricsInstance) { prometheusMetrics = prometheusMetricsInstance; }
+    void setLoggingService(LoggingService* loggingServiceInstance) { loggingService = loggingServiceInstance; }
 
 private:
     NtpServer* ntpServer = nullptr;
     ConfigManager* configManager = nullptr;
     PrometheusMetrics* prometheusMetrics = nullptr;
+    LoggingService* loggingService = nullptr;
     
     void rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData);
     void gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSatData_t);

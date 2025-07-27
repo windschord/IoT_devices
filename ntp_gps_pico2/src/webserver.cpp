@@ -2,13 +2,16 @@
 #include "NtpServer.h"
 #include "ConfigManager.h"
 #include "PrometheusMetrics.h"
+#include "LoggingService.h"
 
 void WebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData)
 {
   EthernetClient client = server.available();
   if (client)
   {
-    stream.println("new client");
+    if (loggingService) {
+      loggingService->info("WEB", "New HTTP client connected");
+    }
     String s;
     // an http request ends with a blank line
     boolean currentLineIsBlank = true;
@@ -35,31 +38,41 @@ void WebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT
       }
     }
 
-    stream.print(s);
+    // HTTP request logging moved to LoggingService - raw request no longer printed
 
     if (s.indexOf("GET /gps ") >= 0)
     {
-      stream.println("GPS");
+      if (loggingService) {
+        loggingService->info("WEB", "Serving GPS details page");
+      }
       gpsPage(client, ubxNavSatData_t);
     }
     else if (s.indexOf("GET /metrics ") >= 0)
     {
-      stream.println("METRICS");
+      if (loggingService) {
+        loggingService->info("WEB", "Serving Prometheus metrics page");
+      }
       metricsPage(client);
     }
     else if (s.indexOf("GET /config ") >= 0)
     {
-      stream.println("CONFIG");
+      if (loggingService) {
+        loggingService->info("WEB", "Serving configuration page");
+      }
       configPage(client);
     }
     else if (s.indexOf("GET /api/config ") >= 0)
     {
-      stream.println("CONFIG_API_GET");
+      if (loggingService) {
+        loggingService->info("WEB", "Serving config API GET");
+      }
       configApiGet(client);
     }
     else if (s.indexOf("POST /api/config ") >= 0)
     {
-      stream.println("CONFIG_API_POST");
+      if (loggingService) {
+        loggingService->info("WEB", "Processing config API POST");
+      }
       // Extract POST data from request
       String postData = "";
       int contentStart = s.indexOf("\r\n\r\n");
@@ -70,21 +83,29 @@ void WebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT
     }
     else if (s.indexOf("POST /api/reset ") >= 0)
     {
-      stream.println("CONFIG_API_RESET");
+      if (loggingService) {
+        loggingService->warning("WEB", "Processing factory reset API");
+      }
       configApiReset(client);
     }
     else
     {
-      stream.println("ROOT");
+      if (loggingService) {
+        loggingService->info("WEB", "Serving root page");
+      }
       rootPage(client, gpsSummaryData);
     }
 
-    stream.println("sending response");
+    if (loggingService) {
+      loggingService->debug("WEB", "HTTP response sent to client");
+    }
     // give the web browser time to receive the data
     delay(1);
     // close the connection:
     client.stop();
-    stream.println("client disonnected");
+    if (loggingService) {
+      loggingService->info("WEB", "HTTP client disconnected");
+    }
   }
 }
 
