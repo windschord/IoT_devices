@@ -3,7 +3,7 @@
 #include <SPI.h>
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include "RTClib.h"
-#include <WebServer.h>
+// Removed WebServer.h to avoid conflicts with custom GpsWebServer
 #include <time.h>
 #include <EthernetUdp.h>
 
@@ -33,7 +33,7 @@
 SFE_UBLOX_GNSS myGNSS;
 EthernetServer server(80);
 EthernetUDP ntpUdp;
-WebServer webServer;
+GpsWebServer webServer;
 GpsClient gpsClient(Serial);
 RTC_DS3231 rtc;
 

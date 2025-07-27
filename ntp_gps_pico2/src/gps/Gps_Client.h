@@ -1,4 +1,7 @@
 
+#ifndef GPS_CLIENT_H
+#define GPS_CLIENT_H
+
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include "Gps_model.h"
 #include <QZQSM.h>
@@ -21,3 +24,5 @@ private:
     GpsSummaryData gpsSummaryData;
     const char *dwrd_to_str(uint32_t value);
 };
+
+#endif // GPS_CLIENT_H

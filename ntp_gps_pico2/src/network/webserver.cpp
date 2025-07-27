@@ -1,10 +1,10 @@
-#include <webserver.h>
+#include "webserver.h"
 #include "NtpServer.h"
 #include "../config/ConfigManager.h"
 #include "../system/PrometheusMetrics.h"
 #include "../config/LoggingService.h"
 
-void WebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData)
+void GpsWebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData)
 {
   EthernetClient client = server.available();
   if (client)
@@ -109,7 +109,7 @@ void WebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT
   }
 }
 
-void WebServer::printHeader(EthernetClient &client, String contentType)
+void GpsWebServer::printHeader(EthernetClient &client, String contentType)
 {
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: " + contentType);
@@ -117,7 +117,7 @@ void WebServer::printHeader(EthernetClient &client, String contentType)
   client.println();
 }
 
-void WebServer::rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData)
+void GpsWebServer::rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData)
 {
   printHeader(client, "text/html");
 
@@ -167,7 +167,7 @@ void WebServer::rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData)
   client.println("</body></html>");
 }
 
-void WebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSatData_t)
+void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSatData_t)
 {
   printHeader(client, "text/html");
 
@@ -229,7 +229,7 @@ void WebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSatDat
   client.println("</body></html>");
 }
 
-void WebServer::metricsPage(EthernetClient &client)
+void GpsWebServer::metricsPage(EthernetClient &client)
 {
   printHeader(client, "text/plain");
   
@@ -285,7 +285,7 @@ void WebServer::metricsPage(EthernetClient &client)
   }
 }
 
-void WebServer::configPage(EthernetClient &client) {
+void GpsWebServer::configPage(EthernetClient &client) {
   printHeader(client, "text/html");
   
   client.println("<!DOCTYPE HTML>");
@@ -459,7 +459,7 @@ void WebServer::configPage(EthernetClient &client) {
   client.println("</body></html>");
 }
 
-void WebServer::configApiGet(EthernetClient &client) {
+void GpsWebServer::configApiGet(EthernetClient &client) {
   if (configManager) {
     String configJson = configManager->configToJson();
     sendJsonResponse(client, configJson);
@@ -468,7 +468,7 @@ void WebServer::configApiGet(EthernetClient &client) {
   }
 }
 
-void WebServer::configApiPost(EthernetClient &client, String postData) {
+void GpsWebServer::configApiPost(EthernetClient &client, String postData) {
   if (!configManager) {
     sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
     return;
@@ -486,7 +486,7 @@ void WebServer::configApiPost(EthernetClient &client, String postData) {
   }
 }
 
-void WebServer::configApiReset(EthernetClient &client) {
+void GpsWebServer::configApiReset(EthernetClient &client) {
   if (!configManager) {
     sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
     return;
@@ -496,7 +496,7 @@ void WebServer::configApiReset(EthernetClient &client) {
   sendJsonResponse(client, "{\"success\": true, \"message\": \"Configuration reset to defaults\"}");
 }
 
-void WebServer::sendJsonResponse(EthernetClient &client, const String& json, int statusCode) {
+void GpsWebServer::sendJsonResponse(EthernetClient &client, const String& json, int statusCode) {
   client.printf("HTTP/1.1 %d %s\r\n", statusCode, statusCode == 200 ? "OK" : "Error");
   client.println("Content-Type: application/json");
   client.println("Connection: close");

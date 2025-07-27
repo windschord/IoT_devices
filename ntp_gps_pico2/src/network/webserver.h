@@ -1,5 +1,5 @@
-#ifndef WEBSERVER_H
-#define WEBSERVER_H
+#ifndef GPS_WEBSERVER_H
+#define GPS_WEBSERVER_H
 
 #include <Ethernet.h>
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
@@ -11,7 +11,7 @@ class ConfigManager; // Forward declaration
 class PrometheusMetrics; // Forward declaration
 class LoggingService; // Forward declaration
 
-class WebServer
+class GpsWebServer
 {
 public:
     void handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData);
