@@ -5,18 +5,25 @@
 #include "SystemTypes.h"
 #include "Gps_Client.h"
 
+// Forward declaration for LoggingService
+class LoggingService;
+
 class SystemMonitor {
 private:
     GpsMonitor gpsMonitor;
     GpsClient* gpsClient;
     bool* gpsConnected;
     volatile bool* ppsReceived;
+    LoggingService* loggingService;
 
 public:
     SystemMonitor(GpsClient* gpsClientInstance, bool* gpsConnectedPtr, volatile bool* ppsReceivedPtr);
     
     void init();
     void monitorGpsSignal();
+    
+    // LoggingService integration
+    void setLoggingService(LoggingService* loggingServiceInstance);
     
     bool isInFallbackMode() const { return gpsMonitor.inFallbackMode; }
     int getSignalQuality() const { return gpsMonitor.signalQuality; }

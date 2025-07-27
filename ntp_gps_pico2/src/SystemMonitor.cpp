@@ -4,10 +4,14 @@
 #include "LoggingService.h"
 
 SystemMonitor::SystemMonitor(GpsClient* gpsClientInstance, bool* gpsConnectedPtr, volatile bool* ppsReceivedPtr)
-    : gpsClient(gpsClientInstance), gpsConnected(gpsConnectedPtr), ppsReceived(ppsReceivedPtr) {
+    : gpsClient(gpsClientInstance), gpsConnected(gpsConnectedPtr), ppsReceived(ppsReceivedPtr), loggingService(nullptr) {
     
     // Initialize GPS monitoring structure
     gpsMonitor = {0, 0, 30000, 60000, false, false, 0, 0, false};
+}
+
+void SystemMonitor::setLoggingService(LoggingService* loggingServiceInstance) {
+    loggingService = loggingServiceInstance;
 }
 
 void SystemMonitor::init() {

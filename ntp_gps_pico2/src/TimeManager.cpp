@@ -156,16 +156,18 @@ unsigned long TimeManager::getHighPrecisionTime() {
         static unsigned long lastGpsTimeDebug = 0;
         if (millis() - lastGpsTimeDebug > 5000) { // Every 5 seconds
 #ifdef DEBUG_TIME_MANAGER
-            Serial.printf("GPS Time Detail Debug:\n");
-            Serial.printf("  timeSync->gpsTime: %lu (Unix seconds)\n", timeSync->gpsTime);
-            Serial.printf("  64-bit gpsTimeMs: %llu (milliseconds)\n", gpsTimeMs64);
+            if (loggingService) {
+                loggingService->debug("TIME", "GPS Time Detail Debug:");
+                loggingService->debugf("TIME", "  timeSync->gpsTime: %lu (Unix seconds)", timeSync->gpsTime);
+                loggingService->debugf("TIME", "  64-bit gpsTimeMs: %llu (milliseconds)", gpsTimeMs64);
+                loggingService->debugf("TIME", "  32-bit max: %lu", ULONG_MAX);
+                loggingService->debugf("TIME", "  elapsed microseconds: %lu", elapsed);
+                loggingService->debugf("TIME", "  elapsed milliseconds: %llu", elapsedMs64);
+                loggingService->debugf("TIME", "  64-bit result: %llu (milliseconds)", result64);
+                loggingService->debugf("TIME", "  final 32-bit result: %lu (milliseconds)", result);
+                loggingService->debugf("TIME", "  result as seconds: %lu", result / 1000);
+            }
 #endif
-            Serial.printf("  32-bit max: %lu\n", ULONG_MAX);
-            Serial.printf("  elapsed microseconds: %lu\n", elapsed);
-            Serial.printf("  elapsed milliseconds: %llu\n", elapsedMs64);
-            Serial.printf("  64-bit result: %llu (milliseconds)\n", result64);
-            Serial.printf("  final 32-bit result: %lu (milliseconds)\n", result);
-            Serial.printf("  result as seconds: %lu\n", result / 1000);
             lastGpsTimeDebug = millis();
         }
         
@@ -297,12 +299,12 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
         Serial.print(", Time Valid: ");
         Serial.print(gpsData.timeValid ? "YES" : "NO");
 #endif
-        Serial.print(", Date Valid: ");
-        Serial.print(gpsData.dateValid ? "YES" : "NO");
-        Serial.print(", Synchronized: ");
-        Serial.print(timeSync->synchronized ? "YES" : "NO");
-        Serial.print(", Fallback: ");
-        Serial.println(gpsMonitor && gpsMonitor->inFallbackMode ? "YES" : "NO");
+        if (loggingService) {
+            loggingService->debugf("TIME", "GPS Sync Debug - Date Valid: %s, Synchronized: %s, Fallback: %s",
+                                 gpsData.dateValid ? "YES" : "NO",
+                                 timeSync->synchronized ? "YES" : "NO",
+                                 gpsMonitor && gpsMonitor->inFallbackMode ? "YES" : "NO");
+        }
         lastDebugTime = now;
     }
     
@@ -326,6 +328,7 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
             timeinfo.tm_min = gpsData.min;
             timeinfo.tm_sec = gpsData.sec;
             
+#ifdef DEBUG_GPS_SYNC
             // Debug converted timeinfo
             Serial.printf("timeinfo - tm_year: %d, tm_mon: %d, tm_mday: %d\n",
                          timeinfo.tm_year, timeinfo.tm_mon, timeinfo.tm_mday);
@@ -338,6 +341,11 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
             time_t utc_result = gpsTimeToUnixTimestamp(gpsData.year, gpsData.month, gpsData.day,
                                                       gpsData.hour, gpsData.min, gpsData.sec);
             Serial.printf("UTC calculation result: %lu (Unix timestamp)\n", utc_result);
+#else
+            // 新しいUTC計算関数の結果（非デバッグ時）
+            time_t utc_result = gpsTimeToUnixTimestamp(gpsData.year, gpsData.month, gpsData.day,
+                                                      gpsData.hour, gpsData.min, gpsData.sec);
+#endif
             
             // UTCタイムスタンプを使用（より信頼性が高い）
             timeSync->gpsTime = utc_result;
@@ -366,6 +374,7 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
                          preCommError == 0 ? "SUCCESS" : "FAILED", preCommError);
 #endif
             
+#ifdef DEBUG_GPS_SYNC
             // Manual DS3231 time setting (bypassing uRTCLib)
             Serial.println("Manual DS3231 time setting:");
             
@@ -379,6 +388,15 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
             
             Serial.printf("BCD values: sec=%02X min=%02X hour=%02X day=%02X month=%02X year=%02X\n",
                          secBCD, minBCD, hourBCD, dayBCD, monthBCD, yearBCD);
+#else
+            // Convert decimal to BCD (non-debug)
+            byte secBCD = ((gpsData.sec / 10) << 4) | (gpsData.sec % 10);
+            byte minBCD = ((gpsData.min / 10) << 4) | (gpsData.min % 10);
+            byte hourBCD = ((gpsData.hour / 10) << 4) | (gpsData.hour % 10);
+            byte dayBCD = ((gpsData.day / 10) << 4) | (gpsData.day % 10);
+            byte monthBCD = ((gpsData.month / 10) << 4) | (gpsData.month % 10);
+            byte yearBCD = (((gpsData.year % 100) / 10) << 4) | ((gpsData.year % 100) % 10);
+#endif
             
             // Write to DS3231 registers directly
             extern TwoWire Wire1;
@@ -393,8 +411,10 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
             Wire1.write(yearBCD);
             byte manualWriteError = Wire1.endTransmission();
             
+#ifdef DEBUG_GPS_SYNC
             Serial.printf("Manual DS3231 write result: %s (error: %d)\n",
                          manualWriteError == 0 ? "SUCCESS" : "FAILED", manualWriteError);
+#endif
             
             // RTClib method - create DateTime object and adjust RTC
             DateTime gpsDateTime(gpsData.year, gpsData.month, gpsData.day,
@@ -408,6 +428,7 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
             // Small delay to ensure write completes
             delay(10);
             
+#ifdef DEBUG_GPS_SYNC
             // Manual verification - read DS3231 registers directly
             Serial.println("Manual DS3231 verification:");
             Wire1.beginTransmission(0x68);
@@ -439,6 +460,7 @@ void TimeManager::processPpsSync(const GpsSummaryData& gpsData) {
                                  yearDec, monthDec, dateDec, hourDec, minDec, secDec);
                 }
             }
+#endif
             
             // Verify RTC was updated correctly using RTClib
             DateTime afterUpdate = rtc->now();

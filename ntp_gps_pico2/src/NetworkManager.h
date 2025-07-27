@@ -6,8 +6,9 @@
 #include <EthernetUdp.h>
 #include "SystemTypes.h"
 
-// Forward declaration for LoggingService
+// Forward declarations
 class LoggingService;
+class ConfigManager;
 
 class NetworkManager {
 private:
@@ -15,6 +16,7 @@ private:
     UdpSocketManager udpManager;
     EthernetUDP* ntpUdp;
     LoggingService* loggingService;
+    ConfigManager* configManager;
     byte mac[6];
     
     // Performance optimization: Non-blocking initialization state machine
@@ -33,6 +35,7 @@ private:
 public:
     NetworkManager(EthernetUDP* udpInstance);
     void setLoggingService(LoggingService* loggingServiceInstance) { loggingService = loggingServiceInstance; }
+    void setConfigManager(ConfigManager* configManagerInstance) { configManager = configManagerInstance; }
     
     void init();
     void monitorConnection();
