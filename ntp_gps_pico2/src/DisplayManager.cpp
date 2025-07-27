@@ -32,8 +32,6 @@ bool DisplayManager::testI2CAddress(uint8_t address) {
 bool DisplayManager::initialize() {
     if (loggingService) {
         loggingService->info("DISPLAY", "Initializing OLED display...");
-    } else {
-        Serial.println("Initializing OLED display...");
     }
     
     // Try common OLED I2C addresses
@@ -51,8 +49,6 @@ bool DisplayManager::initialize() {
     if (!found) {
         if (loggingService) {
             loggingService->error("DISPLAY", "No OLED display found");
-        } else {
-            Serial.println("No OLED display found");
         }
         return false;
     }
@@ -75,43 +71,31 @@ bool DisplayManager::initialize() {
     if (!display) {
         if (loggingService) {
             loggingService->error("DISPLAY", "Failed to create OLED instance");
-        } else {
-            Serial.println("Failed to create OLED instance");
         }
         return false;
     }
     
     if (loggingService) {
         loggingService->info("DISPLAY", "Calling display->begin()...");
-    } else {
-        Serial.println("Calling display->begin()...");
     }
     display->begin();
     if (loggingService) {
         loggingService->info("DISPLAY", "display->begin() completed");
-    } else {
-        Serial.println("display->begin() completed");
     }
     
     // Enable SH1106 offset for 132x64 -> 128x64 conversion
     if (loggingService) {
         loggingService->info("DISPLAY", "Setting SH1106 offset...");
-    } else {
-        Serial.println("Setting SH1106 offset...");
     }
     display->useOffset(true);
     if (loggingService) {
         loggingService->info("DISPLAY", "SH1106 offset set");
-    } else {
-        Serial.println("SH1106 offset set");
     }
     
     // Set initialized flag BEFORE calling display methods
     initialized = true;
     if (loggingService) {
         loggingService->info("DISPLAY", "DisplayManager marked as initialized");
-    } else {
-        Serial.println("DisplayManager marked as initialized");
     }
     
     // Display startup screen
@@ -127,8 +111,6 @@ bool DisplayManager::initialize() {
     
     if (loggingService) {
         loggingService->info("DISPLAY", "OLED display initialized successfully");
-    } else {
-        Serial.println("OLED display initialized successfully");
     }
     
     return true;
@@ -139,8 +121,6 @@ void DisplayManager::init() {
     if (!initialize()) {
         if (loggingService) {
             loggingService->error("DISPLAY", "DisplayManager initialization failed");
-        } else {
-            Serial.println("DisplayManager initialization failed");
         }
         return;
     }
@@ -156,7 +136,9 @@ void DisplayManager::init() {
     displayOn = true;
     sleepCounter = 0;
     
-    Serial.println("OLED Display initialization completed");
+    if (loggingService) {
+        loggingService->info("DISPLAY", "OLED Display initialization completed");
+    }
 }
 
 // Button handling removed - now managed centrally by PhysicalReset class
@@ -210,13 +192,17 @@ void DisplayManager::displayInfo(const GpsSummaryData& gpsSummaryData) {
     switch (currentMode) {
         case DISPLAY_GPS_TIME:
 #ifdef DEBUG_DISPLAY_GPS
-            Serial.println("Displaying GPS Time screen");
+            if (loggingService) {
+                loggingService->debug("DISPLAY", "Displaying GPS Time screen");
+            }
 #endif
             displayGpsTimeScreen(gpsSummaryData);
             break;
         case DISPLAY_GPS_SATS:
 #ifdef DEBUG_DISPLAY_GPS
-            Serial.println("Displaying GPS Satellites screen");
+            if (loggingService) {
+                loggingService->debug("DISPLAY", "Displaying GPS Satellites screen");
+            }
 #endif
             displayGpsSatsScreen(gpsSummaryData);
             break;
@@ -523,7 +509,7 @@ const char* DisplayManager::getGnssName(int gnssId) {
 // Auto-sleep control methods
 void DisplayManager::wakeDisplay() {
     if (!displayOn) {
-        Serial.println("Waking display from sleep");
+        LOG_INFO_MSG("DISPLAY", "Waking display from sleep");
         displayOn = true;
         sleepCounter = 0;
         
@@ -539,7 +525,7 @@ void DisplayManager::wakeDisplay() {
 
 void DisplayManager::sleepDisplay() {
     if (displayOn) {
-        Serial.println("Putting display to sleep after 30 seconds of inactivity");
+        LOG_INFO_MSG("DISPLAY", "Putting display to sleep after 30 seconds of inactivity");
         displayOn = false;
         sleepCounter = 0;
         

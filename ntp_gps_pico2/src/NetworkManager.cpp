@@ -273,7 +273,9 @@ bool NetworkManager::updateInitialization() {
             pinMode(W5500_CS_PIN, OUTPUT);
             digitalWrite(W5500_CS_PIN, HIGH); // CS High
             
-            Serial.println("Starting non-blocking W5500 reset...");
+            if (loggingService) {
+                loggingService->info("NETWORK", "Starting non-blocking W5500 reset...");
+            }
             digitalWrite(W5500_RST_PIN, LOW);  // Reset Low
             stateChangeTime = currentTime;
             initState = RESET_LOW;
@@ -309,7 +311,9 @@ bool NetworkManager::updateInitialization() {
         case ETHERNET_INIT:
             // Initialize Ethernet library with CS pin
             Ethernet.init(W5500_CS_PIN);
-            Serial.println("Non-blocking W5500 initialization completed");
+            if (loggingService) {
+                loggingService->info("NETWORK", "Non-blocking W5500 initialization completed");
+            }
             initState = INIT_COMPLETE;
             return true;
             
@@ -323,12 +327,16 @@ bool NetworkManager::updateInitialization() {
 }
 
 bool NetworkManager::attemptDhcp() {
-    Serial.println("Attempting DHCP configuration...");
+    if (loggingService) {
+        loggingService->info("NETWORK", "Attempting DHCP configuration...");
+    }
     return (Ethernet.begin(mac) == 1);
 }
 
 void NetworkManager::setupStaticIp() {
-    Serial.println("DHCP failed, trying static IP fallback");
+    if (loggingService) {
+        loggingService->warning("NETWORK", "DHCP failed, trying static IP fallback");
+    }
     
     // Static IP configuration (example: 192.168.1.100)
     IPAddress ip(192, 168, 1, 100);
@@ -347,32 +355,42 @@ void NetworkManager::checkHardwareStatus() {
     switch(Ethernet.hardwareStatus()) {
         case EthernetNoHardware:
             if (!hardwareLogged) {
-                Serial.println("No hardware detected");
+                if (loggingService) {
+                    loggingService->warning("NETWORK", "No hardware detected");
+                }
                 hardwareLogged = true;
             }
             networkMonitor.isConnected = false;
             break;
         case EthernetW5100:
             if (!hardwareLogged) {
-                Serial.println("W5100 detected");
+                if (loggingService) {
+                    loggingService->info("NETWORK", "W5100 detected");
+                }
                 hardwareLogged = true;
             }
             break;
         case EthernetW5200:
             if (!hardwareLogged) {
-                Serial.println("W5200 detected");
+                if (loggingService) {
+                    loggingService->info("NETWORK", "W5200 detected");
+                }
                 hardwareLogged = true;
             }
             break;
         case EthernetW5500:
             if (!hardwareLogged) {
-                Serial.println("W5500 detected");
+                if (loggingService) {
+                    loggingService->info("NETWORK", "W5500 detected");
+                }
                 hardwareLogged = true;
             }
             break;
         default:
             if (!hardwareLogged) {
-                Serial.println("Unknown hardware");
+                if (loggingService) {
+                    loggingService->warning("NETWORK", "Unknown hardware");
+                }
                 hardwareLogged = true;
             }
             break;
@@ -381,7 +399,9 @@ void NetworkManager::checkHardwareStatus() {
 
 void NetworkManager::checkLinkStatus() {
     if (Ethernet.linkStatus() == LinkOFF) {
-        Serial.println("WARNING: Ethernet cable not connected");
+        if (loggingService) {
+            loggingService->warning("NETWORK", "Ethernet cable not connected");
+        }
         networkMonitor.isConnected = false;
     } else {
         IPAddress currentIP = Ethernet.localIP();
@@ -404,8 +424,6 @@ void NetworkManager::maintainDhcp() {
         case 1: // renewed fail
             if (loggingService) {
                 loggingService->warning("NETWORK", "DHCP renewal failed - attempting fallback");
-            } else {
-                Serial.println("DHCP renewal failed");
             }
             networkMonitor.dhcpActive = false;
             digitalWrite(LED_NETWORK_PIN, LOW); // Turn off network LED
@@ -415,10 +433,6 @@ void NetworkManager::maintainDhcp() {
                 IPAddress currentIP = Ethernet.localIP();
                 loggingService->infof("NETWORK", "DHCP renewed successfully - IP: %d.%d.%d.%d",
                                     currentIP[0], currentIP[1], currentIP[2], currentIP[3]);
-            } else {
-                Serial.println("DHCP renewed successfully");
-                Serial.print("IP: ");
-                Serial.println(Ethernet.localIP());
             }
             networkMonitor.dhcpActive = true;
             networkMonitor.isConnected = true;
@@ -427,8 +441,6 @@ void NetworkManager::maintainDhcp() {
         case 3: // rebind fail
             if (loggingService) {
                 loggingService->warning("NETWORK", "DHCP rebind failed - network connectivity lost");
-            } else {
-                Serial.println("DHCP rebind failed");
             }
             networkMonitor.dhcpActive = false;
             networkMonitor.isConnected = false;
@@ -439,10 +451,6 @@ void NetworkManager::maintainDhcp() {
                 IPAddress currentIP = Ethernet.localIP();
                 loggingService->infof("NETWORK", "DHCP rebound successfully - IP: %d.%d.%d.%d",
                                     currentIP[0], currentIP[1], currentIP[2], currentIP[3]);
-            } else {
-                Serial.println("DHCP rebound successfully");
-                Serial.print("IP: ");
-                Serial.println(Ethernet.localIP());
             }
             networkMonitor.dhcpActive = true;
             networkMonitor.isConnected = true;
@@ -476,8 +484,6 @@ void NetworkManager::monitorConnection() {
     if (wasConnected && !networkMonitor.isConnected) {
         if (loggingService) {
             loggingService->warning("NETWORK", "Network connection lost - LED status updated");
-        } else {
-            Serial.println("Network connection lost");
         }
         digitalWrite(LED_NETWORK_PIN, LOW); // Turn off network status LED (Blue)
     } else if (!wasConnected && networkMonitor.isConnected) {
@@ -487,14 +493,6 @@ void NetworkManager::monitorConnection() {
                                 currentIP[0], currentIP[1], currentIP[2], currentIP[3],
                                 Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], 
                                 Ethernet.gatewayIP()[2], Ethernet.gatewayIP()[3]);
-        } else {
-            Serial.println("Network connection established");
-            Serial.print("IP: ");
-            Serial.print(Ethernet.localIP());
-            Serial.print(", Gateway: ");
-            Serial.print(Ethernet.gatewayIP());
-            Serial.print(", DNS: ");
-            Serial.println(Ethernet.dnsServerIP());
         }
         digitalWrite(LED_NETWORK_PIN, HIGH); // Turn on network status LED (Blue) - 常時点灯
     }
@@ -513,20 +511,12 @@ void NetworkManager::attemptReconnection() {
         if (loggingService) {
             loggingService->infof("NETWORK", "Attempting reconnection (attempt %d/%d)",
                                 networkMonitor.reconnectAttempts, networkMonitor.maxReconnectAttempts);
-        } else {
-            Serial.print("Attempting network reconnection (attempt ");
-            Serial.print(networkMonitor.reconnectAttempts);
-            Serial.print("/");
-            Serial.print(networkMonitor.maxReconnectAttempts);
-            Serial.println(")");
         }
         
         // W5500 reset and reconnection
         if (Ethernet.hardwareStatus() != EthernetNoHardware) {
             if (loggingService) {
                 loggingService->info("NETWORK", "Resetting W5500 hardware for reconnection");
-            } else {
-                Serial.println("Resetting W5500...");
             }
             
             // Hardware reset sequence
@@ -539,8 +529,6 @@ void NetworkManager::attemptReconnection() {
             if (Ethernet.begin(mac) == 0) {
                 if (loggingService) {
                     loggingService->warning("NETWORK", "DHCP reconnection failed - will retry in 30 seconds");
-                } else {
-                    Serial.println("DHCP failed, will retry in 30 seconds");
                 }
                 digitalWrite(LED_NETWORK_PIN, LOW); // Ensure LED is off
             } else {
@@ -548,8 +536,6 @@ void NetworkManager::attemptReconnection() {
                 if (loggingService) {
                     loggingService->infof("NETWORK", "DHCP reconnection successful - IP: %d.%d.%d.%d",
                                         reconnectedIP[0], reconnectedIP[1], reconnectedIP[2], reconnectedIP[3]);
-                } else {
-                    Serial.println("DHCP reconnection successful");
                 }
                 networkMonitor.isConnected = true;
                 networkMonitor.dhcpActive = true;
@@ -583,7 +569,9 @@ void NetworkManager::manageUdpSockets() {
             
             if (needsRefresh || hasSocketErrors) {
                 if (udpManager.ntpSocketOpen) {
-                    Serial.println("Refreshing NTP UDP socket for W5500 reliability");
+                    if (loggingService) {
+                        loggingService->info("NETWORK", "Refreshing NTP UDP socket for W5500 reliability");
+                    }
                     ntpUdp->stop();
                     delay(10); // Brief delay to ensure socket is properly closed
                 }
@@ -593,9 +581,13 @@ void NetworkManager::manageUdpSockets() {
                     networkMonitor.ntpServerActive = true;
                     udpManager.socketErrors = 0;
                     lastSocketRefresh = now;
-                    Serial.println("NTP UDP socket refreshed successfully");
+                    if (loggingService) {
+                        loggingService->info("NETWORK", "NTP UDP socket refreshed successfully");
+                    }
                 } else {
-                    Serial.println("Failed to refresh NTP UDP socket");
+                    if (loggingService) {
+                        loggingService->warning("NETWORK", "Failed to refresh NTP UDP socket");
+                    }
                     udpManager.socketErrors++;
                     udpManager.ntpSocketOpen = false;
                     networkMonitor.ntpServerActive = false;
@@ -603,20 +595,28 @@ void NetworkManager::manageUdpSockets() {
             }
             // Normal socket management
             else if (!udpManager.ntpSocketOpen) {
-                Serial.println("Opening NTP UDP socket on port 123");
+                if (loggingService) {
+                    loggingService->info("NETWORK", "Opening NTP UDP socket on port 123");
+                }
                 if (ntpUdp->begin(NTP_PORT)) {
                     udpManager.ntpSocketOpen = true;
                     networkMonitor.ntpServerActive = true;
-                    Serial.println("NTP UDP socket opened successfully");
+                    if (loggingService) {
+                        loggingService->info("NETWORK", "NTP UDP socket opened successfully");
+                    }
                 } else {
-                    Serial.println("Failed to open NTP UDP socket");
+                    if (loggingService) {
+                        loggingService->warning("NETWORK", "Failed to open NTP UDP socket");
+                    }
                     udpManager.socketErrors++;
                 }
             }
         } else {
             // Close UDP socket when network is disconnected
             if (udpManager.ntpSocketOpen) {
-                Serial.println("Closing NTP UDP socket due to network disconnection");
+                if (loggingService) {
+                    loggingService->info("NETWORK", "Closing NTP UDP socket due to network disconnection");
+                }
                 ntpUdp->stop();
                 udpManager.ntpSocketOpen = false;
                 networkMonitor.ntpServerActive = false;
