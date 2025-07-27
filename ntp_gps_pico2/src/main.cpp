@@ -556,6 +556,10 @@ void loop()
       prometheusMetrics->update(&ntpStats, &gpsData, &gpsMonitor, ppsCount);
     }
     
+    // Performance optimization: Invalidate Web GPS cache to ensure fresh data
+    // This ensures clients get updated data while maintaining cache benefits
+    webServer.invalidateGpsCache();
+    
     lastLowPriorityUpdate = currentTime;
   }
   

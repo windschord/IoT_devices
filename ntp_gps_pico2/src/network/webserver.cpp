@@ -471,12 +471,12 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("  "));
   client.println(F("  const stats = gpsData.constellation_stats;"));
   client.println(F("  let html = '';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>Total</strong><br>' + stats.satellites_total + '</div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>Used</strong><br>' + stats.satellites_used + '</div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>GPS</strong><br>' + stats.gps.used + '/' + stats.gps.total + '</div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>GLONASS</strong><br>' + stats.glonass.used + '/' + stats.glonass.total + '</div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>Galileo</strong><br>' + stats.galileo.used + '/' + stats.galileo.total + '</div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>BeiDou</strong><br>' + stats.beidou.used + '/' + stats.beidou.total + '</div>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>Total</strong><br>' + stats.satellites_total + '</div>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>Used</strong><br>' + stats.satellites_used + '</div>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>GPS</strong><br>' + stats.gps.used + '/' + stats.gps.total + '</div>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>GLONASS</strong><br>' + stats.glonass.used + '/' + stats.glonass.total + '</div>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>Galileo</strong><br>' + stats.galileo.used + '/' + stats.galileo.total + '</div>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>BeiDou</strong><br>' + stats.beidou.used + '/' + stats.beidou.total + '</div>';"));
   client.println(F("  document.getElementById('constellationStats').innerHTML = html;"));
   client.println(F("  "));
   client.println(F("  // Update constellation controls"));
@@ -501,12 +501,12 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("    const enabled = enables[constellation.key];"));
   client.println(F("    const checked = document.getElementById('filter_' + constellation.key) ? "));
   client.println(F("                   document.getElementById('filter_' + constellation.key).checked : true;"));
-  client.println(F("    html += '<div style=\"margin: 5px 0; display: flex; align-items: center;\">';"));
-  client.println(F("    html += '<input type=\"checkbox\" id=\"filter_' + constellation.key + '\"';"));
-  client.println(F("    html += (checked ? ' checked' : '') + ' onchange=\"updateDisplay()\">';"));
-  client.println(F("    html += '<div style=\"width: 16px; height: 16px; background: ' + constellation.color + ';';"));
-  client.println(F("    html += ' margin: 0 8px; border-radius: 2px;\"></div>';"));
-  client.println(F("    html += '<label for=\"filter_' + constellation.key + '\" style=\"font-size: 12px;\">';"));
+  client.println(F("    html += '<div style=\\\"margin: 5px 0; display: flex; align-items: center;\\\">';"));
+  client.println(F("    html += '<input type=\\\"checkbox\\\" id=\\\"filter_' + constellation.key + '\\\"';"));
+  client.println(F("    html += (checked ? ' checked' : '') + ' onchange=\\\"updateDisplay()\\\">';"));
+  client.println(F("    html += '<div style=\\\"width: 16px; height: 16px; background: ' + constellation.color + ';';"));
+  client.println(F("    html += ' margin: 0 8px; border-radius: 2px;\\\"></div>';"));
+  client.println(F("    html += '<label for=\\\"filter_' + constellation.key + '\\\" style=\\\"font-size: 12px;\\\">';"));
   client.println(F("    html += constellation.name + (enabled ? ' (Enabled)' : ' (Disabled)');"));
   client.println(F("    html += '</label>';"));
   client.println(F("    html += '</div>';"));
@@ -562,30 +562,30 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("  const ttffFormatted = ttffMinutes > 0 ? (ttffMinutes + 'm ' + ttffSeconds + 's') : (ttffSeconds + 's');"));
   client.println(F("  "));
   client.println(F("  let html = '';"));
-  client.println(F("  html += '<div class=\"stat-card\" style=\"background-color: ' + fixColor + '; color: white;\">';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\" style=\\\"background-color: ' + fixColor + '; color: white;\\\">';"));
   client.println(F("  html += '<strong>Fix Status</strong><br>' + fixType + '<br>';"));
   client.println(F("  html += '<small>Quality: ' + fixQuality + '</small></div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>UTC Date & Time</strong><br>' + utcFormatted + '<br>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>UTC Date & Time</strong><br>' + utcFormatted + '<br>';"));
   client.println(F("  html += '<small>GPS Week: ' + Math.floor(gpsData.utc_time / 604800) + '</small></div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>Latitude</strong><br>' + gpsData.latitude.toFixed(6) + '°<br>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>Latitude</strong><br>' + gpsData.latitude.toFixed(6) + '°<br>';"));
   client.println(F("  html += '<small>WGS84 Datum</small></div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>Longitude</strong><br>' + gpsData.longitude.toFixed(6) + '°<br>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>Longitude</strong><br>' + gpsData.longitude.toFixed(6) + '°<br>';"));
   client.println(F("  html += '<small>WGS84 Datum</small></div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>Altitude</strong><br>' + gpsData.altitude.toFixed(1) + ' m<br>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>Altitude</strong><br>' + gpsData.altitude.toFixed(1) + ' m<br>';"));
   client.println(F("  html += '<small>Above Mean Sea Level</small></div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>Speed</strong><br>' + speedKmh + ' km/h<br>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>Speed</strong><br>' + speedKmh + ' km/h<br>';"));
   client.println(F("  html += '<small>' + speedKnots + ' knots</small></div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>Course</strong><br>' + gpsData.course.toFixed(1) + '° ' + courseDirection + '<br>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>Course</strong><br>' + gpsData.course.toFixed(1) + '° ' + courseDirection + '<br>';"));
   client.println(F("  html += '<small>True North</small></div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>3D Accuracy</strong><br>' + gpsData.accuracy_3d.toFixed(2) + ' m<br>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>3D Accuracy</strong><br>' + gpsData.accuracy_3d.toFixed(2) + ' m<br>';"));
   client.println(F("  html += '<small>95% Confidence</small></div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>HDOP</strong><br>' + gpsData.hdop.toFixed(2) + '<br>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>HDOP</strong><br>' + gpsData.hdop.toFixed(2) + '<br>';"));
   client.println(F("  html += '<small>Horizontal DOP</small></div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>VDOP</strong><br>' + gpsData.vdop.toFixed(2) + '<br>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>VDOP</strong><br>' + gpsData.vdop.toFixed(2) + '<br>';"));
   client.println(F("  html += '<small>Vertical DOP</small></div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>PDOP</strong><br>' + gpsData.pdop.toFixed(2) + '<br>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>PDOP</strong><br>' + gpsData.pdop.toFixed(2) + '<br>';"));
   client.println(F("  html += '<small>Position DOP</small></div>';"));
-  client.println(F("  html += '<div class=\"stat-card\"><strong>Time To First Fix</strong><br>' + ttffFormatted + '<br>';"));
+  client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>Time To First Fix</strong><br>' + ttffFormatted + '<br>';"));
   client.println(F("  html += '<small>Cold Start</small></div>';"));
   client.println(F("  document.getElementById('dateViewStats').innerHTML = html;"));
   client.println(F("}"));
@@ -658,7 +658,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("    updateConnectionStatus();"));
   client.println(F("    "));
   client.println(F("    // Restart regular updates"));
-  client.println(F("    updateInterval = setInterval(fetchGpsData, 1000);"));
+  client.println(F("    updateInterval = setInterval(fetchGpsData, 2000); // Optimized: 2 second intervals"));
   client.println(F("    fetchGpsData(); // Immediate attempt"));
   client.println(F("  }, backoffTime);"));
   client.println(F("}"));
@@ -724,7 +724,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("document.addEventListener('DOMContentLoaded', function() {"));
   client.println(F("  // Initial data fetch"));
   client.println(F("  fetchGpsData();"));
-  client.println(F("  updateInterval = setInterval(fetchGpsData, 1000);"));
+  client.println(F("  updateInterval = setInterval(fetchGpsData, 2000); // Optimized: 2 second intervals"));
   client.println(F("  "));
   client.println(F("  // Add event listeners for all interactive controls"));
   client.println(F("  document.getElementById('showNotTracked').addEventListener('change', (e) => {"));
@@ -1039,16 +1039,33 @@ void GpsWebServer::configApiReset(EthernetClient &client) {
 }
 
 void GpsWebServer::gpsApiGet(EthernetClient &client) {
+  unsigned long requestStartTime = millis();
+  requestCount++;
+  
   if (!gpsClient) {
     sendJsonResponse(client, "{\"error\": \"GPS Client not available\"}", 500);
     return;
   }
   
-  // Get Web GPS data
+  // Performance optimization: Check cache validity
+  unsigned long currentTime = millis();
+  bool cacheExpired = (currentTime - lastGpsDataUpdate) > GPS_DATA_CACHE_INTERVAL;
+  
+  if (gpsDataCacheValid && !cacheExpired && cachedGpsJson.length() > 0) {
+    // Use cached data for improved performance
+    sendJsonResponse(client, cachedGpsJson);
+    
+    // Update performance metrics
+    unsigned long responseTime = millis() - requestStartTime;
+    totalResponseTime += responseTime;
+    return;
+  }
+  
+  // Get fresh Web GPS data
   web_gps_data_t gpsData = gpsClient->getWebGpsData();
   
-  // Create JSON document (using a large buffer for satellite data)
-  DynamicJsonDocument doc(8192);
+  // Create JSON document (optimized buffer size)
+  DynamicJsonDocument doc(6144); // Reduced from 8192 to 6144 for memory efficiency
   
   // Position and Time Information
   doc["latitude"] = gpsData.latitude;
@@ -1126,8 +1143,17 @@ void GpsWebServer::gpsApiGet(EthernetClient &client) {
   String jsonString;
   serializeJson(doc, jsonString);
   
+  // Update cache for performance optimization
+  cachedGpsJson = jsonString;
+  lastGpsDataUpdate = currentTime;
+  gpsDataCacheValid = true;
+  
   // Send response
   sendJsonResponse(client, jsonString);
+  
+  // Update performance metrics
+  unsigned long responseTime = millis() - requestStartTime;
+  totalResponseTime += responseTime;
 }
 
 void GpsWebServer::sendJsonResponse(EthernetClient &client, const String& json, int statusCode) {

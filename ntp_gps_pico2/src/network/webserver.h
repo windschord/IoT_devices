@@ -21,6 +21,13 @@ public:
     void setPrometheusMetrics(PrometheusMetrics* prometheusMetricsInstance) { prometheusMetrics = prometheusMetricsInstance; }
     void setLoggingService(LoggingService* loggingServiceInstance) { loggingService = loggingServiceInstance; }
     void setGpsClient(GpsClient* gpsClientInstance) { gpsClient = gpsClientInstance; }
+    
+    // Performance monitoring and optimization methods
+    void invalidateGpsCache() { gpsDataCacheValid = false; }
+    unsigned long getRequestCount() const { return requestCount; }
+    unsigned long getAverageResponseTime() const { 
+        return requestCount > 0 ? totalResponseTime / requestCount : 0; 
+    }
 
 private:
     NtpServer* ntpServer = nullptr;
@@ -28,6 +35,16 @@ private:
     PrometheusMetrics* prometheusMetrics = nullptr;
     LoggingService* loggingService = nullptr;
     GpsClient* gpsClient = nullptr;
+    
+    // Performance optimization: Cache mechanism
+    unsigned long lastGpsDataUpdate = 0;
+    static const unsigned long GPS_DATA_CACHE_INTERVAL = 2000; // 2 seconds cache
+    String cachedGpsJson = "";
+    bool gpsDataCacheValid = false;
+    
+    // Performance monitoring
+    unsigned long requestCount = 0;
+    unsigned long totalResponseTime = 0;
     
     void rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData);
     void gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSatData_t);
