@@ -180,62 +180,328 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
 {
   printHeader(client, "text/html");
 
-  client.println("<!DOCTYPE HTML>");
-  client.println("<html>");
-  client.print("New NAV SAT data received. It contains data for SVs: ");
-  client.print(ubxNavSatData_t->header.numSvs);
-  client.println("<br>");
-
-  // Just for giggles, print the signal strength for each SV as a barchart
-  for (uint16_t block = 0; block < ubxNavSatData_t->header.numSvs; block++) // For each SV
-  {
-    switch (ubxNavSatData_t->blocks[block].gnssId) // Print the GNSS ID
-    {
-    case 0:
-      client.print(F("GPS     "));
-      break;
-    case 1:
-      client.print(F("SBAS    "));
-      break;
-    case 2:
-      client.print(F("Galileo "));
-      break;
-    case 3:
-      client.print(F("BeiDou  "));
-      break;
-    case 4:
-      client.print(F("IMES    "));
-      break;
-    case 5:
-      client.print(F("QZSS    "));
-      break;
-    case 6:
-      client.print(F("GLONASS "));
-      break;
-    default:
-      client.print(F("UNKNOWN "));
-      break;
-    }
-
-    client.print(ubxNavSatData_t->blocks[block].svId); // Print the SV ID
-
-    if (ubxNavSatData_t->blocks[block].svId < 10)
-    {
-      client.print(F("   "));
-    }
-    else if (ubxNavSatData_t->blocks[block].svId < 100)
-    {
-      client.print(F("  "));
-    }
-    else
-    {
-      client.print(F(" "));
-    }
-
-    client.print(ubxNavSatData_t->blocks[block].cno);
-    client.print("<br>");
-  }
-  client.println("</body></html>");
+  client.println(F("<!DOCTYPE HTML>"));
+  client.println(F("<html>"));
+  client.println(F("<head>"));
+  client.println(F("<title>GPS Satellite Information</title>"));
+  client.println(F("<meta charset='utf-8'>"));
+  client.println(F("<meta name='viewport' content='width=device-width, initial-scale=1'>"));
+  client.println(F("<style>"));
+  client.println(F("body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }"));
+  client.println(F(".container { max-width: 1200px; margin: 0 auto; }"));
+  client.println(F(".header { background: #2c3e50; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }"));
+  client.println(F(".view-toggle { margin: 20px 0; text-align: center; }"));
+  client.println(F(".btn { background: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 0 5px; }"));
+  client.println(F(".btn:hover { background: #2980b9; }"));
+  client.println(F(".btn.active { background: #e74c3c; }"));
+  client.println(F(".view-panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }"));
+  client.println(F(".satellite-view { display: flex; gap: 20px; }"));
+  client.println(F(".radar-container { flex: 1; text-align: center; }"));
+  client.println(F(".info-panel { flex: 0 0 300px; }"));
+  client.println(F(".stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 20px 0; }"));
+  client.println(F(".date-view-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }"));
+  client.println(F(".stat-card { background: #ecf0f1; padding: 15px; border-radius: 4px; text-align: center; }"));
+  client.println(F(".stat-card small { color: #7f8c8d; display: block; margin-top: 5px; font-size: 11px; }"));
+  client.println(F(".constellation-legend { margin: 20px 0; }"));
+  client.println(F(".legend-item { display: inline-block; margin: 5px 10px; padding: 5px 10px; border-radius: 4px; color: white; font-size: 12px; }"));
+  client.println(F(".gps { background: #f39c12; }"));
+  client.println(F(".glonass { background: #e74c3c; }"));
+  client.println(F(".galileo { background: #27ae60; }"));
+  client.println(F(".beidou { background: #3498db; }"));
+  client.println(F(".sbas { background: #95a5a6; }"));
+  client.println(F(".qzss { background: #9b59b6; }"));
+  client.println(F("#radarChart { border: 2px solid #34495e; border-radius: 50%; }"));
+  client.println(F("</style>"));
+  client.println(F("</head>"));
+  client.println(F("<body>"));
+  
+  client.println(F("<div class='container'>"));
+  client.println(F("<div class='header'>"));
+  client.println(F("<h1>GPS NTP Server - Satellite Information</h1>"));
+  client.println(F("<p>Real-time GNSS satellite tracking and positioning</p>"));
+  client.println(F("</div>"));
+  
+  client.println(F("<div class='view-toggle'>"));
+  client.println(F("<button class='btn active' onclick='showSatelliteView()'>Satellite Position View</button>"));
+  client.println(F("<button class='btn' onclick='showDateView()'>Date & Position View</button>"));
+  client.println(F("</div>"));
+  
+  client.println(F("<div id='satelliteView' class='view-panel'>"));
+  client.println(F("<div class='satellite-view'>"));
+  client.println(F("<div class='radar-container'>"));
+  client.println(F("<h3>Satellite Position View</h3>"));
+  client.println(F("<canvas id='radarChart' width='400' height='400'></canvas>"));
+  client.println(F("<div class='constellation-legend'>"));
+  client.println(F("<div class='legend-item gps'>GPS</div>"));
+  client.println(F("<div class='legend-item sbas'>SBAS</div>"));
+  client.println(F("<div class='legend-item galileo'>Galileo</div>"));
+  client.println(F("<div class='legend-item beidou'>BeiDou</div>"));
+  client.println(F("<div class='legend-item glonass'>GLONASS</div>"));
+  client.println(F("<div class='legend-item qzss'>QZSS</div>"));
+  client.println(F("</div>"));
+  client.println(F("</div>"));
+  
+  client.println(F("<div class='info-panel'>"));
+  client.println(F("<h3>Constellation Statistics</h3>"));
+  client.println(F("<div class='stats-grid' id='constellationStats'>"));
+  client.println(F("<!-- Stats will be populated by JavaScript -->"));
+  client.println(F("</div>"));
+  client.println(F("<h3>GNSS Constellation</h3>"));
+  client.println(F("<div id='gnssControls'>"));
+  client.println(F("<!-- Controls will be populated by JavaScript -->"));
+  client.println(F("</div>"));
+  client.println(F("<h3>Filter satellites</h3>"));
+  client.println(F("<label><input type='checkbox' id='showNotTracked' checked> Show not tracked</label>"));
+  client.println(F("<h3>Zoom in/out</h3>"));
+  client.println(F("<input type='range' id='zoomSlider' min='5' max='20' value='15' style='width: 100%'>"));
+  client.println(F("</div>"));
+  client.println(F("</div>"));
+  client.println(F("</div>"));
+  
+  client.println(F("<div id='dateView' class='view-panel' style='display: none;'>"));
+  client.println(F("<h3>Date & Position Information</h3>"));
+  client.println(F("<div class='date-view-grid' id='dateViewStats'>"));
+  client.println(F("<!-- Date view stats will be populated by JavaScript -->"));
+  client.println(F("</div>"));
+  client.println(F("</div>"));
+  
+  client.println(F("<script>"));
+  client.println(F("let gpsData = null;"));
+  client.println(F("let updateInterval = null;"));
+  
+  client.println(F("function showSatelliteView() {"));
+  client.println(F("  document.getElementById('satelliteView').style.display = 'block';"));
+  client.println(F("  document.getElementById('dateView').style.display = 'none';"));
+  client.println(F("  document.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));"));
+  client.println(F("  event.target.classList.add('active');"));
+  client.println(F("}"));
+  
+  client.println(F("function showDateView() {"));
+  client.println(F("  document.getElementById('satelliteView').style.display = 'none';"));
+  client.println(F("  document.getElementById('dateView').style.display = 'block';"));
+  client.println(F("  document.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));"));
+  client.println(F("  event.target.classList.add('active');"));
+  client.println(F("}"));
+  
+  client.println(F("function fetchGpsData() {"));
+  client.println(F("  fetch('/api/gps')"));
+  client.println(F("    .then(response => response.json())"));
+  client.println(F("    .then(data => {"));
+  client.println(F("      gpsData = data;"));
+  client.println(F("      updateDisplay();"));
+  client.println(F("    })"));
+  client.println(F("    .catch(error => console.error('Error:', error));"));
+  client.println(F("}"));
+  
+  client.println(F("function updateDisplay() {"));
+  client.println(F("  if (!gpsData) return;"));
+  client.println(F("  drawRadarChart();"));
+  client.println(F("  updateConstellationStats();"));
+  client.println(F("  updateDateView();"));
+  client.println(F("}"));
+  
+  // radarChart描画関数の続きは次のセクションで実装
+  client.println(F("function drawRadarChart() {"));
+  client.println(F("  const canvas = document.getElementById('radarChart');"));
+  client.println(F("  const ctx = canvas.getContext('2d');"));
+  client.println(F("  const centerX = canvas.width / 2;"));
+  client.println(F("  const centerY = canvas.height / 2;"));
+  client.println(F("  const radius = Math.min(centerX, centerY) - 20;"));
+  client.println(F("  "));
+  client.println(F("  // Clear canvas"));
+  client.println(F("  ctx.clearRect(0, 0, canvas.width, canvas.height);"));
+  client.println(F("  "));
+  client.println(F("  // Draw concentric circles"));
+  client.println(F("  ctx.strokeStyle = '#bdc3c7';"));
+  client.println(F("  ctx.lineWidth = 1;"));
+  client.println(F("  for (let i = 1; i <= 3; i++) {"));
+  client.println(F("    ctx.beginPath();"));
+  client.println(F("    ctx.arc(centerX, centerY, radius * i / 3, 0, 2 * Math.PI);"));
+  client.println(F("    ctx.stroke();"));
+  client.println(F("  }"));
+  client.println(F("  "));
+  client.println(F("  // Draw compass directions"));
+  client.println(F("  ctx.fillStyle = '#2c3e50';"));
+  client.println(F("  ctx.font = '14px Arial';"));
+  client.println(F("  ctx.textAlign = 'center';"));
+  client.println(F("  ctx.fillText('N', centerX, centerY - radius - 5);"));
+  client.println(F("  ctx.fillText('S', centerX, centerY + radius + 15);"));
+  client.println(F("  ctx.textAlign = 'left';"));
+  client.println(F("  ctx.fillText('E', centerX + radius + 5, centerY + 5);"));
+  client.println(F("  ctx.textAlign = 'right';"));
+  client.println(F("  ctx.fillText('W', centerX - radius - 5, centerY + 5);"));
+  client.println(F("  "));
+  client.println(F("  // Draw satellites"));
+  client.println(F("  if (gpsData && gpsData.satellites) {"));
+  client.println(F("    gpsData.satellites.forEach(sat => {"));
+  client.println(F("      if (!document.getElementById('showNotTracked').checked && !sat.tracked) return;"));
+  client.println(F("      "));
+  client.println(F("      const elevationRadius = radius * (90 - sat.elevation) / 90;"));
+  client.println(F("      const azimuthRad = (sat.azimuth - 90) * Math.PI / 180;"));
+  client.println(F("      const x = centerX + elevationRadius * Math.cos(azimuthRad);"));
+  client.println(F("      const y = centerY + elevationRadius * Math.sin(azimuthRad);"));
+  client.println(F("      "));
+  client.println(F("      // Constellation colors"));
+  client.println(F("      const colors = ['#f39c12', '#95a5a6', '#27ae60', '#3498db', '#e74c3c', '#9b59b6'];"));
+  client.println(F("      const color = colors[sat.constellation] || '#34495e';"));
+  client.println(F("      "));
+  client.println(F("      // Satellite size based on signal strength"));
+  client.println(F("      const size = Math.max(3, sat.signal_strength / 10);"));
+  client.println(F("      "));
+  client.println(F("      // Draw satellite"));
+  client.println(F("      ctx.fillStyle = sat.used_in_nav ? color : color + '80';"));
+  client.println(F("      ctx.beginPath();"));
+  client.println(F("      ctx.arc(x, y, size, 0, 2 * Math.PI);"));
+  client.println(F("      ctx.fill();"));
+  client.println(F("      "));
+  client.println(F("      // Draw PRN number"));
+  client.println(F("      ctx.fillStyle = '#fff';"));
+  client.println(F("      ctx.font = '10px Arial';"));
+  client.println(F("      ctx.textAlign = 'center';"));
+  client.println(F("      ctx.fillText(sat.prn, x, y + 3);"));
+  client.println(F("    });"));
+  client.println(F("  }"));
+  client.println(F("}"));
+  
+  client.println(F("function updateConstellationStats() {"));
+  client.println(F("  if (!gpsData || !gpsData.constellation_stats) return;"));
+  client.println(F("  "));
+  client.println(F("  const stats = gpsData.constellation_stats;"));
+  client.println(F("  const html = `"));
+  client.println(F("    <div class='stat-card'><strong>Total</strong><br>${stats.satellites_total}</div>"));
+  client.println(F("    <div class='stat-card'><strong>Used</strong><br>${stats.satellites_used}</div>"));
+  client.println(F("    <div class='stat-card'><strong>GPS</strong><br>${stats.gps.used}/${stats.gps.total}</div>"));
+  client.println(F("    <div class='stat-card'><strong>GLONASS</strong><br>${stats.glonass.used}/${stats.glonass.total}</div>"));
+  client.println(F("    <div class='stat-card'><strong>Galileo</strong><br>${stats.galileo.used}/${stats.galileo.total}</div>"));
+  client.println(F("    <div class='stat-card'><strong>BeiDou</strong><br>${stats.beidou.used}/${stats.beidou.total}</div>"));
+  client.println(F("  `;"));
+  client.println(F("  document.getElementById('constellationStats').innerHTML = html;"));
+  client.println(F("}"));
+  
+  client.println(F("function updateDateView() {"));
+  client.println(F("  if (!gpsData) return;"));
+  client.println(F("  "));
+  client.println(F("  // Fix type mapping with enhanced descriptions"));
+  client.println(F("  const fixTypes = ["));
+  client.println(F("    'No Fix',"));
+  client.println(F("    'Dead Reckoning Only',"));
+  client.println(F("    '2D Fix (Latitude/Longitude)',"));
+  client.println(F("    '3D Fix (Lat/Lon/Alt)',"));
+  client.println(F("    'GNSS + Dead Reckoning',"));
+  client.println(F("    'Time Only Fix'"));
+  client.println(F("  ];"));
+  client.println(F("  const fixType = fixTypes[gpsData.fix_type] || 'Unknown';"));
+  client.println(F("  "));
+  client.println(F("  // Get fix quality indicator"));
+  client.println(F("  let fixQuality = 'Unknown';"));
+  client.println(F("  let fixColor = '#95a5a6';"));
+  client.println(F("  if (gpsData.fix_type >= 3) {"));
+  client.println(F("    fixQuality = 'Excellent';"));
+  client.println(F("    fixColor = '#27ae60';"));
+  client.println(F("  } else if (gpsData.fix_type >= 2) {"));
+  client.println(F("    fixQuality = 'Good';"));
+  client.println(F("    fixColor = '#f39c12';"));
+  client.println(F("  } else if (gpsData.fix_type >= 1) {"));
+  client.println(F("    fixQuality = 'Poor';"));
+  client.println(F("    fixColor = '#e74c3c';"));
+  client.println(F("  }"));
+  client.println(F("  "));
+  client.println(F("  // Format UTC time"));
+  client.println(F("  const utcDate = new Date(gpsData.utc_time * 1000);"));
+  client.println(F("  const utcFormatted = utcDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';"));
+  client.println(F("  "));
+  client.println(F("  // Speed conversion (m/s to km/h and knots)"));
+  client.println(F("  const speedKmh = (gpsData.speed * 3.6).toFixed(1);"));
+  client.println(F("  const speedKnots = (gpsData.speed * 1.944).toFixed(1);"));
+  client.println(F("  "));
+  client.println(F("  // Course direction"));
+  client.println(F("  const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];"));
+  client.println(F("  const dirIndex = Math.round(gpsData.course / 22.5) % 16;"));
+  client.println(F("  const courseDirection = directions[dirIndex];"));
+  client.println(F("  "));
+  client.println(F("  // TTFF (Time To First Fix) formatting"));
+  client.println(F("  const ttffMinutes = Math.floor(gpsData.ttff / 60);"));
+  client.println(F("  const ttffSeconds = gpsData.ttff % 60;"));
+  client.println(F("  const ttffFormatted = ttffMinutes > 0 ? `${ttffMinutes}m ${ttffSeconds}s` : `${ttffSeconds}s`;"));
+  client.println(F("  "));
+  client.println(F("  const html = `"));
+  client.println(F("    <div class='stat-card' style='background-color: ${fixColor}; color: white;'>"));
+  client.println(F("      <strong>Fix Status</strong><br>"));
+  client.println(F("      ${fixType}<br>"));
+  client.println(F("      <small>Quality: ${fixQuality}</small>"));
+  client.println(F("    </div>"));
+  client.println(F("    <div class='stat-card'>"));
+  client.println(F("      <strong>UTC Date & Time</strong><br>"));
+  client.println(F("      ${utcFormatted}<br>"));
+  client.println(F("      <small>GPS Week: ${Math.floor(gpsData.utc_time / 604800)}</small>"));
+  client.println(F("    </div>"));
+  client.println(F("    <div class='stat-card'>"));
+  client.println(F("      <strong>Latitude</strong><br>"));
+  client.println(F("      ${gpsData.latitude.toFixed(6)}°<br>"));
+  client.println(F("      <small>WGS84 Datum</small>"));
+  client.println(F("    </div>"));
+  client.println(F("    <div class='stat-card'>"));
+  client.println(F("      <strong>Longitude</strong><br>"));
+  client.println(F("      ${gpsData.longitude.toFixed(6)}°<br>"));
+  client.println(F("      <small>WGS84 Datum</small>"));
+  client.println(F("    </div>"));
+  client.println(F("    <div class='stat-card'>"));
+  client.println(F("      <strong>Altitude</strong><br>"));
+  client.println(F("      ${gpsData.altitude.toFixed(1)} m<br>"));
+  client.println(F("      <small>Above Mean Sea Level</small>"));
+  client.println(F("    </div>"));
+  client.println(F("    <div class='stat-card'>"));
+  client.println(F("      <strong>Speed</strong><br>"));
+  client.println(F("      ${speedKmh} km/h<br>"));
+  client.println(F("      <small>${speedKnots} knots</small>"));
+  client.println(F("    </div>"));
+  client.println(F("    <div class='stat-card'>"));
+  client.println(F("      <strong>Course</strong><br>"));
+  client.println(F("      ${gpsData.course.toFixed(1)}° ${courseDirection}<br>"));
+  client.println(F("      <small>True North</small>"));
+  client.println(F("    </div>"));
+  client.println(F("    <div class='stat-card'>"));
+  client.println(F("      <strong>3D Accuracy</strong><br>"));
+  client.println(F("      ${gpsData.accuracy_3d.toFixed(2)} m<br>"));
+  client.println(F("      <small>95% Confidence</small>"));
+  client.println(F("    </div>"));
+  client.println(F("    <div class='stat-card'>"));
+  client.println(F("      <strong>HDOP</strong><br>"));
+  client.println(F("      ${gpsData.hdop.toFixed(2)}<br>"));
+  client.println(F("      <small>Horizontal DOP</small>"));
+  client.println(F("    </div>"));
+  client.println(F("    <div class='stat-card'>"));
+  client.println(F("      <strong>VDOP</strong><br>"));
+  client.println(F("      ${gpsData.vdop.toFixed(2)}<br>"));
+  client.println(F("      <small>Vertical DOP</small>"));
+  client.println(F("    </div>"));
+  client.println(F("    <div class='stat-card'>"));
+  client.println(F("      <strong>PDOP</strong><br>"));
+  client.println(F("      ${gpsData.pdop.toFixed(2)}<br>"));
+  client.println(F("      <small>Position DOP</small>"));
+  client.println(F("    </div>"));
+  client.println(F("    <div class='stat-card'>"));
+  client.println(F("      <strong>Time To First Fix</strong><br>"));
+  client.println(F("      ${ttffFormatted}<br>"));
+  client.println(F("      <small>Cold Start</small>"));
+  client.println(F("    </div>"));
+  client.println(F("  `;"));
+  client.println(F("  document.getElementById('dateViewStats').innerHTML = html;"));
+  client.println(F("}"));
+  
+  client.println(F("// Initialize"));
+  client.println(F("document.addEventListener('DOMContentLoaded', function() {"));
+  client.println(F("  fetchGpsData();"));
+  client.println(F("  updateInterval = setInterval(fetchGpsData, 1000);"));
+  client.println(F("  "));
+  client.println(F("  document.getElementById('showNotTracked').addEventListener('change', updateDisplay);"));
+  client.println(F("  document.getElementById('zoomSlider').addEventListener('input', updateDisplay);"));
+  client.println(F("});"));
+  
+  client.println(F("</script>"));
+  client.println(F("</div>"));
+  client.println(F("</body>"));
+  client.println(F("</html>"));
 }
 
 void GpsWebServer::metricsPage(EthernetClient &client)
