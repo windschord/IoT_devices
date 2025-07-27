@@ -521,6 +521,11 @@ void DisplayManager::wakeDisplay() {
         // Reset sleep counter to extend display time
         sleepCounter = 0;
     }
+    
+    // Debug log for triggerDisplay() calls (from inline function)
+    if (loggingService && displayCount == 1) {
+        loggingService->debugf("DISPLAY", "triggerDisplay() called - displayCount set to %d", displayCount);
+    }
 }
 
 void DisplayManager::sleepDisplay() {

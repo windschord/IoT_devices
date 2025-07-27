@@ -71,7 +71,7 @@ public:
         displayCount = 1; 
         lastDisplay = 0; 
         wakeDisplay(); // Wake display when triggered
-        Serial.printf("triggerDisplay() called - displayCount set to %d\n", displayCount);
+        // Debug log moved to non-inline function to avoid header include complexity
     }
     
     // Auto-sleep control methods
