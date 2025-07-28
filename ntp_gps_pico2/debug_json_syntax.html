@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JSON Syntax Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .error { color: red; font-weight: bold; }
+        .success { color: green; font-weight: bold; }
+        .info { color: blue; margin: 10px 0; }
+        pre { background: #f5f5f5; padding: 10px; border: 1px solid #ccc; overflow-x: auto; }
+        .character-marker { background: yellow; }
+    </style>
+</head>
+<body>
+    <h1>JSON Syntax Debug Test</h1>
+    <div id="status" class="info">Testing...</div>
+    
+    <h2>JSON Response Analysis</h2>
+    <div id="jsonAnalysis"></div>
+    
+    <h2>Raw JSON Response</h2>
+    <pre id="rawJson"></pre>
+    
+    <h2>Character Analysis around position 2048</h2>
+    <pre id="characterAnalysis"></pre>
+
+    <script>
+        async function testJsonSyntax() {
+            const statusDiv = document.getElementById('status');
+            const analysisDiv = document.getElementById('jsonAnalysis');
+            const rawJsonDiv = document.getElementById('rawJson');
+            const charAnalysisDiv = document.getElementById('characterAnalysis');
+            
+            try {
+                statusDiv.textContent = 'Fetching /api/gps...';
+                statusDiv.className = 'info';
+                
+                const response = await fetch('/api/gps', {
+                    method: 'GET',
+                    headers: {
+                        'Cache-Control': 'no-cache'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('HTTP error! status: ' + response.status);
+                }
+                
+                const text = await response.text();
+                rawJsonDiv.textContent = text;
+                
+                // Analyze characters around position 2048
+                const pos = 2048;
+                const start = Math.max(0, pos - 50);
+                const end = Math.min(text.length, pos + 50);
+                const substring = text.substring(start, end);
+                
+                let marked = '';
+                for (let i = 0; i < substring.length; i++) {
+                    const charCode = substring.charCodeAt(i);
+                    const char = substring.charAt(i);
+                    const globalPos = start + i;
+                    
+                    if (globalPos === pos) {
+                        marked += '<span class="character-marker">';
+                    }
+                    
+                    // Check for control characters
+                    if (charCode < 32 && charCode !== 9 && charCode !== 10 && charCode !== 13) {
+                        marked += '[CTRL:' + charCode + ']';
+                    } else if (char === '"') {
+                        marked += '\\"';
+                    } else if (char === '\\') {
+                        marked += '\\\\';
+                    } else {
+                        marked += char;
+                    }
+                    
+                    if (globalPos === pos) {
+                        marked += '</span>';
+                    }
+                }
+                
+                charAnalysisDiv.innerHTML = 'Position ' + pos + ' context:<br>' + marked;
+                
+                // Try to parse JSON
+                try {
+                    const data = JSON.parse(text);
+                    statusDiv.textContent = 'JSON parsing successful!';
+                    statusDiv.className = 'success';
+                    
+                    analysisDiv.innerHTML = 
+                        '<div class="success">✓ JSON is valid</div>' +
+                        '<div>Length: ' + text.length + ' characters</div>' +
+                        '<div>Satellites count: ' + (data.satellites ? data.satellites.length : 'undefined') + '</div>' +
+                        '<div>Data valid: ' + data.data_valid + '</div>';
+                        
+                } catch (parseError) {
+                    statusDiv.textContent = 'JSON parsing failed: ' + parseError.message;
+                    statusDiv.className = 'error';
+                    
+                    // Extract position from error message
+                    const posMatch = parseError.message.match(/position (\d+)/);
+                    if (posMatch) {
+                        const errorPos = parseInt(posMatch[1]);
+                        const errorStart = Math.max(0, errorPos - 20);
+                        const errorEnd = Math.min(text.length, errorPos + 20);
+                        const errorContext = text.substring(errorStart, errorEnd);
+                        
+                        analysisDiv.innerHTML = 
+                            '<div class="error">✗ JSON parsing error at position ' + errorPos + '</div>' +
+                            '<div>Error context: <pre>' + errorContext + '</pre></div>' +
+                            '<div>Character at error position: "' + text.charAt(errorPos) + '" (code: ' + text.charCodeAt(errorPos) + ')</div>';
+                    } else {
+                        analysisDiv.innerHTML = '<div class="error">✗ ' + parseError.message + '</div>';
+                    }
+                }
+                
+            } catch (error) {
+                statusDiv.textContent = 'Fetch error: ' + error.message;
+                statusDiv.className = 'error';
+                analysisDiv.innerHTML = '<div class="error">✗ ' + error.message + '</div>';
+            }
+        }
+        
+        // Run test when page loads
+        window.onload = testJsonSyntax;
+        
+        // Add refresh button functionality
+        function refreshTest() {
+            testJsonSyntax();
+        }
+    </script>
+    
+    <button onclick="refreshTest()">Refresh Test</button>
+</body>
+</html>

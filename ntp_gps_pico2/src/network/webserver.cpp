@@ -284,7 +284,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("let updateInterval = null;"));
   client.println(F("let lastUpdateTime = 0;"));
   client.println(F("let connectionFailures = 0;"));
-  client.println(F("let maxConnectionFailures = 5;"));
+  client.println(F("const maxConnectionFailures = 5;"));
   client.println(F("let isUserInteracting = false;"));
   client.println(F("let interactionTimeout = null;"));
   client.println(F("let previousGpsData = null;"));
@@ -293,14 +293,14 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("function showSatelliteView() {"));
   client.println(F("  document.getElementById('satelliteView').style.display = 'block';"));
   client.println(F("  document.getElementById('dateView').style.display = 'none';"));
-  client.println(F("  document.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));"));
+  client.println(F("  document.querySelectorAll('.btn').forEach(function(btn) { btn.classList.remove('active'); });"));
   client.println(F("  event.target.classList.add('active');"));
   client.println(F("}"));
   
   client.println(F("function showDateView() {"));
   client.println(F("  document.getElementById('satelliteView').style.display = 'none';"));
   client.println(F("  document.getElementById('dateView').style.display = 'block';"));
-  client.println(F("  document.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));"));
+  client.println(F("  document.querySelectorAll('.btn').forEach(function(btn) { btn.classList.remove('active'); });"));
   client.println(F("  event.target.classList.add('active');"));
   client.println(F("}"));
   
@@ -311,7 +311,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("    return;"));
   client.println(F("  }"));
   client.println(F("  "));
-  client.println(F("  const startTime = Date.now();"));
+  client.println(F("  let startTime = Date.now();"));
   client.println(F("  "));
   client.println(F("  fetch('/api/gps', {"));
   client.println(F("    method: 'GET',"));
@@ -338,7 +338,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("    }"));
   client.println(F("    "));
   client.println(F("    updateConnectionStatus();"));
-  client.println(F("    const responseTime = Date.now() - startTime;"));
+  client.println(F("    var responseTime = Date.now() - startTime;"));
   client.println(F("    console.log('GPS data updated in ' + responseTime + 'ms');"));
   client.println(F("  })"));
   client.println(F("  .catch(error => {"));
@@ -365,11 +365,11 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   
   // radarChart描画関数の続きは次のセクションで実装
   client.println(F("function drawRadarChart() {"));
-  client.println(F("  const canvas = document.getElementById('radarChart');"));
-  client.println(F("  const ctx = canvas.getContext('2d');"));
-  client.println(F("  const centerX = canvas.width / 2;"));
-  client.println(F("  const centerY = canvas.height / 2;"));
-  client.println(F("  const radius = Math.min(centerX, centerY) - 20;"));
+  client.println(F("  let canvas = document.getElementById('radarChart');"));
+  client.println(F("  let ctx = canvas.getContext('2d');"));
+  client.println(F("  let centerX = canvas.width / 2;"));
+  client.println(F("  let centerY = canvas.height / 2;"));
+  client.println(F("  let radius = Math.min(centerX, centerY) - 20;"));
   client.println(F("  "));
   client.println(F("  // Clear canvas"));
   client.println(F("  ctx.clearRect(0, 0, canvas.width, canvas.height);"));
@@ -377,7 +377,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("  // Draw concentric circles"));
   client.println(F("  ctx.strokeStyle = '#bdc3c7';"));
   client.println(F("  ctx.lineWidth = 1;"));
-  client.println(F("  for (let i = 1; i <= 3; i++) {"));
+  client.println(F("  for (var i = 1; i <= 3; i++) {"));
   client.println(F("    ctx.beginPath();"));
   client.println(F("    ctx.arc(centerX, centerY, radius * i / 3, 0, 2 * Math.PI);"));
   client.println(F("    ctx.stroke();"));
@@ -395,14 +395,14 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("  ctx.fillText('W', centerX - radius - 5, centerY + 5);"));
   client.println(F("  "));
   client.println(F("  // Apply zoom factor"));
-  client.println(F("  const zoomFactor = document.getElementById('zoomSlider') ? "));
+  client.println(F("  let zoomFactor = document.getElementById('zoomSlider') ? "));
   client.println(F("                     document.getElementById('zoomSlider').value / 15 : 1;"));
-  client.println(F("  const zoomedRadius = radius * zoomFactor;"));
+  client.println(F("  let zoomedRadius = radius * zoomFactor;"));
   client.println(F("  "));
   client.println(F("  // Draw satellites"));
   client.println(F("  if (gpsData && gpsData.satellites) {"));
   client.println(F("    // Constellation filter mapping"));
-  client.println(F("    const constellationKeys = ['gps', 'sbas', 'galileo', 'beidou', 'glonass', 'qzss'];"));
+  client.println(F("    var constellationKeys = ['gps', 'sbas', 'galileo', 'beidou', 'glonass', 'qzss'];"));
   client.println(F("    "));
   client.println(F("    gpsData.satellites.forEach(sat => {"));
   client.println(F("      // Check if not tracked satellites should be shown"));
@@ -415,28 +415,28 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("      if (document.getElementById('showHighSignal').checked && sat.signal_strength <= 35) return;"));
   client.println(F("      "));
   client.println(F("      // Check constellation filter"));
-  client.println(F("      const constellationKey = constellationKeys[sat.constellation];"));
+  client.println(F("      var constellationKey = constellationKeys[sat.constellation];"));
   client.println(F("      if (constellationKey) {"));
-  client.println(F("        const filterElement = document.getElementById('filter_' + constellationKey);"));
+  client.println(F("        var filterElement = document.getElementById('filter_' + constellationKey);"));
   client.println(F("        if (filterElement && !filterElement.checked) return;"));
   client.println(F("      }"));
   client.println(F("      "));
   client.println(F("      // Calculate position with zoom"));
-  client.println(F("      const elevationRadius = zoomedRadius * (90 - sat.elevation) / 90;"));
-  client.println(F("      const azimuthRad = (sat.azimuth - 90) * Math.PI / 180;"));
-  client.println(F("      const x = centerX + elevationRadius * Math.cos(azimuthRad);"));
-  client.println(F("      const y = centerY + elevationRadius * Math.sin(azimuthRad);"));
+  client.println(F("      var elevationRadius = zoomedRadius * (90 - sat.elevation) / 90;"));
+  client.println(F("      var azimuthRad = (sat.azimuth - 90) * Math.PI / 180;"));
+  client.println(F("      var x = centerX + elevationRadius * Math.cos(azimuthRad);"));
+  client.println(F("      var y = centerY + elevationRadius * Math.sin(azimuthRad);"));
   client.println(F("      "));
   client.println(F("      // Skip if satellite is outside visible area"));
   client.println(F("      if (Math.sqrt((x - centerX)**2 + (y - centerY)**2) > radius + 20) return;"));
   client.println(F("      "));
   client.println(F("      // Constellation colors"));
-  client.println(F("      const colors = ['#f39c12', '#95a5a6', '#27ae60', '#3498db', '#e74c3c', '#9b59b6'];"));
-  client.println(F("      const color = colors[sat.constellation] || '#34495e';"));
+  client.println(F("      var colors = ['#f39c12', '#95a5a6', '#27ae60', '#3498db', '#e74c3c', '#9b59b6'];"));
+  client.println(F("      var color = colors[sat.constellation] || '#34495e';"));
   client.println(F("      "));
   client.println(F("      // Satellite size based on signal strength and zoom"));
-  client.println(F("      const baseSize = Math.max(3, sat.signal_strength / 10);"));
-  client.println(F("      const size = Math.min(baseSize * zoomFactor, 20); // Limit maximum size"));
+  client.println(F("      var baseSize = Math.max(3, sat.signal_strength / 10);"));
+  client.println(F("      var size = Math.min(baseSize * zoomFactor, 20); // Limit maximum size"));
   client.println(F("      "));
   client.println(F("      // Draw satellite with enhanced visibility"));
   client.println(F("      ctx.fillStyle = sat.used_in_nav ? color : color + '80';"));
@@ -450,7 +450,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("      ctx.stroke();"));
   client.println(F("      "));
   client.println(F("      // Draw PRN number with zoom-aware font size"));
-  client.println(F("      const fontSize = Math.max(8, Math.min(12, 10 * zoomFactor));"));
+  client.println(F("      var fontSize = Math.max(8, Math.min(12, 10 * zoomFactor));"));
   client.println(F("      ctx.fillStyle = '#fff';"));
   client.println(F("      ctx.font = fontSize + 'px Arial';"));
   client.println(F("      ctx.textAlign = 'center';"));
@@ -469,7 +469,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("function updateConstellationStats() {"));
   client.println(F("  if (!gpsData || !gpsData.constellation_stats) return;"));
   client.println(F("  "));
-  client.println(F("  const stats = gpsData.constellation_stats;"));
+  client.println(F("  let stats = gpsData.constellation_stats;"));
   client.println(F("  let html = '';"));
   client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>Total</strong><br>' + stats.satellites_total + '</div>';"));
   client.println(F("  html += '<div class=\\\"stat-card\\\"><strong>Used</strong><br>' + stats.satellites_used + '</div>';"));
@@ -486,8 +486,8 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("function updateConstellationControls() {"));
   client.println(F("  if (!gpsData || !gpsData.constellation_enables) return;"));
   client.println(F("  "));
-  client.println(F("  const enables = gpsData.constellation_enables;"));
-  client.println(F("  const constellations = ["));
+  client.println(F("  let enables = gpsData.constellation_enables;"));
+  client.println(F("  let constellations = ["));
   client.println(F("    { name: 'GPS', key: 'gps', color: '#f39c12', id: 0 },"));
   client.println(F("    { name: 'SBAS', key: 'sbas', color: '#95a5a6', id: 1 },"));
   client.println(F("    { name: 'Galileo', key: 'galileo', color: '#27ae60', id: 2 },"));
@@ -498,8 +498,8 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("  "));
   client.println(F("  let html = '';"));
   client.println(F("  constellations.forEach(constellation => {"));
-  client.println(F("    const enabled = enables[constellation.key];"));
-  client.println(F("    const checked = document.getElementById('filter_' + constellation.key) ? "));
+  client.println(F("    var enabled = enables[constellation.key];"));
+  client.println(F("    var checked = document.getElementById('filter_' + constellation.key) ? "));
   client.println(F("                   document.getElementById('filter_' + constellation.key).checked : true;"));
   client.println(F("    html += '<div style=\\\"margin: 5px 0; display: flex; align-items: center;\\\">';"));
   client.println(F("    html += '<input type=\\\"checkbox\\\" id=\\\"filter_' + constellation.key + '\\\"';"));
@@ -519,7 +519,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("  if (!gpsData) return;"));
   client.println(F("  "));
   client.println(F("  // Fix type mapping with enhanced descriptions"));
-  client.println(F("  const fixTypes = ["));
+  client.println(F("  let fixTypes = ["));
   client.println(F("    'No Fix',"));
   client.println(F("    'Dead Reckoning Only',"));
   client.println(F("    '2D Fix (Latitude/Longitude)',"));
@@ -527,7 +527,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("    'GNSS + Dead Reckoning',"));
   client.println(F("    'Time Only Fix'"));
   client.println(F("  ];"));
-  client.println(F("  const fixType = fixTypes[gpsData.fix_type] || 'Unknown';"));
+  client.println(F("  let fixType = fixTypes[gpsData.fix_type] || 'Unknown';"));
   client.println(F("  "));
   client.println(F("  // Get fix quality indicator"));
   client.println(F("  let fixQuality = 'Unknown';"));
@@ -544,22 +544,22 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("  }"));
   client.println(F("  "));
   client.println(F("  // Format UTC time"));
-  client.println(F("  const utcDate = new Date(gpsData.utc_time * 1000);"));
-  client.println(F("  const utcFormatted = utcDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';"));
+  client.println(F("  let utcDate = new Date(gpsData.utc_time * 1000);"));
+  client.println(F("  let utcFormatted = utcDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';"));
   client.println(F("  "));
   client.println(F("  // Speed conversion (m/s to km/h and knots)"));
-  client.println(F("  const speedKmh = (gpsData.speed * 3.6).toFixed(1);"));
-  client.println(F("  const speedKnots = (gpsData.speed * 1.944).toFixed(1);"));
+  client.println(F("  let speedKmh = (gpsData.speed * 3.6).toFixed(1);"));
+  client.println(F("  let speedKnots = (gpsData.speed * 1.944).toFixed(1);"));
   client.println(F("  "));
   client.println(F("  // Course direction"));
-  client.println(F("  const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];"));
-  client.println(F("  const dirIndex = Math.round(gpsData.course / 22.5) % 16;"));
-  client.println(F("  const courseDirection = directions[dirIndex];"));
+  client.println(F("  let directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];"));
+  client.println(F("  let dirIndex = Math.round(gpsData.course / 22.5) % 16;"));
+  client.println(F("  let courseDirection = directions[dirIndex];"));
   client.println(F("  "));
   client.println(F("  // TTFF (Time To First Fix) formatting"));
-  client.println(F("  const ttffMinutes = Math.floor(gpsData.ttff / 60);"));
-  client.println(F("  const ttffSeconds = gpsData.ttff % 60;"));
-  client.println(F("  const ttffFormatted = ttffMinutes > 0 ? (ttffMinutes + 'm ' + ttffSeconds + 's') : (ttffSeconds + 's');"));
+  client.println(F("  let ttffMinutes = Math.floor(gpsData.ttff / 60);"));
+  client.println(F("  let ttffSeconds = gpsData.ttff % 60;"));
+  client.println(F("  let ttffFormatted = ttffMinutes > 0 ? (ttffMinutes + 'm ' + ttffSeconds + 's') : (ttffSeconds + 's');"));
   client.println(F("  "));
   client.println(F("  let html = '';"));
   client.println(F("  html += '<div class=\\\"stat-card\\\" style=\\\"background-color: ' + fixColor + '; color: white;\\\">';"));
@@ -601,7 +601,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("  if (oldData.satellites?.length !== newData.satellites?.length) return true;"));
   client.println(F("  "));
   client.println(F("  // Check for position changes (more than 1 meter)"));
-  client.println(F("  const positionThreshold = 0.00001; // ~1 meter"));
+  client.println(F("  let positionThreshold = 0.00001; // ~1 meter"));
   client.println(F("  if (Math.abs(oldData.latitude - newData.latitude) > positionThreshold ||"));
   client.println(F("      Math.abs(oldData.longitude - newData.longitude) > positionThreshold) {"));
   client.println(F("    return true;"));
@@ -609,7 +609,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("  "));
   client.println(F("  // Check for satellite signal strength changes"));
   client.println(F("  if (oldData.satellites && newData.satellites) {"));
-  client.println(F("    for (let i = 0; i < Math.min(oldData.satellites.length, newData.satellites.length); i++) {"));
+  client.println(F("    for (var i = 0; i < Math.min(oldData.satellites.length, newData.satellites.length); i++) {"));
   client.println(F("      if (Math.abs(oldData.satellites[i].signal_strength - newData.satellites[i].signal_strength) > 5) {"));
   client.println(F("        return true;"));
   client.println(F("      }"));
@@ -621,10 +621,10 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F(""));
   client.println(F("// Connection status management"));
   client.println(F("function updateConnectionStatus() {"));
-  client.println(F("  const statusElement = document.getElementById('connectionStatus');"));
+  client.println(F("  let statusElement = document.getElementById('connectionStatus');"));
   client.println(F("  if (!statusElement) return;"));
   client.println(F("  "));
-  client.println(F("  const timeSinceUpdate = Date.now() - lastUpdateTime;"));
+  client.println(F("  let timeSinceUpdate = Date.now() - lastUpdateTime;"));
   client.println(F("  let statusText = '';"));
   client.println(F("  let statusColor = '';"));
   client.println(F("  "));
@@ -649,7 +649,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("    clearInterval(updateInterval);"));
   client.println(F("  }"));
   client.println(F("  "));
-  client.println(F("  const backoffTime = Math.min(1000 * Math.pow(2, connectionFailures - maxConnectionFailures), 30000);"));
+  client.println(F("  let backoffTime = Math.min(1000 * Math.pow(2, connectionFailures - maxConnectionFailures), 30000);"));
   client.println(F("  console.log('Attempting reconnection in ' + backoffTime + 'ms...');"));
   client.println(F("  "));
   client.println(F("  setTimeout(() => {"));
@@ -681,10 +681,10 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F(""));
   client.println(F("// Utility functions for interactive features"));
   client.println(F("function updateZoomLabel() {"));
-  client.println(F("  const slider = document.getElementById('zoomSlider');"));
-  client.println(F("  const label = document.getElementById('zoomValue');"));
+  client.println(F("  let slider = document.getElementById('zoomSlider');"));
+  client.println(F("  let label = document.getElementById('zoomValue');"));
   client.println(F("  if (slider && label) {"));
-  client.println(F("    const zoomValue = (slider.value / 15).toFixed(1);"));
+  client.println(F("    var zoomValue = (slider.value / 15).toFixed(1);"));
   client.println(F("    label.textContent = zoomValue + 'x';"));
   client.println(F("  }"));
   client.println(F("  updateDisplay();"));
@@ -701,7 +701,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("  document.getElementById('showHighSignal').checked = false;"));
   client.println(F("  "));
   client.println(F("  // Reset constellation filters"));
-  client.println(F("  const constellationFilters = document.querySelectorAll('[id^=\"filter_\"]');"));
+  client.println(F("  let constellationFilters = document.querySelectorAll('[id^=\"filter_\"]');"));
   client.println(F("  constellationFilters.forEach(filter => filter.checked = true);"));
   client.println(F("  "));
   client.println(F("  updateDisplay();"));
@@ -712,9 +712,9 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("  updateDisplay();"));
   client.println(F("  "));
   client.println(F("  // Update last update timestamp"));
-  client.println(F("  const now = new Date();"));
-  client.println(F("  const timeString = now.toLocaleTimeString();"));
-  client.println(F("  const timestampElement = document.getElementById('lastUpdateTime');"));
+  client.println(F("  let now = new Date();"));
+  client.println(F("  let timeString = now.toLocaleTimeString();"));
+  client.println(F("  let timestampElement = document.getElementById('lastUpdateTime');"));
   client.println(F("  if (timestampElement) {"));
   client.println(F("    timestampElement.textContent = timeString;"));
   client.println(F("  }"));
@@ -750,7 +750,7 @@ void GpsWebServer::gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSat
   client.println(F("  });"));
   client.println(F("  "));
   client.println(F("  // Add interaction detection for canvas (mouse/touch)"));
-  client.println(F("  const canvas = document.getElementById('radarChart');"));
+  client.println(F("  let canvas = document.getElementById('radarChart');"));
   client.println(F("  if (canvas) {"));
   client.println(F("    canvas.addEventListener('mousedown', handleUserInteraction);"));
   client.println(F("    canvas.addEventListener('touchstart', handleUserInteraction);"));
@@ -950,16 +950,16 @@ void GpsWebServer::configPage(EthernetClient &client) {
   client.println("<script>");
   client.println("function submitConfig(event) {");
   client.println("  event.preventDefault();");
-  client.println("  const form = event.target;");
-  client.println("  const formData = new FormData(form);");
-  client.println("  const config = {};");
-  client.println("  for (let [key, value] of formData.entries()) {");
+  client.println("  var form = event.target;");
+  client.println("  var formData = new FormData(form);");
+  client.println("  var config = {};");
+  client.println("  for (var [key, value] of formData.entries()) {");
   client.println("    if (value === 'on') config[key] = true;");
   client.println("    else if (key.includes('_enabled') || key.includes('enabled')) config[key] = false;");
   client.println("    else config[key] = value;");
   client.println("  }");
   client.println("  // Handle checkboxes that weren't checked");
-  client.println("  const checkboxes = ['gps_enabled', 'glonass_enabled', 'galileo_enabled', 'beidou_enabled', 'qzss_enabled', 'qzss_l1s_enabled', 'ntp_enabled', 'prometheus_enabled', 'debug_enabled'];");
+  client.println("  var checkboxes = ['gps_enabled', 'glonass_enabled', 'galileo_enabled', 'beidou_enabled', 'qzss_enabled', 'qzss_l1s_enabled', 'ntp_enabled', 'prometheus_enabled', 'debug_enabled'];");
   client.println("  checkboxes.forEach(name => { if (!(name in config)) config[name] = false; });");
   client.println("  fetch('/api/config', {");
   client.println("    method: 'POST',");
@@ -1067,22 +1067,47 @@ void GpsWebServer::gpsApiGet(EthernetClient &client) {
   // Create JSON document (optimized buffer size)
   DynamicJsonDocument doc(6144); // Reduced from 8192 to 6144 for memory efficiency
   
-  // Position and Time Information
-  doc["latitude"] = gpsData.latitude;
-  doc["longitude"] = gpsData.longitude;
-  doc["altitude"] = gpsData.altitude;
-  doc["speed"] = gpsData.speed;
-  doc["course"] = gpsData.course;
+  // Position and Time Information with validation
+  // Validate float values to prevent NaN or Inf in JSON
+  float lat = gpsData.latitude;
+  float lon = gpsData.longitude;
+  float alt = gpsData.altitude;
+  float spd = gpsData.speed;
+  float crs = gpsData.course;
+  
+  if (isnan(lat) || isinf(lat)) lat = 0.0;
+  if (isnan(lon) || isinf(lon)) lon = 0.0;
+  if (isnan(alt) || isinf(alt)) alt = 0.0;
+  if (isnan(spd) || isinf(spd)) spd = 0.0;
+  if (isnan(crs) || isinf(crs)) crs = 0.0;
+  
+  doc["latitude"] = lat;
+  doc["longitude"] = lon;
+  doc["altitude"] = alt;
+  doc["speed"] = spd;
+  doc["course"] = crs;
   doc["utc_time"] = gpsData.utc_time;
   doc["ttff"] = gpsData.ttff;
   
-  // Fix Information
+  // Fix Information with validation
+  float pdop = gpsData.pdop;
+  float hdop = gpsData.hdop;
+  float vdop = gpsData.vdop;
+  float acc3d = gpsData.accuracy_3d;
+  float acc2d = gpsData.accuracy_2d;
+  
+  if (isnan(pdop) || isinf(pdop)) pdop = 99.99;
+  if (isnan(hdop) || isinf(hdop)) hdop = 99.99;
+  if (isnan(vdop) || isinf(vdop)) vdop = 99.99;
+  if (isnan(acc3d) || isinf(acc3d)) acc3d = 0.0;
+  if (isnan(acc2d) || isinf(acc2d)) acc2d = 0.0;
+  
   doc["fix_type"] = gpsData.fix_type;
-  doc["pdop"] = gpsData.pdop;
-  doc["hdop"] = gpsData.hdop;
-  doc["vdop"] = gpsData.vdop;
-  doc["accuracy_3d"] = gpsData.accuracy_3d;
-  doc["accuracy_2d"] = gpsData.accuracy_2d;
+  doc["pdop"] = pdop;
+  doc["hdop"] = hdop;
+  doc["vdop"] = vdop;
+  doc["accuracy_3d"] = acc3d;
+  doc["accuracy_2d"] = acc2d;
   
   // Constellation Statistics
   JsonObject stats = doc.createNestedObject("constellation_stats");
@@ -1115,12 +1140,44 @@ void GpsWebServer::gpsApiGet(EthernetClient &client) {
   
   // Individual Satellite Information
   JsonArray satellites = doc.createNestedArray("satellites");
-  for (uint8_t i = 0; i < gpsData.satellite_count; i++) {
+  
+  // Bounds checking to prevent buffer overflow
+  uint8_t safeSatelliteCount = gpsData.satellite_count;
+  if (safeSatelliteCount > MAX_SATELLITES) {
+    safeSatelliteCount = MAX_SATELLITES;
+  }
+  
+  for (uint8_t i = 0; i < safeSatelliteCount; i++) {
+    // Additional bounds checking for satellite array access
+    if (i >= MAX_SATELLITES) {
+      break;
+    }
+    
     JsonObject sat = satellites.createNestedObject();
+    
+    // Validate data before adding to JSON
     sat["prn"] = gpsData.satellites[i].prn;
     sat["constellation"] = gpsData.satellites[i].constellation;
-    sat["azimuth"] = gpsData.satellites[i].azimuth;
-    sat["elevation"] = gpsData.satellites[i].elevation;
+    
+    // Validate float values to prevent NaN or Inf
+    float azimuth = gpsData.satellites[i].azimuth;
+    float elevation = gpsData.satellites[i].elevation;
+    
+    if (isnan(azimuth) || isinf(azimuth)) {
+      azimuth = 0.0;
+    }
+    if (isnan(elevation) || isinf(elevation)) {
+      elevation = 0.0;
+    }
+    
+    // Clamp values to valid ranges
+    if (azimuth < 0.0) azimuth = 0.0;
+    if (azimuth > 360.0) azimuth = 360.0;
+    if (elevation < 0.0) elevation = 0.0;
+    if (elevation > 90.0) elevation = 90.0;
+    
+    sat["azimuth"] = azimuth;
+    sat["elevation"] = elevation;
     sat["signal_strength"] = gpsData.satellites[i].signal_strength;
     sat["used_in_nav"] = gpsData.satellites[i].used_in_nav;
     sat["tracked"] = gpsData.satellites[i].tracked;
@@ -1139,9 +1196,35 @@ void GpsWebServer::gpsApiGet(EthernetClient &client) {
   doc["data_valid"] = gpsData.data_valid;
   doc["last_update"] = gpsData.last_update;
   
-  // Serialize to string
+  // Check document capacity before serialization
+  size_t requiredSize = measureJson(doc);
+  if (requiredSize > 6144) {
+    // JSON too large, send error response
+    String errorJson = "{\"error\": \"GPS data too large\", \"required_size\": " + String(requiredSize) + "}";
+    sendJsonResponse(client, errorJson, 500);
+    return;
+  }
+  
+  // Serialize to string with error checking
   String jsonString;
-  serializeJson(doc, jsonString);
+  jsonString.reserve(requiredSize + 100); // Reserve space to prevent reallocation
+  
+  size_t serializedBytes = serializeJson(doc, jsonString);
+  if (serializedBytes == 0) {
+    // Serialization failed, send error response
+    String errorJson = "{\"error\": \"JSON serialization failed\", \"bytes\": 0}";
+    sendJsonResponse(client, errorJson, 500);
+    return;
+  }
+  
+  // Validate JSON string for control characters
+  for (size_t i = 0; i < jsonString.length(); i++) {
+    char c = jsonString.charAt(i);
+    if (c < 32 && c != '\t' && c != '\n' && c != '\r') {
+      // Found invalid control character, replace with space
+      jsonString.setCharAt(i, ' ');
+    }
+  }
   
   // Update cache for performance optimization
   cachedGpsJson = jsonString;
@@ -1157,9 +1240,25 @@ void GpsWebServer::gpsApiGet(EthernetClient &client) {
 }
 
 void GpsWebServer::sendJsonResponse(EthernetClient &client, const String& json, int statusCode) {
+  // Validate JSON string before sending
+  String validatedJson = json;
+  
+  // Remove any potential control characters from JSON
+  for (size_t i = 0; i < validatedJson.length(); i++) {
+    char c = validatedJson.charAt(i);
+    if (c < 32 && c != '\t' && c != '\n' && c != '\r') {
+      validatedJson.setCharAt(i, ' ');
+    }
+  }
+  
+  // Send HTTP headers with proper Content-Length
   client.printf("HTTP/1.1 %d %s\r\n", statusCode, statusCode == 200 ? "OK" : "Error");
-  client.println("Content-Type: application/json");
+  client.println("Content-Type: application/json; charset=utf-8");
+  client.printf("Content-Length: %d\r\n", validatedJson.length());
   client.println("Connection: close");
+  client.println("Cache-Control: no-cache");
   client.println();
-  client.println(json);
+  
+  // Send JSON content
+  client.print(validatedJson);
 }

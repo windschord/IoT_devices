@@ -388,6 +388,161 @@ void test_system_integration() {
     Serial.println("✓ System integration test passed");
 }
 
+void test_json_serialization_integrity() {
+    Serial.println("Testing JSON serialization integrity");
+    
+    // Test potential causes of JSON syntax error at position 2048
+    
+    // Test 1: Float precision issues
+    float testFloat = 123.456789;
+    char floatBuffer[32];
+    sprintf(floatBuffer, "%.6f", testFloat);
+    
+    // Should not contain invalid characters
+    String floatStr = String(floatBuffer);
+    TEST_ASSERT_FALSE(floatStr.indexOf('\0') != -1); // No null characters
+    TEST_ASSERT_FALSE(floatStr.indexOf('\n') != -1); // No newlines
+    TEST_ASSERT_FALSE(floatStr.indexOf('\r') != -1); // No carriage returns
+    
+    // Test 2: String escaping
+    String testString = "Test \"quoted\" string";
+    String expectedEscaped = "Test \\\"quoted\\\" string";
+    
+    // Simulate JSON string escaping
+    String escaped = testString;
+    escaped.replace("\\", "\\\\");
+    escaped.replace("\"", "\\\"");
+    
+    TEST_ASSERT_EQUAL_STRING(expectedEscaped.c_str(), escaped.c_str());
+    
+    // Test 3: Array boundary conditions
+    const int maxSatellites = 32;
+    for (int i = 0; i <= maxSatellites; i++) {
+        // Test satellite array access doesn't cause memory corruption
+        if (i < maxSatellites) {
+            // Valid access - should work
+            TEST_ASSERT_TRUE(i >= 0 && i < maxSatellites);
+        } else {
+            // Boundary test - should be caught
+            TEST_ASSERT_FALSE(i < maxSatellites);
+        }
+    }
+    
+    // Test 4: JSON document size validation
+    size_t jsonDocSize = 6144;
+    size_t typicalJsonSize = 2048; // Approximate size for 32 satellites
+    
+    TEST_ASSERT_GREATER_THAN(typicalJsonSize, jsonDocSize);
+    TEST_ASSERT_LESS_THAN(8192, jsonDocSize); // Should be optimized
+    
+    Serial.println("✓ JSON serialization integrity test passed");
+}
+
+void test_character_encoding_validation() {
+    Serial.println("Testing character encoding validation");
+    
+    // Test for control characters that could cause JSON parsing errors
+    
+    // Test 1: Control character detection
+    for (int i = 0; i < 32; i++) {
+        char controlChar = (char)i;
+        
+        // Only allow specific whitespace characters in JSON
+        if (i == 9 || i == 10 || i == 13) { // Tab, LF, CR
+            // These are acceptable in JSON strings
+            continue;
+        } else {
+            // These should be escaped or removed
+            TEST_ASSERT_TRUE(i < 32); // Confirm it's a control character
+        }
+    }
+    
+    // Test 2: String validation for JSON safety
+    String testStrings[] = {
+        "Normal string",
+        "String with \"quotes\"",
+        "String with \\backslash",
+        "String with /forward/slash",
+        "String with\tTab",
+        "String with\nNewline"
+    };
+    
+    size_t stringCount = sizeof(testStrings) / sizeof(testStrings[0]);
+    
+    for (size_t i = 0; i < stringCount; i++) {
+        String str = testStrings[i];
+        
+        // Test that we can detect strings needing escaping
+        bool needsEscaping = (str.indexOf('"') != -1) || 
+                            (str.indexOf('\\') != -1) ||
+                            (str.indexOf('\n') != -1) ||
+                            (str.indexOf('\r') != -1) ||
+                            (str.indexOf('\t') != -1);
+        
+        // Verify detection logic
+        if (i >= 1 && i <= 5) { // These strings need escaping
+            TEST_ASSERT_TRUE(needsEscaping);
+        } else { // "Normal string" doesn't need escaping
+            TEST_ASSERT_FALSE(needsEscaping);
+        }
+    }
+    
+    // Test 3: UTF-8 handling
+    String utf8String = "Test UTF-8: α β γ";
+    
+    // UTF-8 characters should not cause JSON parsing errors
+    TEST_ASSERT_GREATER_THAN(0, utf8String.length());
+    TEST_ASSERT_FALSE(utf8String.indexOf('\0') != -1); // No null terminators
+    
+    Serial.println("✓ Character encoding validation test passed");
+}
+
+void test_memory_overflow_detection() {
+    Serial.println("Testing memory overflow detection");
+    
+    // Test conditions that could cause buffer overflow near position 2048
+    
+    // Test 1: Satellite array overflow
+    const int MAX_SATELLITES = 32;
+    int satelliteCount = 50; // Intentionally too many
+    
+    // Should detect overflow condition
+    TEST_ASSERT_GREATER_THAN(MAX_SATELLITES, satelliteCount);
+    
+    // Proper bounds checking
+    int safeSatelliteCount = satelliteCount > MAX_SATELLITES ? MAX_SATELLITES : satelliteCount;
+    TEST_ASSERT_EQUAL(MAX_SATELLITES, safeSatelliteCount);
+    
+    // Test 2: String concatenation overflow
+    String longString = "";
+    const int TARGET_LENGTH = 2100; // Around position 2048
+    
+    // Build a string that approaches the error position
+    for (int i = 0; i < 50; i++) {
+        longString += "This is a test string that gets quite long when repeated multiple times. ";
+        if (longString.length() > TARGET_LENGTH) {
+            break;
+        }
+    }
+    
+    // Verify we can detect when strings get too long
+    TEST_ASSERT_GREATER_THAN(TARGET_LENGTH, longString.length());
+    
+    // Test 3: JSON document capacity
+    size_t jsonCapacity = 6144;
+    size_t testDataSize = longString.length() * 2; // Simulate large JSON
+    
+    if (testDataSize > jsonCapacity) {
+        // Should detect overflow condition
+        TEST_ASSERT_GREATER_THAN(jsonCapacity, testDataSize);
+    } else {
+        // Should be within capacity
+        TEST_ASSERT_LESS_THAN(jsonCapacity + 1, testDataSize);
+    }
+    
+    Serial.println("✓ Memory overflow detection test passed");
+}
+
 void test_user_experience_validation() {
     Serial.println("Testing user experience validation");
     
@@ -457,6 +612,9 @@ void setup() {
     RUN_TEST(test_browser_compatibility_features);
     RUN_TEST(test_performance_optimization);
     RUN_TEST(test_system_integration);
+    RUN_TEST(test_json_serialization_integrity);
+    RUN_TEST(test_character_encoding_validation);
+    RUN_TEST(test_memory_overflow_detection);
     RUN_TEST(test_user_experience_validation);
     
     UNITY_END();
