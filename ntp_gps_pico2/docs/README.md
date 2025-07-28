@@ -119,27 +119,150 @@ Special support for Japan's Quasi-Zenith Satellite System disaster alerts:
 
 ## Getting Started
 
+### Prerequisites
+
+Before building and deploying the GPS NTP Server, ensure you have:
+
+```bash
+# Required software
+- PlatformIO Core (installed via pip)
+- GNU Make (macOS: included, Linux: build-essential)
+- USB-C cable for Raspberry Pi Pico 2 connection
+
+# Installation commands
+pip install platformio
+# macOS: make is pre-installed
+# Ubuntu/Debian: sudo apt install build-essential
+```
+
+### Build and Deployment
+
+The project includes a comprehensive Makefile for automated build and deployment:
+
+#### Quick Deployment (Recommended)
+
+```bash
+# Complete build, firmware upload, and filesystem upload
+make full
+
+# Monitor serial output after deployment
+make monitor
+```
+
+#### Step-by-Step Deployment
+
+```bash
+# 1. Build the project
+make build
+
+# 2. Upload firmware to Raspberry Pi Pico 2
+make upload
+
+# 3. Upload web files (HTML/JS) to LittleFS
+make uploadfs
+
+# 4. Monitor serial output
+make monitor BAUD=9600
+```
+
+#### Available Make Commands
+
+```bash
+# Basic Commands
+make build       # Build project only
+make upload      # Upload firmware only
+make uploadfs    # Upload filesystem (HTML/JS files) only
+make full        # Complete deployment (build + upload + uploadfs)
+make clean       # Clean build artifacts
+
+# Development Commands
+make monitor     # Start serial monitor (default: 9600 baud)
+make test        # Run unit tests
+make check       # Code compilation check only
+
+# File System Commands
+make fs-check    # Check data/ directory contents
+make fs-build    # Build filesystem image only
+
+# Advanced Commands
+make rebuild     # Clean + build
+make safe-upload # Upload with validation steps
+make help        # Show all available commands
+```
+
+#### Command Options
+
+```bash
+# Custom baud rate for monitoring
+make monitor BAUD=115200
+
+# Specify USB port (auto-detection default)
+make upload PORT=/dev/ttyACM0
+
+# Example: Complete deployment with monitoring
+make full && make monitor
+```
+
+#### Troubleshooting Build Issues
+
+**Common Error**: `picoboot::connection_error`
+- **Cause**: Normal Raspberry Pi Pico 2 reboot behavior
+- **Solution**: Error is harmless - deployment actually succeeded
+- **Verification**: Check serial output with `make monitor`
+
+**LittleFS Upload Issues**:
+```bash
+# Check filesystem configuration
+make fs-check
+
+# Verify data directory structure should show:
+# data/gps.html (~9KB)
+# data/gps.js (~15KB)
+```
+
+**Build Dependency Issues**:
+```bash
+# Update all libraries
+make lib-update
+
+# Clean rebuild if libraries change
+make rebuild
+```
+
 ### Quick Start Checklist
 
-1. **Hardware Assembly** (2-4 hours):
+1. **Development Setup** (5 minutes):
+   ```bash
+   # Clone and navigate to project
+   cd ntp_gps_pico2
+   
+   # Verify PlatformIO installation
+   make check-install
+   
+   # Build and deploy everything
+   make full
+   ```
+
+2. **Hardware Assembly** (2-4 hours):
    - Follow [Hardware Setup Guide](HARDWARE_SETUP.md)
    - Install all components and verify connections
    - Connect GNSS antenna with clear sky view
    - Apply power and verify LED startup sequence
 
-2. **Initial Configuration** (30 minutes):
+3. **Initial Configuration** (30 minutes):
    - Connect Ethernet cable to network
+   - Monitor startup with `make monitor`
    - Access web interface via DHCP-assigned IP
    - Configure network settings if needed
    - Wait for GPS satellite acquisition (5-15 minutes)
 
-3. **System Verification** (15 minutes):
+4. **System Verification** (15 minutes):
    - Verify all status LEDs are functioning correctly
    - Check GPS satellite count (minimum 4)
    - Test NTP client connectivity
    - Confirm PPS signal operation
 
-4. **Client Configuration** (varies):
+5. **Client Configuration** (varies):
    - Configure NTP clients to use server IP address
    - Test time synchronization accuracy
    - Set up monitoring and alerting

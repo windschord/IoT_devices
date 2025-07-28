@@ -4,6 +4,213 @@
 
 This guide covers the configuration and operation procedures for the GPS NTP Server system. After completing the hardware setup, follow these instructions to configure the software and establish proper system operation.
 
+## Firmware Build and Deployment
+
+### Prerequisites
+
+Before building and deploying, ensure you have the required development environment:
+
+```bash
+# Check PlatformIO installation
+pio --version
+
+# Install if not present
+pip install platformio
+
+# Verify Make is available (macOS/Linux)
+make --version
+```
+
+### Complete Deployment Process
+
+The recommended approach is to use the integrated Makefile for complete deployment:
+
+#### 1. Quick Deploy (Single Command)
+
+```bash
+# Complete build, firmware upload, and filesystem upload
+make full
+
+# Expected output:
+# 🔨 Building GPS NTP Server...
+# ✅ Build completed successfully
+# 📤 Uploading firmware to Raspberry Pi Pico 2...
+# ✅ Firmware upload completed
+# 📁 Uploading filesystem (HTML/JS files)...
+# ✅ Filesystem upload completed
+# 🎉 Complete deployment finished!
+```
+
+#### 2. Step-by-Step Deployment
+
+For troubleshooting or development, deploy components separately:
+
+```bash
+# Step 1: Build project
+make build
+# Compiles all source code and prepares firmware
+
+# Step 2: Upload firmware
+make upload
+# Flashes firmware to Raspberry Pi Pico 2
+# Device will reboot automatically
+
+# Step 3: Upload web files
+make uploadfs
+# Uploads HTML/JS files to LittleFS filesystem
+# Required for GPS web interface functionality
+
+# Step 4: Monitor system startup
+make monitor
+# Shows serial output for debugging
+# Press Ctrl+C to exit monitor
+```
+
+### Deployment Verification
+
+After deployment, verify system functionality:
+
+#### 1. Serial Output Monitoring
+
+```bash
+make monitor BAUD=9600
+
+# Expected startup sequence:
+# === GPS NTP Server v1.0 ===
+# Hardware: Raspberry Pi Pico 2 (RP2350)
+# LittleFS initialized successfully
+# GPS module connected successfully at I2C 0x42
+# Network connected - IP: 192.168.1.100
+# NTP Server listening on port 123
+# Web server started on port 80
+```
+
+#### 2. LED Status Indicators
+
+| LED | Color | Pattern | Status |
+|-----|-------|---------|--------|
+| 1 | Green | OFF | GPS module not connected |
+| 1 | Green | Slow blink (2s) | GPS connected, acquiring satellites |
+| 1 | Green | Fast blink (0.5s) | 2D GPS fix acquired |
+| 1 | Green | Solid ON | 3D GPS fix acquired |
+| 2 | Blue | OFF | No network connection |
+| 2 | Blue | Solid ON | Network connected |
+| 3 | Red | OFF | Normal operation |
+| 3 | Red | Solid ON | System error |
+| 4 | Yellow | OFF | No PPS signal |
+| 4 | Yellow | Brief flash (50ms/s) | PPS signal active |
+
+#### 3. Web Interface Test
+
+```bash
+# Get device IP from serial monitor, then:
+# Open browser to: http://[device-ip]/
+
+# Test GPS web interface:
+# http://[device-ip]/gps
+
+# Check system metrics:
+# http://[device-ip]/metrics
+```
+
+### Common Deployment Issues
+
+#### Issue: `picoboot::connection_error`
+
+**Symptoms**:
+```
+Verifying Flash:    [==============================]  100%
+  OK
+libc++abi: terminating due to uncaught exception of type picoboot::connection_error
+*** [upload] Error -6
+```
+
+**Cause**: Normal Raspberry Pi Pico 2 reboot behavior after successful upload
+
+**Solution**: 
+- Error is harmless - deployment actually succeeded
+- Verify with `make monitor` to see system startup
+- Continue with next deployment step
+
+#### Issue: LittleFS Upload Failure
+
+**Symptoms**:
+```
+error: image size not specified, can't create filesystem
+*** [.pio/build/pico/littlefs.bin] Error 1
+```
+
+**Solution**:
+```bash
+# Check platformio.ini has filesystem size setting
+grep "filesystem_size" platformio.ini
+# Should show: board_build.filesystem_size = 1m
+
+# Verify data directory exists and has files
+make fs-check
+# Should show gps.html and gps.js files
+```
+
+#### Issue: Build Dependencies
+
+**Symptoms**: Library not found or compilation errors
+
+**Solution**:
+```bash
+# Update all libraries
+make lib-update
+
+# Clean rebuild
+make rebuild
+
+# Check library installation
+pio lib list
+```
+
+### Development Workflow
+
+#### 1. Code Modification Cycle
+
+```bash
+# After making code changes:
+make build          # Compile and check for errors
+make upload         # Upload firmware only (faster)
+make monitor        # Check system behavior
+
+# For web interface changes:
+make uploadfs       # Upload HTML/JS files only
+# No firmware recompile needed
+```
+
+#### 2. Testing and Validation
+
+```bash
+# Run unit tests
+make test
+
+# Code compilation check only
+make check
+
+# Build with verbose output for debugging
+make build VERBOSE=1
+```
+
+#### 3. File System Management
+
+```bash
+# Check web files before upload
+make fs-check
+
+# Expected output:
+# 📋 Checking data directory contents:
+#   📄 data/gps.js (15528 bytes)
+#   📄 data/gps.html (9437 bytes)
+# 📊 Total: 2 files, 24965 bytes
+
+# Build filesystem image only
+make fs-build
+```
+
 ## Initial System Configuration
 
 ### First Boot Procedure

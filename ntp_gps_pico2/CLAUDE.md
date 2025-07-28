@@ -4,41 +4,97 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 開発コマンド
 
-### ビルドとアップロード
+### 統合Makefile（推奨）
+
+プロジェクトには包括的なMakefileが含まれており、ビルドとデプロイメントを簡素化します：
+
+```bash
+# 完全デプロイ（ビルド + ファームウェア + ファイルシステム）
+make full
+
+# 基本コマンド
+make build       # プロジェクトをビルド
+make upload      # ファームウェアをアップロード
+make uploadfs    # HTML/JSファイルをLittleFSにアップロード
+make clean       # ビルド成果物をクリーンアップ
+make monitor     # シリアルモニター開始 (9600 baud)
+
+# 開発用コマンド
+make test        # テスト実行
+make check       # コードチェック（コンパイルのみ）
+make rebuild     # クリーン + ビルド
+make fs-check    # data/ディレクトリ内容確認
+
+# オプション指定
+make monitor BAUD=115200         # カスタムボーレート
+make upload PORT=/dev/ttyACM0    # 特定ポート指定
+```
+
+### 従来のPlatformIOコマンド
+
+必要に応じて直接PlatformIOコマンドも使用可能：
+
 ```bash
 # プロジェクトをビルド
-pio build
+pio run -e pico
 
 # Raspberry Pi Pico 2にビルドしてアップロード
-pio run -t upload
+pio run -e pico -t upload
+
+# LittleFSファイルシステムアップロード
+pio run -e pico -t uploadfs
 
 # ビルド成果物をクリーンアップ
-pio run -t clean
+pio run -e pico -t clean
 ```
 
 ### テストとデバッグ
 ```bash
-# コードチェック（アップロードなしでコンパイル）
-pio check
+# Makefileベース（推奨）
+make test           # テスト実行
+make monitor        # シリアルモニター
+make check          # コードチェック
 
-# シリアル出力をモニター（デフォルトボーレート9600）
+# PlatformIO直接実行
+pio test -e pico
 pio device monitor -b 9600
-
-# 特定のボーレートでモニター
-pio device monitor -b 9600
+pio check -e pico
 ```
 
 ### ライブラリ管理
 ```bash
-# ライブラリのインストール/更新
-pio lib install
+# Makefileベース
+make lib-update     # 全ライブラリ更新
 
-# インストール済みライブラリの一覧
-pio lib list
-
-# 全ライブラリの更新
-pio lib update
+# PlatformIO直接実行
+pio lib install     # ライブラリのインストール/更新
+pio lib list        # インストール済みライブラリの一覧
+pio lib update      # 全ライブラリの更新
 ```
+
+### デプロイメント手順
+
+1. **完全デプロイ（推奨）**:
+   ```bash
+   make full
+   ```
+
+2. **段階的デプロイ（トラブルシューティング用）**:
+   ```bash
+   make build      # ビルド
+   make upload     # ファームウェアアップロード
+   make uploadfs   # Webファイルアップロード
+   make monitor    # 動作確認
+   ```
+
+3. **開発時の高速デプロイ**:
+   ```bash
+   # コード変更後
+   make upload     # ファームウェアのみ
+
+   # Webファイル変更後
+   make uploadfs   # ファイルシステムのみ
+   ```
 
 ## プロジェクトアーキテクチャ
 
