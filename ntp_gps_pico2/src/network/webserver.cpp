@@ -5,6 +5,7 @@
 #include "../config/LoggingService.h"
 #include "../gps/Gps_Client.h"
 #include <ArduinoJson.h>
+#include <LittleFS.h>
 
 void GpsWebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_SAT_data_t *ubxNavSatData_t, GpsSummaryData gpsSummaryData)
 {
@@ -45,9 +46,16 @@ void GpsWebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_
     if (s.indexOf("GET /gps ") >= 0)
     {
       if (loggingService) {
-        loggingService->info("WEB", "Serving GPS details page");
+        loggingService->info("WEB", "Serving GPS page from file system");
       }
-      gpsPage(client, ubxNavSatData_t);
+      handleFileRequest(client, "/gps.html", "text/html");
+    }
+    else if (s.indexOf("GET /gps.js ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Serving GPS JavaScript from file system");
+      }
+      handleFileRequest(client, "/gps.js", "text/javascript");
     }
     else if (s.indexOf("GET /metrics ") >= 0)
     {
@@ -1237,6 +1245,43 @@ void GpsWebServer::gpsApiGet(EthernetClient &client) {
   // Update performance metrics
   unsigned long responseTime = millis() - requestStartTime;
   totalResponseTime += responseTime;
+}
+
+void GpsWebServer::handleFileRequest(EthernetClient &client, const String& path, const String& contentType) {
+  if (LittleFS.exists(path)) {
+    File file = LittleFS.open(path, "r");
+    if (file) {
+      size_t fileSize = file.size();
+      
+      // Send headers
+      client.println("HTTP/1.1 200 OK");
+      client.printf("Content-Type: %s\r\n", contentType.c_str());
+      client.printf("Content-Length: %zu\r\n", fileSize);
+      client.println("Connection: close");
+      client.println("Cache-Control: public, max-age=3600");
+      client.println();
+      
+      // Stream file content
+      while (file.available()) {
+        client.write(file.read());
+      }
+      file.close();
+      return;
+    }
+  }
+  
+  // 404 Not Found
+  send404(client);
+}
+
+void GpsWebServer::send404(EthernetClient &client) {
+  String notFound = "<!DOCTYPE html><html><body><h1>404 Not Found</h1><p>The requested file was not found.</p></body></html>";
+  client.println("HTTP/1.1 404 Not Found");
+  client.println("Content-Type: text/html");
+  client.printf("Content-Length: %d\r\n", notFound.length());
+  client.println("Connection: close");
+  client.println();
+  client.print(notFound);
 }
 
 void GpsWebServer::sendJsonResponse(EthernetClient &client, const String& json, int statusCode) {

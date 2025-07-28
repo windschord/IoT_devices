@@ -58,6 +58,8 @@ private:
     void printHeader(EthernetClient &client, String contentType);
     bool parsePostData(const String& data, String& key, String& value);
     void sendJsonResponse(EthernetClient &client, const String& json, int statusCode = 200);
+    void send404(EthernetClient &client); // Add 404 handler
+    void handleFileRequest(EthernetClient &client, const String& path, const String& contentType); // File system support
 
 };
 #endif

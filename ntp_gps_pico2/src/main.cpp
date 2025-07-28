@@ -6,6 +6,7 @@
 // Removed WebServer.h to avoid conflicts with custom GpsWebServer
 #include <time.h>
 #include <EthernetUdp.h>
+#include <LittleFS.h>
 
 // GPS Client import
 #include "gps/Gps_Client.h"
@@ -460,6 +461,13 @@ void setup()
   initializeSerial();
   initializeLEDs();
   initializeI2C_OLED();
+  
+  // 1.1. ファイルシステム初期化（Web用）
+  if (!LittleFS.begin()) {
+    Serial.println("LittleFS mount failed - Web files not available");
+  } else {
+    Serial.println("LittleFS initialized successfully");
+  }
 
   // 2. コアサービス初期化（エラーハンドラ、設定、ログ）
   initializeCoreServices();
