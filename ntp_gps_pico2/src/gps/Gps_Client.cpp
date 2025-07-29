@@ -22,6 +22,9 @@ void GpsClient::getPVTdata(UBX_NAV_PVT_data_t *data)
   gpsSummaryData.sec = data->sec;
   gpsSummaryData.msec = data->iTOW % 1000;
   gpsSummaryData.fixType = data->fixType;
+  
+  // Web GPS データも同期更新 (GPS APIとルートページのデータ整合性確保)
+  updateWebGpsData(data, ubxNavSatData_t);
 }
 
 // https://github.com/SWITCHSCIENCE/samplecodes/blob/master/GPS_shield_for_ESPr/espr_dev_qzss_drc_drx_decode/espr_dev_qzss_drc_drx_decode.ino

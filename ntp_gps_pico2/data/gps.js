@@ -1,5 +1,6 @@
 // Chrome専用 Modern JavaScript (ES6+)
 // GPS Satellite Display - Separated from C++ for better maintainability
+// Version: 2.2.0 (2025-01-29) - GPS status display improvements
 
 // Global variables
 let gpsData = null;
@@ -150,6 +151,11 @@ function updateConnectionStatus() {
     
     statusElement.className = `connection-status ${connectionStatus}`;
   }
+  
+  // Add version info to browser console for debugging
+  if (connectionStatus === 'connected') {
+    console.log('🔗 GPS API Connection established - JS v2.1.0 (2025-01-29)');
+  }
 }
 
 // Display functions
@@ -297,28 +303,43 @@ function updateConstellationStats() {
   const statsContainer = document.getElementById('constellationStats');
   if (!statsContainer || !gpsData) return;
   
-  const stats = gpsData.constellation_stats;
-  if (!stats) return;
-  
   let html = `
     <div class="stat-card">
       <strong>Total</strong>
-      ${stats.satellites_total}
+      ${gpsData.satellites_total || 0}
     </div>
     <div class="stat-card">
       <strong>Used</strong>
-      ${stats.satellites_used}
+      ${gpsData.satellites_used || 0}
     </div>
   `;
   
-  // Add constellation-specific stats
+  // Add constellation-specific stats using direct data from gpsData
   const constellationStats = {
-    gps: stats.gps || { total: 0, used: 0 },
-    glonass: stats.glonass || { total: 0, used: 0 },
-    galileo: stats.galileo || { total: 0, used: 0 },
-    beidou: stats.beidou || { total: 0, used: 0 },
-    sbas: stats.sbas || { total: 0, used: 0 },
-    qzss: stats.qzss || { total: 0, used: 0 }
+    gps: { 
+      total: gpsData.satellites_gps_total || 0, 
+      used: gpsData.satellites_gps_used || 0 
+    },
+    glonass: { 
+      total: gpsData.satellites_glonass_total || 0, 
+      used: gpsData.satellites_glonass_used || 0 
+    },
+    galileo: { 
+      total: gpsData.satellites_galileo_total || 0, 
+      used: gpsData.satellites_galileo_used || 0 
+    },
+    beidou: { 
+      total: gpsData.satellites_beidou_total || 0, 
+      used: gpsData.satellites_beidou_used || 0 
+    },
+    sbas: { 
+      total: gpsData.satellites_sbas_total || 0, 
+      used: gpsData.satellites_sbas_used || 0 
+    },
+    qzss: { 
+      total: gpsData.satellites_qzss_total || 0, 
+      used: gpsData.satellites_qzss_used || 0 
+    }
   };
   
   Object.entries(constellationStats).forEach(([key, data]) => {
@@ -340,19 +361,39 @@ function updateGnssControls() {
   const controlsContainer = document.getElementById('gnssControls');
   if (!controlsContainer || !gpsData) return;
   
-  const enables = gpsData.constellation_enables || {};
-  
   let html = '';
   CONSTELLATIONS.forEach(constellation => {
-    const enabled = enables[constellation.key] ?? true;
     const checked = document.getElementById(`filter_${constellation.key}`)?.checked ?? true;
+    
+    // Get constellation status based on actual data
+    let enabled = false;
+    switch(constellation.key) {
+      case 'gps':
+        enabled = (gpsData.satellites_gps_total || 0) > 0;
+        break;
+      case 'glonass':
+        enabled = (gpsData.satellites_glonass_total || 0) > 0;
+        break;
+      case 'galileo':
+        enabled = (gpsData.satellites_galileo_total || 0) > 0;
+        break;
+      case 'beidou':
+        enabled = (gpsData.satellites_beidou_total || 0) > 0;
+        break;
+      case 'sbas':
+        enabled = (gpsData.satellites_sbas_total || 0) > 0;
+        break;
+      case 'qzss':
+        enabled = (gpsData.satellites_qzss_total || 0) > 0;
+        break;
+    }
     
     html += `
       <div style="margin: 5px 0; display: flex; align-items: center;">
         <input type="checkbox" id="filter_${constellation.key}" ${checked ? 'checked' : ''} onchange="handleUserInteraction(); updateDisplay();">
         <div style="width: 16px; height: 16px; background: ${constellation.color}; margin: 0 8px; border-radius: 2px;"></div>
         <label for="filter_${constellation.key}" style="font-size: 12px;">
-          ${constellation.name} ${enabled ? '(Enabled)' : '(Disabled)'}
+          ${constellation.name} ${enabled ? '(Active)' : '(No Data)'}
         </label>
       </div>
     `;
@@ -368,25 +409,105 @@ function updateDateView() {
   const fixTypeNames = ['No Fix', 'Dead Reckoning', '2D Fix', '3D Fix', 'GNSS + DR', 'Time Only'];
   const fixTypeName = fixTypeNames[gpsData.fix_type] || 'Unknown';
   
-  // Format UTC time
-  const utcTime = gpsData.utc_time ? new Date(gpsData.utc_time * 1000).toISOString() : 'N/A';
+  // Check if GPS has valid fix
+  const hasValidFix = gpsData.data_valid && gpsData.fix_type >= 2;
+  const noSignal = gpsData.fix_type === 0 && !gpsData.data_valid;
   
-  // Calculate speed in different units
-  const speedKmh = (gpsData.speed * 3.6).toFixed(1);
-  const speedMph = (gpsData.speed * 2.237).toFixed(1);
+  // Format UTC time
+  let utcTime = 'Waiting for GPS signal...';
+  if (gpsData.utc_time && gpsData.utc_time > 0) {
+    utcTime = new Date(gpsData.utc_time * 1000).toISOString();
+  } else if (noSignal) {
+    utcTime = 'No GPS signal received';
+  }
+  
+  // Position display with status indication
+  let positionDisplay;
+  if (hasValidFix) {
+    positionDisplay = `${gpsData.latitude.toFixed(6)}°, ${gpsData.longitude.toFixed(6)}°`;
+  } else if (noSignal) {
+    positionDisplay = 'GPS signal required for position';
+  } else {
+    positionDisplay = `Acquiring position... (${gpsData.satellites_used}/${gpsData.satellites_total} satellites)`;
+  }
+  
+  // Altitude with status
+  let altitudeDisplay;
+  if (hasValidFix) {
+    altitudeDisplay = `${gpsData.altitude.toFixed(1)} m`;
+  } else {
+    altitudeDisplay = noSignal ? 'No GPS signal' : 'Acquiring altitude...';
+  }
+  
+  // Speed calculation with status
+  let speedDisplay;
+  if (hasValidFix && gpsData.speed > 0.1) {
+    const speedKmh = (gpsData.speed * 3.6).toFixed(1);
+    const speedMph = (gpsData.speed * 2.237).toFixed(1);
+    speedDisplay = `${gpsData.speed.toFixed(1)} m/s (${speedKmh} km/h, ${speedMph} mph)`;
+  } else if (hasValidFix) {
+    speedDisplay = 'Stationary (< 0.1 m/s)';
+  } else {
+    speedDisplay = noSignal ? 'No GPS signal' : 'Acquiring speed data...';
+  }
+  
+  // Course with status
+  let courseDisplay;
+  if (hasValidFix && gpsData.speed > 0.5) {
+    courseDisplay = `${gpsData.course.toFixed(1)}°`;
+  } else if (hasValidFix) {
+    courseDisplay = 'Not moving (course invalid)';
+  } else {
+    courseDisplay = noSignal ? 'No GPS signal' : 'Acquiring course...';
+  }
+  
+  // DOP values with interpretation
+  let hdopDisplay, vdopDisplay;
+  if (hasValidFix) {
+    const hdop = gpsData.hdop || 0;
+    const vdop = gpsData.vdop || 0;
+    const hdopQuality = hdop < 2 ? 'Excellent' : hdop < 5 ? 'Good' : hdop < 10 ? 'Moderate' : 'Poor';
+    const vdopQuality = vdop < 3 ? 'Good' : vdop < 6 ? 'Moderate' : 'Poor';
+    hdopDisplay = `${hdop.toFixed(2)} (${hdopQuality})`;
+    vdopDisplay = `${vdop.toFixed(2)} (${vdopQuality})`;
+  } else {
+    hdopDisplay = noSignal ? 'No GPS signal' : 'Calculating...';
+    vdopDisplay = noSignal ? 'No GPS signal' : 'Calculating...';
+  }
+  
+  // Accuracy with status
+  let accuracy3dDisplay, accuracy2dDisplay;
+  if (hasValidFix) {
+    accuracy3dDisplay = `${(gpsData.accuracy_3d || 0).toFixed(1)} m`;
+    accuracy2dDisplay = `${(gpsData.accuracy_2d || 0).toFixed(1)} m`;
+  } else {
+    accuracy3dDisplay = noSignal ? 'No GPS signal' : 'Acquiring fix...';
+    accuracy2dDisplay = noSignal ? 'No GPS signal' : 'Acquiring fix...';
+  }
+  
+  // TTFF with interpretation
+  let ttffDisplay;
+  if (gpsData.ttff > 0) {
+    ttffDisplay = `${gpsData.ttff} seconds`;
+  } else if (noSignal) {
+    ttffDisplay = 'No first fix yet';
+  } else {
+    ttffDisplay = 'Acquiring first fix...';
+  }
   
   const html = `
     <div class="info-item">
       <strong>Fix Status</strong>
-      ${fixTypeName} (Type ${gpsData.fix_type})
+      ${fixTypeName} (Type ${gpsData.fix_type || 0})
+      ${noSignal ? ' - Searching for satellites...' : ''}
     </div>
     <div class="info-item">
       <strong>Position</strong>
-      ${gpsData.latitude.toFixed(6)}°, ${gpsData.longitude.toFixed(6)}°
+      ${positionDisplay}
     </div>
     <div class="info-item">
       <strong>Altitude</strong>
-      ${gpsData.altitude.toFixed(1)} m
+      ${altitudeDisplay}
     </div>
     <div class="info-item">
       <strong>UTC Time</strong>
@@ -394,31 +515,31 @@ function updateDateView() {
     </div>
     <div class="info-item">
       <strong>Speed</strong>
-      ${gpsData.speed.toFixed(1)} m/s (${speedKmh} km/h, ${speedMph} mph)
+      ${speedDisplay}
     </div>
     <div class="info-item">
       <strong>Course</strong>
-      ${gpsData.course.toFixed(1)}°
+      ${courseDisplay}
     </div>
     <div class="info-item">
       <strong>HDOP</strong>
-      ${gpsData.hdop.toFixed(2)}
+      ${hdopDisplay}
     </div>
     <div class="info-item">
       <strong>VDOP</strong>
-      ${gpsData.vdop.toFixed(2)}
+      ${vdopDisplay}
     </div>
     <div class="info-item">
       <strong>3D Accuracy</strong>
-      ${gpsData.accuracy_3d.toFixed(1)} m
+      ${accuracy3dDisplay}
     </div>
     <div class="info-item">
       <strong>2D Accuracy</strong>
-      ${gpsData.accuracy_2d.toFixed(1)} m
+      ${accuracy2dDisplay}
     </div>
     <div class="info-item">
       <strong>TTFF</strong>
-      ${gpsData.ttff} seconds
+      ${ttffDisplay}
     </div>
   `;
   
@@ -470,7 +591,8 @@ function updateDisplayWithTimestamp() {
 
 // Initialize everything when page loads
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('GPS Satellite Display initialized');
+  console.log('GPS Satellite Display initialized - Version 2.2.0 (2025-01-29)');
+  console.log('GPS status display improvements applied');
   
   // Initial data fetch
   fetchGpsData();

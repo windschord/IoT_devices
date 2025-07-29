@@ -96,9 +96,9 @@ void triggerPps() {
  */
 void initializeSerial() {
   Serial.begin(SERIAL_BAUD_RATE);
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB port only
-  }
+  // Removed Serial connection wait to allow standalone operation
+  // System will start immediately without requiring serial monitor
+  delay(100); // Brief delay for serial initialization
   Serial.println("=== GPS NTP Server v1.0 ===");
 }
 
