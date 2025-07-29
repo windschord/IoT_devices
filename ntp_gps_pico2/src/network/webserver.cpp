@@ -316,37 +316,438 @@ void GpsWebServer::configPage(EthernetClient &client) {
   
   client.println("<!DOCTYPE HTML>");
   client.println("<html><head>");
+  client.println("<meta charset=\"UTF-8\">");
+  client.println("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
   client.println("<title>GPS NTP Server Configuration</title>");
   client.println("<style>");
-  client.println("body { font-family: Arial, sans-serif; margin: 20px; }");
-  client.println("table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }");
-  client.println("th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }");
-  client.println("th { background-color: #f2f2f2; }");
-  client.println("input[type=text], input[type=number], select { width: 100%; padding: 4px; }");
-  client.println("input[type=submit] { background-color: #4CAF50; color: white; padding: 8px 16px; border: none; cursor: pointer; }");
-  client.println("input[type=submit]:hover { background-color: #45a049; }");
-  client.println(".success { color: green; font-weight: bold; }");
-  client.println(".error { color: red; font-weight: bold; }");
+  client.println("body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }");
+  client.println(".container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }");
+  client.println(".header { text-align: center; margin-bottom: 30px; }");
+  client.println(".nav { margin-bottom: 20px; }");
+  client.println(".nav a { text-decoration: none; color: #4CAF50; margin-right: 15px; }");
+  client.println(".tabs { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 20px; }");
+  client.println(".tab { padding: 10px 20px; cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; }");
+  client.println(".tab.active { border-bottom-color: #4CAF50; background-color: #f9f9f9; }");
+  client.println(".tab-content { display: none; }");
+  client.println(".tab-content.active { display: block; }");
+  client.println(".form-group { margin-bottom: 15px; }");
+  client.println("label { display: block; margin-bottom: 5px; font-weight: bold; }");
+  client.println("input[type=text], input[type=number], select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }");
+  client.println("input[type=checkbox] { margin-right: 8px; }");
+  client.println(".checkbox-group { display: flex; align-items: center; margin-bottom: 5px; }");
+  client.println(".form-row { display: flex; gap: 15px; }");
+  client.println(".form-row .form-group { flex: 1; }");
+  client.println("button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; }");
+  client.println("button:hover { background-color: #45a049; }");
+  client.println("button.secondary { background-color: #f44336; }");
+  client.println("button.secondary:hover { background-color: #da190b; }");
+  client.println(".message { padding: 10px; margin: 10px 0; border-radius: 4px; }");
+  client.println(".success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }");
+  client.println(".error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }");
+  client.println(".warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }");
+  client.println(".loading { display: none; padding: 10px; text-align: center; }");
   client.println("</style>");
   client.println("</head><body>");
   
+  client.println("<div class=\"container\">");
+  client.println("<div class=\"header\">");
   client.println("<h1>GPS NTP Server Configuration</h1>");
-  client.println("<p><a href=\"/\">← Back to Status</a></p>");
+  client.println("<div class=\"nav\">");
+  client.println("<a href=\"/\">← Status Dashboard</a>");
+  client.println("<a href=\"/metrics\">Metrics</a>");
+  client.println("<a href=\"/gps.html\">GPS View</a>");
+  client.println("</div>");
+  client.println("</div>");
+  
+  // Message container
+  client.println("<div id=\"messageContainer\"></div>");
+  client.println("<div id=\"loadingIndicator\" class=\"loading\">Saving configuration...</div>");
+  
+  // Tab navigation
+  client.println("<div class=\"tabs\">");
+  client.println("<button class=\"tab active\" onclick=\"showTab('network')\">Network</button>");
+  client.println("<button class=\"tab\" onclick=\"showTab('gnss')\">GNSS</button>");
+  client.println("<button class=\"tab\" onclick=\"showTab('ntp')\">NTP Server</button>");
+  client.println("<button class=\"tab\" onclick=\"showTab('system')\">System</button>");
+  client.println("<button class=\"tab\" onclick=\"showTab('logs')\">Logging</button>");
+  client.println("</div>");
   
   if (configManager) {
-    // Configuration form implementation would go here
-    client.println("<h2>Current Configuration</h2>");
-    client.println("<p>Configuration management is available via API endpoints:</p>");
-    client.println("<ul>");
-    client.println("<li>GET /api/config - Get current configuration</li>");
-    client.println("<li>POST /api/config - Update configuration</li>");
-    client.println("<li>POST /api/reset - Factory reset</li>");
-    client.println("</ul>");
+    const auto& config = configManager->getConfig();
+    
+    // Network Configuration Tab
+    client.println("<div id=\"network\" class=\"tab-content active\">");
+    client.println("<h3>Network Configuration</h3>");
+    client.println("<form id=\"networkForm\">");
+    
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"hostname\">Device Hostname:</label>");
+    client.print("<input type=\"text\" id=\"hostname\" name=\"hostname\" value=\"");
+    client.print(config.hostname);
+    client.println("\" required>");
+    client.println("</div>");
+    
+    client.println("<div class=\"form-group\">");
+    client.println("<label>");
+    client.println("<input type=\"radio\" name=\"ip_mode\" value=\"dhcp\" ");
+    if (config.ip_address == 0) client.print("checked");
+    client.println("> Use DHCP (Automatic)");
+    client.println("</label>");
+    client.println("<label>");
+    client.println("<input type=\"radio\" name=\"ip_mode\" value=\"static\" ");
+    if (config.ip_address != 0) client.print("checked");
+    client.println("> Static IP Address");
+    client.println("</label>");
+    client.println("</div>");
+    
+    client.println("<div id=\"static-ip-fields\" style=\"display: ");
+    client.print(config.ip_address != 0 ? "block" : "none");
+    client.println("\">");
+    client.println("<div class=\"form-row\">");
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"ip_address\">IP Address:</label>");
+    client.print("<input type=\"text\" id=\"ip_address\" name=\"ip_address\" value=\"");
+    if (config.ip_address != 0) {
+      client.print((config.ip_address & 0xFF)); client.print(".");
+      client.print((config.ip_address >> 8) & 0xFF); client.print(".");
+      client.print((config.ip_address >> 16) & 0xFF); client.print(".");
+      client.print((config.ip_address >> 24) & 0xFF);
+    }
+    client.println("\">");
+    client.println("</div>");
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"netmask\">Subnet Mask:</label>");
+    client.print("<input type=\"text\" id=\"netmask\" name=\"netmask\" value=\"");
+    if (config.netmask != 0) {
+      client.print((config.netmask & 0xFF)); client.print(".");
+      client.print((config.netmask >> 8) & 0xFF); client.print(".");
+      client.print((config.netmask >> 16) & 0xFF); client.print(".");
+      client.print((config.netmask >> 24) & 0xFF);
+    }
+    client.println("\">");
+    client.println("</div>");
+    client.println("</div>");
+    client.println("<div class=\"form-row\">");
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"gateway\">Gateway:</label>");
+    client.print("<input type=\"text\" id=\"gateway\" name=\"gateway\" value=\"");
+    if (config.gateway != 0) {
+      client.print((config.gateway & 0xFF)); client.print(".");
+      client.print((config.gateway >> 8) & 0xFF); client.print(".");
+      client.print((config.gateway >> 16) & 0xFF); client.print(".");
+      client.print((config.gateway >> 24) & 0xFF);
+    }
+    client.println("\">");
+    client.println("</div>");
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"dns_server\">DNS Server:</label>");
+    client.print("<input type=\"text\" id=\"dns_server\" name=\"dns_server\" value=\"");
+    if (config.dns_server != 0) {
+      client.print((config.dns_server & 0xFF)); client.print(".");
+      client.print((config.dns_server >> 8) & 0xFF); client.print(".");
+      client.print((config.dns_server >> 16) & 0xFF); client.print(".");
+      client.print((config.dns_server >> 24) & 0xFF);
+    }
+    client.println("\">");
+    client.println("</div>");
+    client.println("</div>");
+    client.println("</div>");
+    
+    client.println("<div class=\"form-group\">");
+    client.println("<label>MAC Address (Read-only):</label>");
+    uint8_t mac[6];
+    Ethernet.MACAddress(mac);
+    client.print("<input type=\"text\" value=\"");
+    for (int i = 0; i < 6; i++) {
+      if (i > 0) client.print(":");
+      if (mac[i] < 16) client.print("0");
+      client.print(mac[i], HEX);
+    }
+    client.println("\" readonly>");
+    client.println("</div>");
+    
+    client.println("<button type=\"submit\">Save Network Configuration</button>");
+    client.println("</form>");
+    client.println("</div>");
+    
+    // GNSS Configuration Tab
+    client.println("<div id=\"gnss\" class=\"tab-content\">");
+    client.println("<h3>GNSS Configuration</h3>");
+    client.println("<form id=\"gnssForm\">");
+    
+    client.println("<h4>Satellite Constellations</h4>");
+    client.println("<div class=\"checkbox-group\">");
+    client.print("<input type=\"checkbox\" id=\"gps_enabled\" name=\"gps_enabled\"");
+    if (config.gps_enabled) client.print(" checked");
+    client.println("><label for=\"gps_enabled\">GPS (Global Positioning System)</label>");
+    client.println("</div>");
+    client.println("<div class=\"checkbox-group\">");
+    client.print("<input type=\"checkbox\" id=\"glonass_enabled\" name=\"glonass_enabled\"");
+    if (config.glonass_enabled) client.print(" checked");
+    client.println("><label for=\"glonass_enabled\">GLONASS (Russian)</label>");
+    client.println("</div>");
+    client.println("<div class=\"checkbox-group\">");
+    client.print("<input type=\"checkbox\" id=\"galileo_enabled\" name=\"galileo_enabled\"");
+    if (config.galileo_enabled) client.print(" checked");
+    client.println("><label for=\"galileo_enabled\">Galileo (European)</label>");
+    client.println("</div>");
+    client.println("<div class=\"checkbox-group\">");
+    client.print("<input type=\"checkbox\" id=\"beidou_enabled\" name=\"beidou_enabled\"");
+    if (config.beidou_enabled) client.print(" checked");
+    client.println("><label for=\"beidou_enabled\">BeiDou (Chinese)</label>");
+    client.println("</div>");
+    client.println("<div class=\"checkbox-group\">");
+    client.print("<input type=\"checkbox\" id=\"qzss_enabled\" name=\"qzss_enabled\"");
+    if (config.qzss_enabled) client.print(" checked");
+    client.println("><label for=\"qzss_enabled\">QZSS (Quasi-Zenith Satellite System)</label>");
+    client.println("</div>");
+    
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"gnss_update_rate\">GNSS Update Rate:</label>");
+    client.print("<select id=\"gnss_update_rate\" name=\"gnss_update_rate\">");
+    client.print("<option value=\"1\""); if (config.gnss_update_rate == 1) client.print(" selected"); client.print(">1 Hz</option>");
+    client.print("<option value=\"5\""); if (config.gnss_update_rate == 5) client.print(" selected"); client.print(">5 Hz</option>");
+    client.print("<option value=\"10\""); if (config.gnss_update_rate == 10) client.print(" selected"); client.print(">10 Hz</option>");
+    client.println("</select>");
+    client.println("</div>");
+    
+    client.println("<h4>QZSS L1S Disaster Alert System</h4>");
+    client.println("<div class=\"checkbox-group\">");
+    client.print("<input type=\"checkbox\" id=\"qzss_l1s_enabled\" name=\"qzss_l1s_enabled\"");
+    if (config.qzss_l1s_enabled) client.print(" checked");
+    client.println("><label for=\"qzss_l1s_enabled\">Enable L1S Disaster Alert Reception</label>");
+    client.println("</div>");
+    
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"disaster_alert_priority\">Disaster Alert Priority:</label>");
+    client.print("<select id=\"disaster_alert_priority\" name=\"disaster_alert_priority\">");
+    client.print("<option value=\"1\""); if (config.disaster_alert_priority == 1) client.print(" selected"); client.print(">Low</option>");
+    client.print("<option value=\"2\""); if (config.disaster_alert_priority == 2) client.print(" selected"); client.print(">Medium</option>");
+    client.print("<option value=\"3\""); if (config.disaster_alert_priority == 3) client.print(" selected"); client.print(">High</option>");
+    client.println("</select>");
+    client.println("</div>");
+    
+    client.println("<button type=\"submit\">Save GNSS Configuration</button>");
+    client.println("</form>");
+    client.println("</div>");
+    
+    // NTP Server Configuration Tab
+    client.println("<div id=\"ntp\" class=\"tab-content\">");
+    client.println("<h3>NTP Server Configuration</h3>");
+    client.println("<form id=\"ntpForm\">");
+    
+    client.println("<div class=\"checkbox-group\">");
+    client.print("<input type=\"checkbox\" id=\"ntp_enabled\" name=\"ntp_enabled\"");
+    if (config.ntp_enabled) client.print(" checked");
+    client.println("><label for=\"ntp_enabled\">Enable NTP Server</label>");
+    client.println("</div>");
+    
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"ntp_port\">NTP Port:</label>");
+    client.print("<input type=\"number\" id=\"ntp_port\" name=\"ntp_port\" value=\"");
+    client.print(config.ntp_port);
+    client.println("\" min=\"1\" max=\"65535\">");
+    client.println("</div>");
+    
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"ntp_stratum\">Stratum Level:</label>");
+    client.print("<select id=\"ntp_stratum\" name=\"ntp_stratum\">");
+    client.print("<option value=\"1\""); if (config.ntp_stratum == 1) client.print(" selected"); client.print(">1 (Primary - GPS Synchronized)</option>");
+    client.print("<option value=\"2\""); if (config.ntp_stratum == 2) client.print(" selected"); client.print(">2 (Secondary)</option>");
+    client.print("<option value=\"3\""); if (config.ntp_stratum == 3) client.print(" selected"); client.print(">3 (Fallback)</option>");
+    client.println("</select>");
+    client.println("</div>");
+    
+    client.println("<button type=\"submit\">Save NTP Configuration</button>");
+    client.println("</form>");
+    client.println("</div>");
+    
+    // System Configuration Tab
+    client.println("<div id=\"system\" class=\"tab-content\">");
+    client.println("<h3>System Configuration</h3>");
+    client.println("<form id=\"systemForm\">");
+    
+    client.println("<div class=\"checkbox-group\">");
+    client.print("<input type=\"checkbox\" id=\"auto_restart_enabled\" name=\"auto_restart_enabled\"");
+    if (config.auto_restart_enabled) client.print(" checked");
+    client.println("><label for=\"auto_restart_enabled\">Enable Auto Restart</label>");
+    client.println("</div>");
+    
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"restart_interval\">Restart Interval (hours):</label>");
+    client.print("<input type=\"number\" id=\"restart_interval\" name=\"restart_interval\" value=\"");
+    client.print(config.restart_interval);
+    client.println("\" min=\"1\" max=\"168\">");
+    client.println("</div>");
+    
+    client.println("<div class=\"checkbox-group\">");
+    client.print("<input type=\"checkbox\" id=\"debug_enabled\" name=\"debug_enabled\"");
+    if (config.debug_enabled) client.print(" checked");
+    client.println("><label for=\"debug_enabled\">Enable Debug Mode</label>");
+    client.println("</div>");
+    
+    client.println("<button type=\"submit\">Save System Configuration</button>");
+    client.println("<button type=\"button\" class=\"secondary\" onclick=\"factoryReset()\">Factory Reset</button>");
+    client.println("</form>");
+    client.println("</div>");
+    
+    // Logging Configuration Tab
+    client.println("<div id=\"logs\" class=\"tab-content\">");
+    client.println("<h3>Logging Configuration</h3>");
+    client.println("<form id=\"logsForm\">");
+    
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"syslog_server\">Syslog Server:</label>");
+    client.print("<input type=\"text\" id=\"syslog_server\" name=\"syslog_server\" value=\"");
+    client.print(config.syslog_server);
+    client.println("\">");
+    client.println("</div>");
+    
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"syslog_port\">Syslog Port:</label>");
+    client.print("<input type=\"number\" id=\"syslog_port\" name=\"syslog_port\" value=\"");
+    client.print(config.syslog_port);
+    client.println("\" min=\"1\" max=\"65535\">");
+    client.println("</div>");
+    
+    client.println("<div class=\"form-group\">");
+    client.println("<label for=\"log_level\">Log Level:</label>");
+    client.print("<select id=\"log_level\" name=\"log_level\">");
+    client.print("<option value=\"0\""); if (config.log_level == 0) client.print(" selected"); client.print(">Emergency</option>");
+    client.print("<option value=\"1\""); if (config.log_level == 1) client.print(" selected"); client.print(">Alert</option>");
+    client.print("<option value=\"2\""); if (config.log_level == 2) client.print(" selected"); client.print(">Critical</option>");
+    client.print("<option value=\"3\""); if (config.log_level == 3) client.print(" selected"); client.print(">Error</option>");
+    client.print("<option value=\"4\""); if (config.log_level == 4) client.print(" selected"); client.print(">Warning</option>");
+    client.print("<option value=\"5\""); if (config.log_level == 5) client.print(" selected"); client.print(">Notice</option>");
+    client.print("<option value=\"6\""); if (config.log_level == 6) client.print(" selected"); client.print(">Info</option>");
+    client.print("<option value=\"7\""); if (config.log_level == 7) client.print(" selected"); client.print(">Debug</option>");
+    client.println("</select>");
+    client.println("</div>");
+    
+    client.println("<div class=\"checkbox-group\">");
+    client.print("<input type=\"checkbox\" id=\"prometheus_enabled\" name=\"prometheus_enabled\"");
+    if (config.prometheus_enabled) client.print(" checked");
+    client.println("><label for=\"prometheus_enabled\">Enable Prometheus Metrics</label>");
+    client.println("</div>");
+    
+    client.println("<button type=\"submit\">Save Logging Configuration</button>");
+    client.println("</form>");
+    client.println("</div>");
+    
+    // Add JavaScript at the end of the page
+    client.println("<script>");
+    
+    // Tab switching function
+    client.println("function showTab(tabName) {");
+    client.println("  var tabs = document.querySelectorAll('.tab');");
+    client.println("  var contents = document.querySelectorAll('.tab-content');");
+    client.println("  tabs.forEach(t => t.classList.remove('active'));");
+    client.println("  contents.forEach(c => c.classList.remove('active'));");
+    client.println("  document.querySelector('[onclick=\"showTab(\\''+tabName+'\\')\"').classList.add('active');");
+    client.println("  document.getElementById(tabName).classList.add('active');");
+    client.println("}");
+    
+    // IP mode change handler
+    client.println("document.querySelectorAll('input[name=\"ip_mode\"]').forEach(radio => {");
+    client.println("  radio.addEventListener('change', function() {");
+    client.println("    document.getElementById('static-ip-fields').style.display = this.value === 'static' ? 'block' : 'none';");
+    client.println("  });");
+    client.println("});");
+    
+    // Form submission handlers
+    client.println("function handleFormSubmit(formId, apiEndpoint) {");
+    client.println("  const form = document.getElementById(formId);");
+    client.println("  const formData = new FormData(form);");
+    client.println("  const jsonData = {};");
+    client.println("  for (let [key, value] of formData.entries()) {");
+    client.println("    if (form.querySelector('[name=\"'+key+'\"]').type === 'checkbox') {");
+    client.println("      jsonData[key] = form.querySelector('[name=\"'+key+'\"]').checked;");
+    client.println("    } else if (form.querySelector('[name=\"'+key+'\"]').type === 'number') {");
+    client.println("      jsonData[key] = parseInt(value);");
+    client.println("    } else {");
+    client.println("      jsonData[key] = value;");
+    client.println("    }");
+    client.println("  }");
+    client.println("  showLoading();");
+    client.println("  fetch(apiEndpoint, {");
+    client.println("    method: 'POST',");
+    client.println("    headers: {'Content-Type': 'application/json'},");
+    client.println("    body: JSON.stringify(jsonData)");
+    client.println("  }).then(response => response.json())");
+    client.println("    .then(data => {");
+    client.println("      hideLoading();");
+    client.println("      if (data.success) {");
+    client.println("        showMessage(data.message || 'Configuration saved successfully', 'success');");
+    client.println("      } else {");
+    client.println("        showMessage(data.error || 'Failed to save configuration', 'error');");
+    client.println("      }");
+    client.println("    }).catch(error => {");
+    client.println("      hideLoading();");
+    client.println("      showMessage('Network error: ' + error, 'error');");
+    client.println("    });");
+    client.println("}");
+    
+    // Message display functions
+    client.println("function showMessage(message, type) {");
+    client.println("  const container = document.getElementById('messageContainer');");
+    client.println("  container.innerHTML = '<div class=\"message ' + type + '\">' + message + '</div>';");
+    client.println("  setTimeout(() => container.innerHTML = '', 5000);");
+    client.println("}");
+    
+    client.println("function showLoading() {");
+    client.println("  document.getElementById('loadingIndicator').style.display = 'block';");
+    client.println("}");
+    
+    client.println("function hideLoading() {");
+    client.println("  document.getElementById('loadingIndicator').style.display = 'none';");
+    client.println("}");
+    
+    // Factory reset function
+    client.println("function factoryReset() {");
+    client.println("  if (confirm('Are you sure you want to reset all settings to factory defaults? This action cannot be undone.')) {");
+    client.println("    showLoading();");
+    client.println("    fetch('/api/reset', { method: 'POST' })");
+    client.println("      .then(response => response.json())");
+    client.println("      .then(data => {");
+    client.println("        hideLoading();");
+    client.println("        if (data.success) {");
+    client.println("          showMessage('Factory reset completed. Page will reload in 3 seconds.', 'success');");
+    client.println("          setTimeout(() => location.reload(), 3000);");
+    client.println("        } else {");
+    client.println("          showMessage(data.error || 'Factory reset failed', 'error');");
+    client.println("        }");
+    client.println("      }).catch(error => {");
+    client.println("        hideLoading();");
+    client.println("        showMessage('Network error: ' + error, 'error');");
+    client.println("      });");
+    client.println("  }");
+    client.println("}");
+    
+    // Add form submit event listeners
+    client.println("document.getElementById('networkForm').addEventListener('submit', function(e) {");
+    client.println("  e.preventDefault(); handleFormSubmit('networkForm', '/api/config/network');");
+    client.println("});");
+    client.println("document.getElementById('gnssForm').addEventListener('submit', function(e) {");
+    client.println("  e.preventDefault(); handleFormSubmit('gnssForm', '/api/config/gnss');");
+    client.println("});");
+    client.println("document.getElementById('ntpForm').addEventListener('submit', function(e) {");
+    client.println("  e.preventDefault(); handleFormSubmit('ntpForm', '/api/config/ntp');");
+    client.println("});");
+    client.println("document.getElementById('systemForm').addEventListener('submit', function(e) {");
+    client.println("  e.preventDefault(); handleFormSubmit('systemForm', '/api/config/system');");
+    client.println("});");
+    client.println("document.getElementById('logsForm').addEventListener('submit', function(e) {");
+    client.println("  e.preventDefault(); handleFormSubmit('logsForm', '/api/config/log');");
+    client.println("});");
+    
+    client.println("</script>");
+    
   } else {
     client.println("<h2>Configuration Manager Not Available</h2>");
     client.println("<p>Configuration management service is not initialized.</p>");
   }
   
+  client.println("</div>");
   client.println("</body></html>");
 }
 
