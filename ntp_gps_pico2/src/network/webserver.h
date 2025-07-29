@@ -71,6 +71,11 @@ private:
     
     // System status API for real-time monitoring
     void statusApiGet(EthernetClient &client);
+    
+    // Maintenance and diagnostics APIs
+    void systemRebootApiPost(EthernetClient &client);
+    void systemMetricsApiGet(EthernetClient &client);
+    void systemLogsApiGet(EthernetClient &client);
     void printHeader(EthernetClient &client, String contentType);
     bool parsePostData(const String& data, String& key, String& value);
     void sendJsonResponse(EthernetClient &client, const String& json, int statusCode = 200);
