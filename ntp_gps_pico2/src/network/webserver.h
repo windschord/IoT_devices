@@ -56,6 +56,21 @@ private:
     void configApiReset(EthernetClient &client);
     void configFormPage(EthernetClient &client);
     void gpsApiGet(EthernetClient &client); // New GPS API endpoint
+    
+    // Basic configuration category API endpoints (家庭利用向け)
+    void configNetworkApiGet(EthernetClient &client);
+    void configNetworkApiPost(EthernetClient &client, String postData);
+    void configGnssApiGet(EthernetClient &client);
+    void configGnssApiPost(EthernetClient &client, String postData);
+    void configNtpApiGet(EthernetClient &client);
+    void configNtpApiPost(EthernetClient &client, String postData);
+    void configSystemApiGet(EthernetClient &client);
+    void configSystemApiPost(EthernetClient &client, String postData);
+    void configLogApiGet(EthernetClient &client);
+    void configLogApiPost(EthernetClient &client, String postData);
+    
+    // System status API for real-time monitoring
+    void statusApiGet(EthernetClient &client);
     void printHeader(EthernetClient &client, String contentType);
     bool parsePostData(const String& data, String& key, String& value);
     void sendJsonResponse(EthernetClient &client, const String& json, int statusCode = 200);

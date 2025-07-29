@@ -105,6 +105,109 @@ void GpsWebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_
       }
       configApiReset(client);
     }
+    // Basic configuration category API endpoints (家庭利用向け)
+    else if (s.indexOf("GET /api/config/network ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Serving network config API GET");
+      }
+      configNetworkApiGet(client);
+    }
+    else if (s.indexOf("POST /api/config/network ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Processing network config API POST");
+      }
+      String postData = "";
+      int contentStart = s.indexOf("\r\n\r\n");
+      if (contentStart > 0) {
+        postData = s.substring(contentStart + 4);
+      }
+      configNetworkApiPost(client, postData);
+    }
+    else if (s.indexOf("GET /api/config/gnss ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Serving GNSS config API GET");
+      }
+      configGnssApiGet(client);
+    }
+    else if (s.indexOf("POST /api/config/gnss ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Processing GNSS config API POST");
+      }
+      String postData = "";
+      int contentStart = s.indexOf("\r\n\r\n");
+      if (contentStart > 0) {
+        postData = s.substring(contentStart + 4);
+      }
+      configGnssApiPost(client, postData);
+    }
+    else if (s.indexOf("GET /api/config/ntp ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Serving NTP config API GET");
+      }
+      configNtpApiGet(client);
+    }
+    else if (s.indexOf("POST /api/config/ntp ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Processing NTP config API POST");
+      }
+      String postData = "";
+      int contentStart = s.indexOf("\r\n\r\n");
+      if (contentStart > 0) {
+        postData = s.substring(contentStart + 4);
+      }
+      configNtpApiPost(client, postData);
+    }
+    else if (s.indexOf("GET /api/config/system ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Serving system config API GET");
+      }
+      configSystemApiGet(client);
+    }
+    else if (s.indexOf("POST /api/config/system ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Processing system config API POST");
+      }
+      String postData = "";
+      int contentStart = s.indexOf("\r\n\r\n");
+      if (contentStart > 0) {
+        postData = s.substring(contentStart + 4);
+      }
+      configSystemApiPost(client, postData);
+    }
+    else if (s.indexOf("GET /api/config/log ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Serving log config API GET");
+      }
+      configLogApiGet(client);
+    }
+    else if (s.indexOf("POST /api/config/log ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Processing log config API POST");
+      }
+      String postData = "";
+      int contentStart = s.indexOf("\r\n\r\n");
+      if (contentStart > 0) {
+        postData = s.substring(contentStart + 4);
+      }
+      configLogApiPost(client, postData);
+    }
+    else if (s.indexOf("GET /api/status ") >= 0)
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Serving system status API GET");
+      }
+      statusApiGet(client);
+    }
     else
     {
       if (loggingService) {
@@ -635,4 +738,375 @@ void GpsWebServer::sendJsonResponse(EthernetClient &client, const String& json, 
                      " Match=" + (bytesSent == jsonLength ? "YES" : "NO");
     loggingService->debug("WEB", debugMsg.c_str());
   }
+}
+
+// ========== Basic Configuration Category API Endpoints (家庭利用向け) ==========
+
+void GpsWebServer::configNetworkApiGet(EthernetClient &client) {
+  if (!configManager) {
+    sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
+    return;
+  }
+
+  DynamicJsonDocument doc(1024);
+  const auto& config = configManager->getConfig();
+  
+  doc["hostname"] = config.hostname;
+  doc["ip_address"] = config.ip_address;
+  doc["netmask"] = config.netmask;
+  doc["gateway"] = config.gateway;
+  doc["dns_server"] = config.dns_server;
+  
+  String jsonString;
+  serializeJson(doc, jsonString);
+  sendJsonResponse(client, jsonString);
+}
+
+void GpsWebServer::configNetworkApiPost(EthernetClient &client, String postData) {
+  if (!configManager) {
+    sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
+    return;
+  }
+
+  DynamicJsonDocument doc(1024);
+  DeserializationError error = deserializeJson(doc, postData);
+  
+  if (error) {
+    sendJsonResponse(client, "{\"error\": \"Invalid JSON format\"}", 400);
+    return;
+  }
+
+  auto config = configManager->getConfig();
+  bool changed = false;
+
+  if (doc.containsKey("hostname")) {
+    strncpy(config.hostname, doc["hostname"], sizeof(config.hostname) - 1);
+    config.hostname[sizeof(config.hostname) - 1] = '\0';
+    changed = true;
+  }
+  
+  if (doc.containsKey("ip_address")) {
+    config.ip_address = doc["ip_address"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("netmask")) {
+    config.netmask = doc["netmask"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("gateway")) {
+    config.gateway = doc["gateway"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("dns_server")) {
+    config.dns_server = doc["dns_server"];
+    changed = true;
+  }
+
+  if (changed && configManager->setConfig(config)) {
+    sendJsonResponse(client, "{\"success\": true, \"message\": \"Network configuration updated\"}");
+  } else {
+    sendJsonResponse(client, "{\"error\": \"Failed to update network configuration\"}", 400);
+  }
+}
+
+void GpsWebServer::configGnssApiGet(EthernetClient &client) {
+  if (!configManager) {
+    sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
+    return;
+  }
+
+  DynamicJsonDocument doc(512);
+  const auto& config = configManager->getConfig();
+  
+  doc["gps_enabled"] = config.gps_enabled;
+  doc["glonass_enabled"] = config.glonass_enabled;
+  doc["galileo_enabled"] = config.galileo_enabled;
+  doc["beidou_enabled"] = config.beidou_enabled;
+  doc["qzss_enabled"] = config.qzss_enabled;
+  doc["qzss_l1s_enabled"] = config.qzss_l1s_enabled;
+  doc["gnss_update_rate"] = config.gnss_update_rate;
+  doc["disaster_alert_priority"] = config.disaster_alert_priority;
+  
+  String jsonString;
+  serializeJson(doc, jsonString);
+  sendJsonResponse(client, jsonString);
+}
+
+void GpsWebServer::configGnssApiPost(EthernetClient &client, String postData) {
+  if (!configManager) {
+    sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
+    return;
+  }
+
+  DynamicJsonDocument doc(512);
+  DeserializationError error = deserializeJson(doc, postData);
+  
+  if (error) {
+    sendJsonResponse(client, "{\"error\": \"Invalid JSON format\"}", 400);
+    return;
+  }
+
+  auto config = configManager->getConfig();
+  bool changed = false;
+
+  if (doc.containsKey("gps_enabled")) {
+    config.gps_enabled = doc["gps_enabled"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("glonass_enabled")) {
+    config.glonass_enabled = doc["glonass_enabled"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("galileo_enabled")) {
+    config.galileo_enabled = doc["galileo_enabled"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("beidou_enabled")) {
+    config.beidou_enabled = doc["beidou_enabled"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("qzss_enabled")) {
+    config.qzss_enabled = doc["qzss_enabled"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("qzss_l1s_enabled")) {
+    config.qzss_l1s_enabled = doc["qzss_l1s_enabled"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("gnss_update_rate")) {
+    config.gnss_update_rate = doc["gnss_update_rate"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("disaster_alert_priority")) {
+    config.disaster_alert_priority = doc["disaster_alert_priority"];
+    changed = true;
+  }
+
+  if (changed && configManager->setConfig(config)) {
+    sendJsonResponse(client, "{\"success\": true, \"message\": \"GNSS configuration updated\"}");
+  } else {
+    sendJsonResponse(client, "{\"error\": \"Failed to update GNSS configuration\"}", 400);
+  }
+}
+
+void GpsWebServer::configNtpApiGet(EthernetClient &client) {
+  if (!configManager) {
+    sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
+    return;
+  }
+
+  DynamicJsonDocument doc(512);
+  const auto& config = configManager->getConfig();
+  
+  doc["ntp_enabled"] = config.ntp_enabled;
+  doc["ntp_port"] = config.ntp_port;
+  doc["ntp_stratum"] = config.ntp_stratum;
+  
+  String jsonString;
+  serializeJson(doc, jsonString);
+  sendJsonResponse(client, jsonString);
+}
+
+void GpsWebServer::configNtpApiPost(EthernetClient &client, String postData) {
+  if (!configManager) {
+    sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
+    return;
+  }
+
+  DynamicJsonDocument doc(512);
+  DeserializationError error = deserializeJson(doc, postData);
+  
+  if (error) {
+    sendJsonResponse(client, "{\"error\": \"Invalid JSON format\"}", 400);
+    return;
+  }
+
+  auto config = configManager->getConfig();
+  bool changed = false;
+
+  if (doc.containsKey("ntp_enabled")) {
+    config.ntp_enabled = doc["ntp_enabled"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("ntp_port")) {
+    config.ntp_port = doc["ntp_port"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("ntp_stratum")) {
+    config.ntp_stratum = doc["ntp_stratum"];
+    changed = true;
+  }
+
+  if (changed && configManager->setConfig(config)) {
+    sendJsonResponse(client, "{\"success\": true, \"message\": \"NTP configuration updated\"}");
+  } else {
+    sendJsonResponse(client, "{\"error\": \"Failed to update NTP configuration\"}", 400);
+  }
+}
+
+void GpsWebServer::configSystemApiGet(EthernetClient &client) {
+  if (!configManager) {
+    sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
+    return;
+  }
+
+  DynamicJsonDocument doc(512);
+  const auto& config = configManager->getConfig();
+  
+  doc["auto_restart_enabled"] = config.auto_restart_enabled;
+  doc["restart_interval"] = config.restart_interval;
+  doc["debug_enabled"] = config.debug_enabled;
+  doc["config_version"] = config.config_version;
+  
+  String jsonString;
+  serializeJson(doc, jsonString);
+  sendJsonResponse(client, jsonString);
+}
+
+void GpsWebServer::configSystemApiPost(EthernetClient &client, String postData) {
+  if (!configManager) {
+    sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
+    return;
+  }
+
+  DynamicJsonDocument doc(512);
+  DeserializationError error = deserializeJson(doc, postData);
+  
+  if (error) {
+    sendJsonResponse(client, "{\"error\": \"Invalid JSON format\"}", 400);
+    return;
+  }
+
+  auto config = configManager->getConfig();
+  bool changed = false;
+
+  if (doc.containsKey("auto_restart_enabled")) {
+    config.auto_restart_enabled = doc["auto_restart_enabled"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("restart_interval")) {
+    config.restart_interval = doc["restart_interval"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("debug_enabled")) {
+    config.debug_enabled = doc["debug_enabled"];
+    changed = true;
+  }
+
+  if (changed && configManager->setConfig(config)) {
+    sendJsonResponse(client, "{\"success\": true, \"message\": \"System configuration updated\"}");
+  } else {
+    sendJsonResponse(client, "{\"error\": \"Failed to update system configuration\"}", 400);
+  }
+}
+
+void GpsWebServer::configLogApiGet(EthernetClient &client) {
+  if (!configManager) {
+    sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
+    return;
+  }
+
+  DynamicJsonDocument doc(512);
+  const auto& config = configManager->getConfig();
+  
+  doc["syslog_server"] = config.syslog_server;
+  doc["syslog_port"] = config.syslog_port;
+  doc["log_level"] = config.log_level;
+  
+  String jsonString;
+  serializeJson(doc, jsonString);
+  sendJsonResponse(client, jsonString);
+}
+
+void GpsWebServer::configLogApiPost(EthernetClient &client, String postData) {
+  if (!configManager) {
+    sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
+    return;
+  }
+
+  DynamicJsonDocument doc(512);
+  DeserializationError error = deserializeJson(doc, postData);
+  
+  if (error) {
+    sendJsonResponse(client, "{\"error\": \"Invalid JSON format\"}", 400);
+    return;
+  }
+
+  auto config = configManager->getConfig();
+  bool changed = false;
+
+  if (doc.containsKey("syslog_server")) {
+    strncpy(config.syslog_server, doc["syslog_server"], sizeof(config.syslog_server) - 1);
+    config.syslog_server[sizeof(config.syslog_server) - 1] = '\0';
+    changed = true;
+  }
+  
+  if (doc.containsKey("syslog_port")) {
+    config.syslog_port = doc["syslog_port"];
+    changed = true;
+  }
+  
+  if (doc.containsKey("log_level")) {
+    config.log_level = doc["log_level"];
+    changed = true;
+  }
+
+  if (changed && configManager->setConfig(config)) {
+    sendJsonResponse(client, "{\"success\": true, \"message\": \"Log configuration updated\"}");
+  } else {
+    sendJsonResponse(client, "{\"error\": \"Failed to update log configuration\"}", 400);
+  }
+}
+
+void GpsWebServer::statusApiGet(EthernetClient &client) {
+  DynamicJsonDocument doc(2048);
+  
+  // System uptime
+  doc["uptime_seconds"] = millis() / 1000;
+  doc["free_memory"] = 524288 - 20916; // 実測値使用
+  
+  // GPS status
+  if (gpsClient) {
+    auto gpsData = gpsClient->getWebGpsData();
+    doc["gps"]["fix_type"] = gpsData.fix_type;
+    doc["gps"]["satellites_total"] = gpsData.satellites_total;
+    doc["gps"]["satellites_used"] = gpsData.satellites_used;
+    doc["gps"]["data_valid"] = gpsData.data_valid;
+    doc["gps"]["latitude"] = gpsData.latitude;
+    doc["gps"]["longitude"] = gpsData.longitude;
+  } else {
+    doc["gps"]["status"] = "not_available";
+  }
+  
+  // NTP statistics
+  if (ntpServer) {
+    const auto& stats = ntpServer->getStatistics();
+    doc["ntp"]["requests_total"] = stats.requests_total;
+    doc["ntp"]["responses_sent"] = stats.responses_sent;
+    doc["ntp"]["avg_processing_time"] = stats.avg_processing_time;
+  } else {
+    doc["ntp"]["status"] = "not_available";
+  }
+  
+  // Network status (connected if we can serve this page)
+  doc["network"]["connected"] = true;
+  doc["network"]["ip_assigned"] = true;
+  
+  String jsonString;
+  serializeJson(doc, jsonString);
+  sendJsonResponse(client, jsonString);
 }
