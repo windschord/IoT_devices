@@ -757,6 +757,14 @@ void GpsWebServer::configNetworkApiGet(EthernetClient &client) {
   doc["gateway"] = config.gateway;
   doc["dns_server"] = config.dns_server;
   
+  // MACアドレス表示（読み取り専用）
+  uint8_t mac[6];
+  Ethernet.MACAddress(mac);
+  char macStr[18];
+  sprintf(macStr, "%02X:%02X:%02X:%02X:%02X:%02X", 
+          mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  doc["mac_address"] = macStr;
+  
   String jsonString;
   serializeJson(doc, jsonString);
   sendJsonResponse(client, jsonString);
@@ -779,8 +787,15 @@ void GpsWebServer::configNetworkApiPost(EthernetClient &client, String postData)
   auto config = configManager->getConfig();
   bool changed = false;
 
+  // ネットワーク設定検証とMACアドレス表示対応
   if (doc.containsKey("hostname")) {
-    strncpy(config.hostname, doc["hostname"], sizeof(config.hostname) - 1);
+    String hostname = doc["hostname"].as<String>();
+    // ホスト名検証: 1-31文字、英数字とハイフンのみ
+    if (hostname.length() == 0 || hostname.length() >= sizeof(config.hostname)) {
+      sendJsonResponse(client, "{\"error\": \"Invalid hostname length (1-31 characters)\"}", 400);
+      return;
+    }
+    strncpy(config.hostname, hostname.c_str(), sizeof(config.hostname) - 1);
     config.hostname[sizeof(config.hostname) - 1] = '\0';
     changed = true;
   }
@@ -883,12 +898,24 @@ void GpsWebServer::configGnssApiPost(EthernetClient &client, String postData) {
   }
   
   if (doc.containsKey("gnss_update_rate")) {
-    config.gnss_update_rate = doc["gnss_update_rate"];
+    uint8_t rate = doc["gnss_update_rate"];
+    // GNSS更新レート検証: 1Hz-10Hz
+    if (rate == 0 || rate > 10) {
+      sendJsonResponse(client, "{\"error\": \"GNSS update rate must be 1-10 Hz\"}", 400);
+      return;
+    }
+    config.gnss_update_rate = rate;
     changed = true;
   }
   
   if (doc.containsKey("disaster_alert_priority")) {
-    config.disaster_alert_priority = doc["disaster_alert_priority"];
+    uint8_t priority = doc["disaster_alert_priority"];
+    // 災害警報優先度検証: 0=低, 1=中, 2=高
+    if (priority > 2) {
+      sendJsonResponse(client, "{\"error\": \"Disaster alert priority must be 0-2 (0=low, 1=medium, 2=high)\"}", 400);
+      return;
+    }
+    config.disaster_alert_priority = priority;
     changed = true;
   }
 
@@ -940,12 +967,24 @@ void GpsWebServer::configNtpApiPost(EthernetClient &client, String postData) {
   }
   
   if (doc.containsKey("ntp_port")) {
-    config.ntp_port = doc["ntp_port"];
+    uint16_t port = doc["ntp_port"];
+    // NTPポート検証: 標準123または1024-65535
+    if (port != 123 && (port < 1024 || port > 65535)) {
+      sendJsonResponse(client, "{\"error\": \"NTP port must be 123 or 1024-65535\"}", 400);
+      return;
+    }
+    config.ntp_port = port;
     changed = true;
   }
   
   if (doc.containsKey("ntp_stratum")) {
-    config.ntp_stratum = doc["ntp_stratum"];
+    uint8_t stratum = doc["ntp_stratum"];
+    // Stratumレベル検証: 1-15
+    if (stratum == 0 || stratum > 15) {
+      sendJsonResponse(client, "{\"error\": \"NTP stratum must be 1-15\"}", 400);
+      return;
+    }
+    config.ntp_stratum = stratum;
     changed = true;
   }
 
@@ -998,7 +1037,13 @@ void GpsWebServer::configSystemApiPost(EthernetClient &client, String postData) 
   }
   
   if (doc.containsKey("restart_interval")) {
-    config.restart_interval = doc["restart_interval"];
+    uint32_t interval = doc["restart_interval"];
+    // 再起動間隔検証: 1-168時間（1週間）
+    if (interval == 0 || interval > 168) {
+      sendJsonResponse(client, "{\"error\": \"Restart interval must be 1-168 hours\"}", 400);
+      return;
+    }
+    config.restart_interval = interval;
     changed = true;
   }
   
@@ -1050,18 +1095,36 @@ void GpsWebServer::configLogApiPost(EthernetClient &client, String postData) {
   bool changed = false;
 
   if (doc.containsKey("syslog_server")) {
-    strncpy(config.syslog_server, doc["syslog_server"], sizeof(config.syslog_server) - 1);
+    String server = doc["syslog_server"].as<String>();
+    // Syslogサーバー検証: 0-63文字
+    if (server.length() >= sizeof(config.syslog_server)) {
+      sendJsonResponse(client, "{\"error\": \"Syslog server address too long (max 63 characters)\"}", 400);
+      return;
+    }
+    strncpy(config.syslog_server, server.c_str(), sizeof(config.syslog_server) - 1);
     config.syslog_server[sizeof(config.syslog_server) - 1] = '\0';
     changed = true;
   }
   
   if (doc.containsKey("syslog_port")) {
-    config.syslog_port = doc["syslog_port"];
+    uint16_t port = doc["syslog_port"];
+    // Syslogポート検証: 標準514または1024-65535
+    if (port != 514 && (port < 1024 || port > 65535)) {
+      sendJsonResponse(client, "{\"error\": \"Syslog port must be 514 or 1024-65535\"}", 400);
+      return;
+    }
+    config.syslog_port = port;
     changed = true;
   }
   
   if (doc.containsKey("log_level")) {
-    config.log_level = doc["log_level"];
+    uint8_t level = doc["log_level"];
+    // ログレベル検証: 0-7（DEBUG〜EMERGENCY）
+    if (level > 7) {
+      sendJsonResponse(client, "{\"error\": \"Log level must be 0-7 (0=DEBUG, 7=EMERGENCY)\"}", 400);
+      return;
+    }
+    config.log_level = level;
     changed = true;
   }
 
