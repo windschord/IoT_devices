@@ -351,6 +351,16 @@ void GpsWebServer::configPage(EthernetClient &client) {
   client.println(".error-field { border-color: #dc3545 !important; background-color: #fff5f5; }");
   client.println(".field-error { color: #dc3545; font-size: 12px; margin-top: 2px; }");
   client.println(".button-row { margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; }");
+  client.println(".status-section { margin-bottom: 25px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef; }");
+  client.println(".status-section h4 { margin-top: 0; margin-bottom: 15px; color: #495057; border-bottom: 2px solid #4CAF50; padding-bottom: 5px; }");
+  client.println(".status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }");
+  client.println(".status-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: white; border-radius: 4px; border: 1px solid #dee2e6; }");
+  client.println(".status-item label { font-weight: bold; color: #495057; margin: 0; }");
+  client.println(".status-item span { color: #6c757d; font-family: monospace; }");
+  client.println(".status-indicator { padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }");
+  client.println(".status-ok { background-color: #d4edda; color: #155724; }");
+  client.println(".status-warning { background-color: #fff3cd; color: #856404; }");
+  client.println(".status-error { background-color: #f8d7da; color: #721c24; }");
   client.println("</style>");
   client.println("</head><body>");
   
@@ -370,7 +380,8 @@ void GpsWebServer::configPage(EthernetClient &client) {
   
   // Tab navigation
   client.println("<div class=\"tabs\">");
-  client.println("<button class=\"tab active\" onclick=\"showTab('network')\">Network</button>");
+  client.println("<button class=\"tab active\" onclick=\"showTab('status')\">Status</button>");
+  client.println("<button class=\"tab\" onclick=\"showTab('network')\">Network</button>");
   client.println("<button class=\"tab\" onclick=\"showTab('gnss')\">GNSS</button>");
   client.println("<button class=\"tab\" onclick=\"showTab('ntp')\">NTP Server</button>");
   client.println("<button class=\"tab\" onclick=\"showTab('system')\">System</button>");
@@ -380,8 +391,147 @@ void GpsWebServer::configPage(EthernetClient &client) {
   if (configManager) {
     const auto& config = configManager->getConfig();
     
+    // Status Tab - Real-time system status display
+    client.println("<div id=\"status\" class=\"tab-content active\">");
+    client.println("<h3>System Status</h3>");
+    
+    // System Information Section
+    client.println("<div class=\"status-section\">");
+    client.println("<h4>System Information</h4>");
+    client.println("<div class=\"status-grid\">");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>Device Name:</label>");
+    client.print("<span>"); client.print(config.hostname); client.println("</span>");
+    client.println("</div>");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>System Uptime:</label>");
+    client.println("<span id=\"system-uptime\">Loading...</span>");
+    client.println("</div>");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>Free Memory:</label>");
+    client.println("<span id=\"free-memory\">Loading...</span>");
+    client.println("</div>");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>Configuration Version:</label>");
+    client.print("<span>"); client.print(config.config_version); client.println("</span>");
+    client.println("</div>");
+    
+    client.println("</div>");
+    client.println("</div>");
+    
+    // GPS Status Section
+    client.println("<div class=\"status-section\">");
+    client.println("<h4>GPS/GNSS Status</h4>");
+    client.println("<div class=\"status-grid\">");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>GPS Fix Status:</label>");
+    client.println("<span id=\"gps-fix-status\" class=\"status-indicator\">Loading...</span>");
+    client.println("</div>");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>Satellites (Total/Used):</label>");
+    client.println("<span id=\"satellite-count\">Loading...</span>");
+    client.println("</div>");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>PPS Signal:</label>");
+    client.println("<span id=\"pps-status\" class=\"status-indicator\">Loading...</span>");
+    client.println("</div>");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>Position (Lat/Lon):</label>");
+    client.println("<span id=\"gps-position\">Loading...</span>");
+    client.println("</div>");
+    
+    client.println("</div>");
+    client.println("</div>");
+    
+    // Network Status Section
+    client.println("<div class=\"status-section\">");
+    client.println("<h4>Network Status</h4>");
+    client.println("<div class=\"status-grid\">");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>Ethernet Link:</label>");
+    client.println("<span id=\"ethernet-status\" class=\"status-indicator\">Connected</span>");
+    client.println("</div>");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>IP Address:</label>");
+    client.println("<span id=\"current-ip\">");
+    if (config.ip_address == 0) {
+      client.println("DHCP Assigned");
+    } else {
+      client.print((config.ip_address & 0xFF)); client.print(".");
+      client.print((config.ip_address >> 8) & 0xFF); client.print(".");
+      client.print((config.ip_address >> 16) & 0xFF); client.print(".");
+      client.print((config.ip_address >> 24) & 0xFF);
+    }
+    client.println("</span>");
+    client.println("</div>");
+    
+    uint8_t mac[6];
+    Ethernet.MACAddress(mac);
+    client.println("<div class=\"status-item\">");
+    client.println("<label>MAC Address:</label>");
+    client.print("<span>");
+    for (int i = 0; i < 6; i++) {
+      if (i > 0) client.print(":");
+      if (mac[i] < 16) client.print("0");
+      client.print(mac[i], HEX);
+    }
+    client.println("</span>");
+    client.println("</div>");
+    
+    client.println("</div>");
+    client.println("</div>");
+    
+    // NTP Status Section
+    client.println("<div class=\"status-section\">");
+    client.println("<h4>NTP Server Status</h4>");
+    client.println("<div class=\"status-grid\">");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>NTP Service:</label>");
+    client.print("<span class=\"status-indicator\">");
+    client.print(config.ntp_enabled ? "Enabled" : "Disabled");
+    client.println("</span>");
+    client.println("</div>");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>NTP Port:</label>");
+    client.print("<span>"); client.print(config.ntp_port); client.println("</span>");
+    client.println("</div>");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>Current Stratum:</label>");
+    client.println("<span id=\"current-stratum\">Loading...</span>");
+    client.println("</div>");
+    
+    client.println("<div class=\"status-item\">");
+    client.println("<label>Requests Served:</label>");
+    client.println("<span id=\"ntp-requests\">Loading...</span>");
+    client.println("</div>");
+    
+    client.println("</div>");
+    client.println("</div>");
+    
+    // Control buttons
+    client.println("<div class=\"button-row\">");
+    client.println("<button type=\"button\" onclick=\"refreshStatus()\">Refresh Status</button>");
+    client.println("<button type=\"button\" onclick=\"window.open('/metrics', '_blank')\">View Metrics</button>");
+    client.println("<button type=\"button\" onclick=\"window.open('/gps.html', '_blank')\">GPS Details</button>");
+    client.println("</div>");
+    
+    client.println("</div>");
+    
     // Network Configuration Tab
-    client.println("<div id=\"network\" class=\"tab-content active\">");
+    client.println("<div id=\"network\" class=\"tab-content\">");
     client.println("<h3>Network Configuration</h3>");
     client.println("<form id=\"networkForm\">");
     
@@ -460,8 +610,6 @@ void GpsWebServer::configPage(EthernetClient &client) {
     
     client.println("<div class=\"form-group\">");
     client.println("<label>MAC Address (Read-only):</label>");
-    uint8_t mac[6];
-    Ethernet.MACAddress(mac);
     client.print("<input type=\"text\" value=\"");
     for (int i = 0; i < 6; i++) {
       if (i > 0) client.print(":");
@@ -964,6 +1112,119 @@ void GpsWebServer::configPage(EthernetClient &client) {
     client.println("}");
     client.println("// Initialize real-time validation");
     client.println("addRealtimeValidation();");
+    
+    // Status refresh functionality
+    client.println("// Status refresh functions");
+    client.println("function refreshStatus() {");
+    client.println("  showMessage('Refreshing system status...', 'warning');");
+    client.println("  ");
+    client.println("  // Fetch system status");
+    client.println("  fetch('/api/status')");
+    client.println("    .then(response => response.json())");
+    client.println("    .then(data => {");
+    client.println("      updateSystemStatus(data);");
+    client.println("      showMessage('Status updated successfully', 'success');");
+    client.println("    })");
+    client.println("    .catch(error => {");
+    client.println("      showMessage('Failed to refresh status: ' + error, 'error');");
+    client.println("    });");
+    client.println("}");
+    
+    client.println("function updateSystemStatus(data) {");
+    client.println("  // Update system information");
+    client.println("  if (data.uptime_seconds) {");
+    client.println("    const hours = Math.floor(data.uptime_seconds / 3600);");
+    client.println("    const minutes = Math.floor((data.uptime_seconds % 3600) / 60);");
+    client.println("    document.getElementById('system-uptime').textContent = hours + 'h ' + minutes + 'm';");
+    client.println("  }");
+    client.println("  ");
+    client.println("  if (data.free_memory) {");
+    client.println("    const memoryKB = Math.round(data.free_memory / 1024);");
+    client.println("    document.getElementById('free-memory').textContent = memoryKB + ' KB';");
+    client.println("  }");
+    client.println("  ");
+    client.println("  // Update GPS status");
+    client.println("  if (data.gps) {");
+    client.println("    const fixStatus = document.getElementById('gps-fix-status');");
+    client.println("    if (data.gps.fix_type >= 3) {");
+    client.println("      fixStatus.textContent = '3D Fix';");
+    client.println("      fixStatus.className = 'status-indicator status-ok';");
+    client.println("    } else if (data.gps.fix_type === 2) {");
+    client.println("      fixStatus.textContent = '2D Fix';");
+    client.println("      fixStatus.className = 'status-indicator status-warning';");
+    client.println("    } else {");
+    client.println("      fixStatus.textContent = 'No Fix';");
+    client.println("      fixStatus.className = 'status-indicator status-error';");
+    client.println("    }");
+    client.println("    ");
+    client.println("    if (data.gps.satellites_total && data.gps.satellites_used) {");
+    client.println("      document.getElementById('satellite-count').textContent = ");
+    client.println("        data.gps.satellites_total + ' / ' + data.gps.satellites_used;");
+    client.println("    }");
+    client.println("    ");
+    client.println("    if (data.gps.latitude && data.gps.longitude) {");
+    client.println("      document.getElementById('gps-position').textContent = ");
+    client.println("        data.gps.latitude.toFixed(6) + ', ' + data.gps.longitude.toFixed(6);");
+    client.println("    }");
+    client.println("    ");
+    client.println("    const ppsStatus = document.getElementById('pps-status');");
+    client.println("    if (data.gps.data_valid && data.gps.fix_type >= 2) {");
+    client.println("      ppsStatus.textContent = 'Active';");
+    client.println("      ppsStatus.className = 'status-indicator status-ok';");
+    client.println("    } else {");
+    client.println("      ppsStatus.textContent = 'Inactive';");
+    client.println("      ppsStatus.className = 'status-indicator status-error';");
+    client.println("    }");
+    client.println("  }");
+    client.println("  ");
+    client.println("  // Update NTP status");
+    client.println("  if (data.ntp) {");
+    client.println("    const stratum = data.gps && data.gps.fix_type >= 2 ? '1 (GPS Sync)' : '3 (Fallback)';");
+    client.println("    document.getElementById('current-stratum').textContent = stratum;");
+    client.println("    ");
+    client.println("    if (data.ntp.requests_total) {");
+    client.println("      document.getElementById('ntp-requests').textContent = data.ntp.requests_total.toLocaleString();");
+    client.println("    }");
+    client.println("  }");
+    client.println("}");
+    
+    client.println("// Auto-refresh status every 30 seconds when on status tab");
+    client.println("let statusRefreshInterval;");
+    client.println("function startStatusRefresh() {");
+    client.println("  if (statusRefreshInterval) clearInterval(statusRefreshInterval);");
+    client.println("  statusRefreshInterval = setInterval(() => {");
+    client.println("    const statusTab = document.getElementById('status');");
+    client.println("    if (statusTab && statusTab.classList.contains('active')) {");
+    client.println("      refreshStatus();");
+    client.println("    }");
+    client.println("  }, 30000);");
+    client.println("}");
+    
+    client.println("function stopStatusRefresh() {");
+    client.println("  if (statusRefreshInterval) {");
+    client.println("    clearInterval(statusRefreshInterval);");
+    client.println("    statusRefreshInterval = null;");
+    client.println("  }");
+    client.println("}");
+    
+    // Enhanced tab switching to handle auto-refresh
+    client.println("// Enhanced tab switching with status refresh management");
+    client.println("const originalShowTab = showTab;");
+    client.println("showTab = function(tabName) {");
+    client.println("  originalShowTab(tabName);");
+    client.println("  if (tabName === 'status') {");
+    client.println("    refreshStatus();");
+    client.println("    startStatusRefresh();");
+    client.println("  } else {");
+    client.println("    stopStatusRefresh();");
+    client.println("  }");
+    client.println("};");
+    
+    client.println("// Initialize status refresh on page load");
+    client.println("document.addEventListener('DOMContentLoaded', function() {");
+    client.println("  refreshStatus();");
+    client.println("  startStatusRefresh();");
+    client.println("});");
     
     client.println("</script>");
     
