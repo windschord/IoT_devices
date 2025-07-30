@@ -341,11 +341,16 @@ void GpsWebServer::configPage(EthernetClient &client) {
   client.println("button:hover { background-color: #45a049; }");
   client.println("button.secondary { background-color: #f44336; }");
   client.println("button.secondary:hover { background-color: #da190b; }");
+  client.println("button.reset-defaults { background-color: #6c757d; }");
+  client.println("button.reset-defaults:hover { background-color: #5a6268; }");
   client.println(".message { padding: 10px; margin: 10px 0; border-radius: 4px; }");
   client.println(".success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }");
   client.println(".error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }");
   client.println(".warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }");
   client.println(".loading { display: none; padding: 10px; text-align: center; }");
+  client.println(".error-field { border-color: #dc3545 !important; background-color: #fff5f5; }");
+  client.println(".field-error { color: #dc3545; font-size: 12px; margin-top: 2px; }");
+  client.println(".button-row { margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; }");
   client.println("</style>");
   client.println("</head><body>");
   
@@ -466,7 +471,10 @@ void GpsWebServer::configPage(EthernetClient &client) {
     client.println("\" readonly>");
     client.println("</div>");
     
+    client.println("<div class=\"button-row\">");
     client.println("<button type=\"submit\">Save Network Configuration</button>");
+    client.println("<button type=\"button\" class=\"reset-defaults\" onclick=\"resetNetworkDefaults()\">Reset to Defaults</button>");
+    client.println("</div>");
     client.println("</form>");
     client.println("</div>");
     
@@ -527,7 +535,10 @@ void GpsWebServer::configPage(EthernetClient &client) {
     client.println("</select>");
     client.println("</div>");
     
+    client.println("<div class=\"button-row\">");
     client.println("<button type=\"submit\">Save GNSS Configuration</button>");
+    client.println("<button type=\"button\" class=\"reset-defaults\" onclick=\"resetGnssDefaults()\">Reset to Defaults</button>");
+    client.println("</div>");
     client.println("</form>");
     client.println("</div>");
     
@@ -558,7 +569,10 @@ void GpsWebServer::configPage(EthernetClient &client) {
     client.println("</select>");
     client.println("</div>");
     
+    client.println("<div class=\"button-row\">");
     client.println("<button type=\"submit\">Save NTP Configuration</button>");
+    client.println("<button type=\"button\" class=\"reset-defaults\" onclick=\"resetNtpDefaults()\">Reset to Defaults</button>");
+    client.println("</div>");
     client.println("</form>");
     client.println("</div>");
     
@@ -586,8 +600,11 @@ void GpsWebServer::configPage(EthernetClient &client) {
     client.println("><label for=\"debug_enabled\">Enable Debug Mode</label>");
     client.println("</div>");
     
+    client.println("<div class=\"button-row\">");
     client.println("<button type=\"submit\">Save System Configuration</button>");
+    client.println("<button type=\"button\" class=\"reset-defaults\" onclick=\"resetSystemDefaults()\">Reset to Defaults</button>");
     client.println("<button type=\"button\" class=\"secondary\" onclick=\"factoryReset()\">Factory Reset</button>");
+    client.println("</div>");
     client.println("</form>");
     client.println("</div>");
     
@@ -630,7 +647,10 @@ void GpsWebServer::configPage(EthernetClient &client) {
     client.println("><label for=\"prometheus_enabled\">Enable Prometheus Metrics</label>");
     client.println("</div>");
     
+    client.println("<div class=\"button-row\">");
     client.println("<button type=\"submit\">Save Logging Configuration</button>");
+    client.println("<button type=\"button\" class=\"reset-defaults\" onclick=\"resetLogsDefaults()\">Reset to Defaults</button>");
+    client.println("</div>");
     client.println("</form>");
     client.println("</div>");
     
@@ -654,7 +674,97 @@ void GpsWebServer::configPage(EthernetClient &client) {
     client.println("  });");
     client.println("});");
     
-    // Form submission handlers
+    // Input validation functions
+    client.println("function validateIP(ip) {");
+    client.println("  const ipRegex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;");
+    client.println("  return ipRegex.test(ip);");
+    client.println("}");
+    
+    client.println("function validatePort(port) {");
+    client.println("  const portNum = parseInt(port);");
+    client.println("  return !isNaN(portNum) && portNum >= 1 && portNum <= 65535;");
+    client.println("}");
+    
+    client.println("function validateHostname(hostname) {");
+    client.println("  if (!hostname || hostname.length === 0 || hostname.length > 63) return false;");
+    client.println("  const hostnameRegex = /^[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?$/;");
+    client.println("  return hostnameRegex.test(hostname);");
+    client.println("}");
+    
+    client.println("function clearFieldErrors() {");
+    client.println("  document.querySelectorAll('.field-error').forEach(el => el.remove());");
+    client.println("  document.querySelectorAll('.error-field').forEach(el => el.classList.remove('error-field'));");
+    client.println("}");
+    
+    client.println("function showFieldError(fieldName, message) {");
+    client.println("  const field = document.querySelector('[name=\"' + fieldName + '\"]');");
+    client.println("  if (field) {");
+    client.println("    field.classList.add('error-field');");
+    client.println("    const errorDiv = document.createElement('div');");
+    client.println("    errorDiv.className = 'field-error';");
+    client.println("    errorDiv.style.color = 'red';");
+    client.println("    errorDiv.style.fontSize = '12px';");
+    client.println("    errorDiv.style.marginTop = '2px';");
+    client.println("    errorDiv.textContent = message;");
+    client.println("    field.parentNode.appendChild(errorDiv);");
+    client.println("  }");
+    client.println("}");
+    
+    client.println("function validateFormData(formId, jsonData) {");
+    client.println("  clearFieldErrors();");
+    client.println("  let isValid = true;");
+    client.println("  ");
+    client.println("  if (formId === 'networkForm') {");
+    client.println("    if (!validateHostname(jsonData.hostname)) {");
+    client.println("      showFieldError('hostname', 'Invalid hostname format');");
+    client.println("      isValid = false;");
+    client.println("    }");
+    client.println("    ");
+    client.println("    if (jsonData.ip_mode === 'static') {");
+    client.println("      if (!jsonData.ip_address || !validateIP(jsonData.ip_address)) {");
+    client.println("        showFieldError('ip_address', 'Valid IP address required for static configuration');");
+    client.println("        isValid = false;");
+    client.println("      }");
+    client.println("      if (!jsonData.netmask || !validateIP(jsonData.netmask)) {");
+    client.println("        showFieldError('netmask', 'Valid subnet mask required for static configuration');");
+    client.println("        isValid = false;");
+    client.println("      }");
+    client.println("      if (!jsonData.gateway || !validateIP(jsonData.gateway)) {");
+    client.println("        showFieldError('gateway', 'Valid gateway address required for static configuration');");
+    client.println("        isValid = false;");
+    client.println("      }");
+    client.println("    }");
+    client.println("  }");
+    client.println("  ");
+    client.println("  if (formId === 'ntpForm') {");
+    client.println("    if (jsonData.ntp_port && !validatePort(jsonData.ntp_port)) {");
+    client.println("      showFieldError('ntp_port', 'Port must be between 1 and 65535');");
+    client.println("      isValid = false;");
+    client.println("    }");
+    client.println("  }");
+    client.println("  ");
+    client.println("  if (formId === 'systemForm') {");
+    client.println("    if (jsonData.restart_interval && (jsonData.restart_interval < 1 || jsonData.restart_interval > 168)) {");
+    client.println("      showFieldError('restart_interval', 'Restart interval must be between 1 and 168 hours');");
+    client.println("      isValid = false;");
+    client.println("    }");
+    client.println("  }");
+    client.println("  ");
+    client.println("  if (formId === 'logsForm') {");
+    client.println("    if (jsonData.syslog_server && jsonData.syslog_server.length > 0 && !validateIP(jsonData.syslog_server)) {");
+    client.println("      showFieldError('syslog_server', 'Invalid IP address format');");
+    client.println("      isValid = false;");
+    client.println("    }");
+    client.println("    if (jsonData.syslog_port && !validatePort(jsonData.syslog_port)) {");
+    client.println("      showFieldError('syslog_port', 'Port must be between 1 and 65535');");
+    client.println("      isValid = false;");
+    client.println("    }");
+    client.println("  }");
+    client.println("  ");
+    client.println("  return isValid;");
+    client.println("}");
+    
+    // Form submission handlers with validation
     client.println("function handleFormSubmit(formId, apiEndpoint) {");
     client.println("  const form = document.getElementById(formId);");
     client.println("  const formData = new FormData(form);");
@@ -668,7 +778,16 @@ void GpsWebServer::configPage(EthernetClient &client) {
     client.println("      jsonData[key] = value;");
     client.println("    }");
     client.println("  }");
+    client.println("  ");
+    client.println("  // Validate form data before submission");
+    client.println("  if (!validateFormData(formId, jsonData)) {");
+    client.println("    showMessage('Please correct the highlighted errors before saving', 'error');");
+    client.println("    return;");
+    client.println("  }");
+    client.println("  ");
     client.println("  showLoading();");
+    client.println("  showMessage('Saving configuration...', 'warning');");
+    client.println("  ");
     client.println("  fetch(apiEndpoint, {");
     client.println("    method: 'POST',");
     client.println("    headers: {'Content-Type': 'application/json'},");
@@ -723,6 +842,67 @@ void GpsWebServer::configPage(EthernetClient &client) {
     client.println("  }");
     client.println("}");
     
+    // Default values reset functions
+    client.println("function resetNetworkDefaults() {");
+    client.println("  if (confirm('Reset network settings to default values?')) {");
+    client.println("    document.getElementById('hostname').value = 'gps-ntp-server';");
+    client.println("    document.querySelector('input[name=\"ip_mode\"][value=\"dhcp\"]').checked = true;");
+    client.println("    document.getElementById('static-ip-fields').style.display = 'none';");
+    client.println("    document.getElementById('ip_address').value = '';");
+    client.println("    document.getElementById('netmask').value = '';");
+    client.println("    document.getElementById('gateway').value = '';");
+    client.println("    document.getElementById('dns_server').value = '';");
+    client.println("    clearFieldErrors();");
+    client.println("    showMessage('Network settings reset to defaults', 'success');");
+    client.println("  }");
+    client.println("}");
+    
+    client.println("function resetGnssDefaults() {");
+    client.println("  if (confirm('Reset GNSS settings to default values?')) {");
+    client.println("    document.getElementById('gps_enabled').checked = true;");
+    client.println("    document.getElementById('glonass_enabled').checked = true;");
+    client.println("    document.getElementById('galileo_enabled').checked = true;");
+    client.println("    document.getElementById('beidou_enabled').checked = false;");
+    client.println("    document.getElementById('qzss_enabled').checked = true;");
+    client.println("    document.getElementById('gnss_update_rate').value = '1';");
+    client.println("    document.getElementById('qzss_l1s_enabled').checked = true;");
+    client.println("    document.getElementById('disaster_alert_priority').value = '2';");
+    client.println("    clearFieldErrors();");
+    client.println("    showMessage('GNSS settings reset to defaults', 'success');");
+    client.println("  }");
+    client.println("}");
+    
+    client.println("function resetNtpDefaults() {");
+    client.println("  if (confirm('Reset NTP settings to default values?')) {");
+    client.println("    document.getElementById('ntp_enabled').checked = true;");
+    client.println("    document.getElementById('ntp_port').value = '123';");
+    client.println("    document.getElementById('ntp_stratum').value = '1';");
+    client.println("    clearFieldErrors();");
+    client.println("    showMessage('NTP settings reset to defaults', 'success');");
+    client.println("  }");
+    client.println("}");
+    
+    client.println("function resetSystemDefaults() {");
+    client.println("  if (confirm('Reset system settings to default values?')) {");
+    client.println("    document.getElementById('auto_restart_enabled').checked = false;");
+    client.println("    document.getElementById('restart_interval').value = '24';");
+    client.println("    document.getElementById('debug_enabled').checked = false;");
+    client.println("    clearFieldErrors();");
+    client.println("    showMessage('System settings reset to defaults', 'success');");
+    client.println("  }");
+    client.println("}");
+    
+    client.println("function resetLogsDefaults() {");
+    client.println("  if (confirm('Reset logging settings to default values?')) {");
+    client.println("    document.getElementById('syslog_server').value = '192.168.1.100';");
+    client.println("    document.getElementById('syslog_port').value = '514';");
+    client.println("    document.getElementById('log_level').value = '6';");
+    client.println("    document.getElementById('prometheus_enabled').checked = true;");
+    client.println("    clearFieldErrors();");
+    client.println("    showMessage('Logging settings reset to defaults', 'success');");
+    client.println("  }");
+    client.println("}");
+    
     // Add form submit event listeners
     client.println("document.getElementById('networkForm').addEventListener('submit', function(e) {");
     client.println("  e.preventDefault(); handleFormSubmit('networkForm', '/api/config/network');");
@@ -739,6 +919,51 @@ void GpsWebServer::configPage(EthernetClient &client) {
     client.println("document.getElementById('logsForm').addEventListener('submit', function(e) {");
     client.println("  e.preventDefault(); handleFormSubmit('logsForm', '/api/config/log');");
     client.println("});");
+    
+    // Real-time validation
+    client.println("// Add real-time validation for IP address fields");
+    client.println("function addRealtimeValidation() {");
+    client.println("  const ipFields = ['ip_address', 'netmask', 'gateway', 'dns_server', 'syslog_server'];");
+    client.println("  ipFields.forEach(fieldName => {");
+    client.println("    const field = document.getElementById(fieldName);");
+    client.println("    if (field) {");
+    client.println("      field.addEventListener('blur', function() {");
+    client.println("        if (this.value && !validateIP(this.value)) {");
+    client.println("          this.classList.add('error-field');");
+    client.println("        } else {");
+    client.println("          this.classList.remove('error-field');");
+    client.println("        }");
+    client.println("      });");
+    client.println("    }");
+    client.println("  });");
+    client.println("  ");
+    client.println("  const portFields = ['ntp_port', 'syslog_port'];");
+    client.println("  portFields.forEach(fieldName => {");
+    client.println("    const field = document.getElementById(fieldName);");
+    client.println("    if (field) {");
+    client.println("      field.addEventListener('blur', function() {");
+    client.println("        if (this.value && !validatePort(this.value)) {");
+    client.println("          this.classList.add('error-field');");
+    client.println("        } else {");
+    client.println("          this.classList.remove('error-field');");
+    client.println("        }");
+    client.println("      });");
+    client.println("    }");
+    client.println("  });");
+    client.println("  ");
+    client.println("  const hostnameField = document.getElementById('hostname');");
+    client.println("  if (hostnameField) {");
+    client.println("    hostnameField.addEventListener('blur', function() {");
+    client.println("      if (this.value && !validateHostname(this.value)) {");
+    client.println("        this.classList.add('error-field');");
+    client.println("      } else {");
+    client.println("        this.classList.remove('error-field');");
+    client.println("      }");
+    client.println("    });");
+    client.println("  }");
+    client.println("}");
+    client.println("// Initialize real-time validation");
+    client.println("addRealtimeValidation();");
     
     client.println("</script>");
     
