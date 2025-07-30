@@ -254,7 +254,17 @@ void GpsWebServer::printHeader(EthernetClient &client, String contentType)
 {
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: " + contentType);
-  client.println("Connnection: close");
+  client.println("Connection: close");
+  
+  // Basic security headers for home use
+  client.println("X-Content-Type-Options: nosniff");
+  client.println("X-Frame-Options: DENY");
+  client.println("X-XSS-Protection: 1; mode=block");
+  client.println("Referrer-Policy: strict-origin-when-cross-origin");
+  client.println("Cache-Control: no-cache, no-store, must-revalidate");
+  client.println("Pragma: no-cache");
+  client.println("Expires: 0");
+  
   client.println();
 }
 
@@ -1684,6 +1694,18 @@ void GpsWebServer::configNetworkApiPost(EthernetClient &client, String postData)
     return;
   }
 
+  // Security checks
+  String clientIP = client.remoteIP().toString();
+  if (!checkRequestRate(clientIP)) {
+    sendJsonResponse(client, "{\"error\": \"Rate limit exceeded. Please wait before making more requests.\"}", 429);
+    return;
+  }
+  
+  if (!isValidJsonInput(postData)) {
+    sendJsonResponse(client, "{\"error\": \"Invalid or malformed JSON input\"}", 400);
+    return;
+  }
+
   DynamicJsonDocument doc(1024);
   DeserializationError error = deserializeJson(doc, postData);
   
@@ -1697,11 +1719,19 @@ void GpsWebServer::configNetworkApiPost(EthernetClient &client, String postData)
 
   // ネットワーク設定検証とMACアドレス表示対応
   if (doc.containsKey("hostname")) {
-    String hostname = doc["hostname"].as<String>();
+    String hostname = sanitizeInput(doc["hostname"].as<String>());
     // ホスト名検証: 1-31文字、英数字とハイフンのみ
     if (hostname.length() == 0 || hostname.length() >= sizeof(config.hostname)) {
       sendJsonResponse(client, "{\"error\": \"Invalid hostname length (1-31 characters)\"}", 400);
       return;
+    }
+    // 追加検証: 英数字とハイフンのみ許可
+    for (int i = 0; i < hostname.length(); i++) {
+      char c = hostname.charAt(i);
+      if (!isalnum(c) && c != '-') {
+        sendJsonResponse(client, "{\"error\": \"Hostname can only contain alphanumeric characters and hyphens\"}", 400);
+        return;
+      }
     }
     strncpy(config.hostname, hostname.c_str(), sizeof(config.hostname) - 1);
     config.hostname[sizeof(config.hostname) - 1] = '\0';
@@ -1759,6 +1789,18 @@ void GpsWebServer::configGnssApiGet(EthernetClient &client) {
 }
 
 void GpsWebServer::configGnssApiPost(EthernetClient &client, String postData) {
+  // Basic security checks
+  String clientIP = client.remoteIP().toString();
+  if (!checkRequestRate(clientIP)) {
+    sendJsonResponse(client, "{\"error\": \"Rate limit exceeded\"}", 429);
+    return;
+  }
+  
+  if (!isValidJsonInput(postData)) {
+    sendJsonResponse(client, "{\"error\": \"Invalid or potentially malicious input\"}", 400);
+    return;
+  }
+  
   if (!configManager) {
     sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
     return;
@@ -1853,6 +1895,18 @@ void GpsWebServer::configNtpApiGet(EthernetClient &client) {
 }
 
 void GpsWebServer::configNtpApiPost(EthernetClient &client, String postData) {
+  // Basic security checks
+  String clientIP = client.remoteIP().toString();
+  if (!checkRequestRate(clientIP)) {
+    sendJsonResponse(client, "{\"error\": \"Rate limit exceeded\"}", 429);
+    return;
+  }
+  
+  if (!isValidJsonInput(postData)) {
+    sendJsonResponse(client, "{\"error\": \"Invalid or potentially malicious input\"}", 400);
+    return;
+  }
+  
   if (!configManager) {
     sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
     return;
@@ -1923,6 +1977,18 @@ void GpsWebServer::configSystemApiGet(EthernetClient &client) {
 }
 
 void GpsWebServer::configSystemApiPost(EthernetClient &client, String postData) {
+  // Basic security checks
+  String clientIP = client.remoteIP().toString();
+  if (!checkRequestRate(clientIP)) {
+    sendJsonResponse(client, "{\"error\": \"Rate limit exceeded\"}", 429);
+    return;
+  }
+  
+  if (!isValidJsonInput(postData)) {
+    sendJsonResponse(client, "{\"error\": \"Invalid or potentially malicious input\"}", 400);
+    return;
+  }
+  
   if (!configManager) {
     sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
     return;
@@ -1986,6 +2052,18 @@ void GpsWebServer::configLogApiGet(EthernetClient &client) {
 }
 
 void GpsWebServer::configLogApiPost(EthernetClient &client, String postData) {
+  // Basic security checks
+  String clientIP = client.remoteIP().toString();
+  if (!checkRequestRate(clientIP)) {
+    sendJsonResponse(client, "{\"error\": \"Rate limit exceeded\"}", 429);
+    return;
+  }
+  
+  if (!isValidJsonInput(postData)) {
+    sendJsonResponse(client, "{\"error\": \"Invalid or potentially malicious input\"}", 400);
+    return;
+  }
+  
   if (!configManager) {
     sendJsonResponse(client, "{\"error\": \"Configuration Manager not available\"}", 500);
     return;
@@ -2004,6 +2082,8 @@ void GpsWebServer::configLogApiPost(EthernetClient &client, String postData) {
 
   if (doc.containsKey("syslog_server")) {
     String server = doc["syslog_server"].as<String>();
+    server = sanitizeInput(server);
+    
     // Syslogサーバー検証: 0-63文字
     if (server.length() >= sizeof(config.syslog_server)) {
       sendJsonResponse(client, "{\"error\": \"Syslog server address too long (max 63 characters)\"}", 400);
@@ -2084,6 +2164,13 @@ void GpsWebServer::statusApiGet(EthernetClient &client) {
 
 // メンテナンス機能API実装
 void GpsWebServer::systemRebootApiPost(EthernetClient &client) {
+  // Basic security checks
+  String clientIP = client.remoteIP().toString();
+  if (!checkRequestRate(clientIP)) {
+    sendJsonResponse(client, "{\"error\": \"Rate limit exceeded\"}", 429);
+    return;
+  }
+  
   // システム再起動確認
   DynamicJsonDocument response(256);
   response["success"] = true;
@@ -2167,4 +2254,91 @@ void GpsWebServer::systemLogsApiGet(EthernetClient &client) {
   String jsonString;
   serializeJson(doc, jsonString);
   sendJsonResponse(client, jsonString);
+}
+
+// Security functions implementation
+String GpsWebServer::sanitizeInput(const String& input) {
+  String sanitized = input;
+  
+  // Remove potentially dangerous characters
+  sanitized.replace("<", "&lt;");
+  sanitized.replace(">", "&gt;");
+  sanitized.replace("\"", "&quot;");
+  sanitized.replace("'", "&#x27;");
+  sanitized.replace("&", "&amp;");
+  sanitized.replace("\r", "");
+  sanitized.replace("\n", "");
+  
+  // Limit length to prevent buffer overflow
+  if (sanitized.length() > 255) {
+    sanitized = sanitized.substring(0, 255);
+  }
+  
+  return sanitized;
+}
+
+bool GpsWebServer::isValidJsonInput(const String& json) {
+  // Basic JSON validation
+  if (json.length() == 0 || json.length() > 2048) {
+    return false;
+  }
+  
+  // Must start with { and end with }
+  if (!json.startsWith("{") || !json.endsWith("}")) {
+    return false;
+  }
+  
+  // Count braces for basic structure validation
+  int braceCount = 0;
+  for (int i = 0; i < json.length(); i++) {
+    if (json.charAt(i) == '{') braceCount++;
+    if (json.charAt(i) == '}') braceCount--;
+  }
+  
+  return braceCount == 0;
+}
+
+// Simple rate limiting for home use
+static unsigned long lastRequestTime[5] = {0}; // Track last 5 client requests
+static String lastClientIPs[5] = {"", "", "", "", ""};
+static int requestCounts[5] = {0};
+static int nextSlot = 0;
+
+bool GpsWebServer::checkRequestRate(const String& clientIP) {
+  unsigned long currentTime = millis();
+  const unsigned long RATE_LIMIT_WINDOW = 60000; // 1 minute window
+  const int MAX_REQUESTS_PER_MINUTE = 30; // 30 requests per minute max
+  
+  // Find existing client or use next slot
+  int clientSlot = -1;
+  for (int i = 0; i < 5; i++) {
+    if (lastClientIPs[i] == clientIP) {
+      clientSlot = i;
+      break;
+    }
+  }
+  
+  if (clientSlot == -1) {
+    clientSlot = nextSlot;
+    nextSlot = (nextSlot + 1) % 5;
+    lastClientIPs[clientSlot] = clientIP;
+    lastRequestTime[clientSlot] = currentTime;
+    requestCounts[clientSlot] = 1;
+    return true;
+  }
+  
+  // Reset counter if window has passed
+  if (currentTime - lastRequestTime[clientSlot] > RATE_LIMIT_WINDOW) {
+    requestCounts[clientSlot] = 1;
+    lastRequestTime[clientSlot] = currentTime;
+    return true;
+  }
+  
+  // Check rate limit
+  requestCounts[clientSlot]++;
+  if (requestCounts[clientSlot] > MAX_REQUESTS_PER_MINUTE) {
+    return false; // Rate limit exceeded
+  }
+  
+  return true;
 }

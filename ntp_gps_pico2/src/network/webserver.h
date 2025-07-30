@@ -81,6 +81,11 @@ private:
     void sendJsonResponse(EthernetClient &client, const String& json, int statusCode = 200);
     void send404(EthernetClient &client); // Add 404 handler
     void handleFileRequest(EthernetClient &client, const String& path, const String& contentType); // File system support
+    
+    // Security functions
+    String sanitizeInput(const String& input);
+    bool isValidJsonInput(const String& json);
+    bool checkRequestRate(const String& clientIP);
 
 };
 #endif

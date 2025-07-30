@@ -799,10 +799,14 @@
     - _Requirements: 基本的な監視機能_ **📋 中優先度** **✅ 完成**
 
 - [ ] 31. 基本セキュリティ機能の実装（家庭利用向け）
-  - [ ] 31.1 基本的なアクセス制御の実装
-    - 入力データのサニタイゼーション機能を実装する
-    - 基本的な入力値検証を追加する
-    - _Requirements: 基本的なセキュリティ_ **📋 中優先度**
+  - [x] 31.1 基本的なアクセス制御の実装 **✅ 完成**
+    - 基本的なHTTPセキュリティヘッダーの実装（X-Content-Type-Options、X-Frame-Options、X-XSS-Protection等） ✅
+    - 入力サニタイゼーション機能（HTML/JS特殊文字のエスケープ処理）の実装 ✅
+    - レート制限機能（30リクエスト/分）の実装 ✅
+    - JSON入力検証機能（基本構文・サイズ制限）の実装 ✅
+    - 全API POSTエンドポイント（configNetworkApiPost、configGnssApiPost、configNtpApiPost、configSystemApiPost、configLogApiPost、systemRebootApiPost）へのセキュリティ機能適用 ✅
+    - ホスト名入力の英数字・ハイフン制限バリデーション強化 ✅
+    - _Requirements: 基本的なセキュリティ（家庭利用レベル）_ **✅ 完成**
 
 - [ ] 32. Web設定インターフェースの基本テストと品質保証
   - [ ] 32.1 バックエンドAPIテストの実装
