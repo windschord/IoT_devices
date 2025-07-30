@@ -1,0 +1,701 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS NTP Server - Frontend Test Suite</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background-color: #f0f0f0; 
+        }
+        .test-container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+        }
+        .test-section { 
+            margin: 20px 0; 
+            padding: 15px; 
+            border: 1px solid #ddd; 
+            border-radius: 5px; 
+        }
+        .test-pass { 
+            background-color: #d4edda; 
+            color: #155724; 
+        }
+        .test-fail { 
+            background-color: #f8d7da; 
+            color: #721c24; 
+        }
+        .test-pending { 
+            background-color: #fff3cd; 
+            color: #856404; 
+        }
+        .tab-nav {
+            display: flex;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 20px;
+        }
+        .tab-button {
+            padding: 10px 20px;
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            cursor: pointer;
+            margin-right: 2px;
+        }
+        .tab-button.active {
+            background: white;
+            border-bottom: 2px solid white;
+            margin-bottom: -2px;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-top: none;
+            background: white;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .form-group {
+            margin: 15px 0;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .error-field {
+            border-color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .message.warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        #testResults {
+            margin-top: 20px;
+        }
+        .status-indicator {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-ok {
+            background-color: #28a745;
+            color: white;
+        }
+        .status-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .status-error {
+            background-color: #dc3545;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>GPS NTP Server - Frontend Test Suite</h1>
+        <p>Task 32.2: フロントエンドテストの実装 - UI コンポーネントの基本動作テスト</p>
+        
+        <div id="messageContainer"></div>
+        
+        <!-- Tab Navigation Test -->
+        <div class="tab-nav">
+            <button class="tab-button active" onclick="showTab('network')">Network</button>
+            <button class="tab-button" onclick="showTab('gnss')">GNSS</button>
+            <button class="tab-button" onclick="showTab('ntp')">NTP</button>
+            <button class="tab-button" onclick="showTab('system')">System</button>
+            <button class="tab-button" onclick="showTab('status')">Status</button>
+        </div>
+
+        <!-- Network Tab -->
+        <div id="network" class="tab-content active">
+            <h3>Network Configuration Test</h3>
+            <form id="networkForm">
+                <div class="form-group">
+                    <label for="hostname">Hostname:</label>
+                    <input type="text" id="hostname" name="hostname" value="test-server">
+                </div>
+                <div class="form-group">
+                    <label>IP Configuration:</label>
+                    <label><input type="radio" name="ip_mode" value="dhcp" checked> DHCP</label>
+                    <label><input type="radio" name="ip_mode" value="static"> Static IP</label>
+                </div>
+                <div id="static-ip-fields" style="display: none;">
+                    <div class="form-group">
+                        <label for="ip_address">IP Address:</label>
+                        <input type="text" id="ip_address" name="ip_address" placeholder="192.168.1.100">
+                    </div>
+                    <div class="form-group">
+                        <label for="netmask">Netmask:</label>
+                        <input type="text" id="netmask" name="netmask" placeholder="255.255.255.0">
+                    </div>
+                    <div class="form-group">
+                        <label for="gateway">Gateway:</label>
+                        <input type="text" id="gateway" name="gateway" placeholder="192.168.1.1">
+                    </div>
+                </div>
+                <button type="submit" class="button">Save Network Settings</button>
+                <button type="button" class="button" onclick="resetNetworkDefaults()">Reset to Defaults</button>
+            </form>
+        </div>
+
+        <!-- GNSS Tab -->
+        <div id="gnss" class="tab-content">
+            <h3>GNSS Configuration Test</h3>
+            <form id="gnssForm">
+                <div class="form-group">
+                    <label><input type="checkbox" id="gps_enabled" name="gps_enabled" checked> GPS</label>
+                    <label><input type="checkbox" id="glonass_enabled" name="glonass_enabled" checked> GLONASS</label>
+                    <label><input type="checkbox" id="galileo_enabled" name="galileo_enabled" checked> Galileo</label>
+                    <label><input type="checkbox" id="beidou_enabled" name="beidou_enabled"> BeiDou</label>
+                    <label><input type="checkbox" id="qzss_enabled" name="qzss_enabled" checked> QZSS</label>
+                </div>
+                <div class="form-group">
+                    <label for="gnss_update_rate">Update Rate (Hz):</label>
+                    <select id="gnss_update_rate" name="gnss_update_rate">
+                        <option value="1" selected>1 Hz</option>
+                        <option value="5">5 Hz</option>
+                        <option value="10">10 Hz</option>
+                    </select>
+                </div>
+                <button type="submit" class="button">Save GNSS Settings</button>
+                <button type="button" class="button" onclick="resetGnssDefaults()">Reset to Defaults</button>
+            </form>
+        </div>
+
+        <!-- NTP Tab -->
+        <div id="ntp" class="tab-content">
+            <h3>NTP Configuration Test</h3>
+            <form id="ntpForm">
+                <div class="form-group">
+                    <label><input type="checkbox" id="ntp_enabled" name="ntp_enabled" checked> Enable NTP Server</label>
+                </div>
+                <div class="form-group">
+                    <label for="ntp_port">NTP Port:</label>
+                    <input type="number" id="ntp_port" name="ntp_port" value="123" min="1" max="65535">
+                </div>
+                <div class="form-group">
+                    <label for="ntp_stratum">Stratum Level:</label>
+                    <select id="ntp_stratum" name="ntp_stratum">
+                        <option value="1" selected>1 (Primary)</option>
+                        <option value="2">2 (Secondary)</option>
+                        <option value="3">3 (Tertiary)</option>
+                    </select>
+                </div>
+                <button type="submit" class="button">Save NTP Settings</button>
+                <button type="button" class="button" onclick="resetNtpDefaults()">Reset to Defaults</button>
+            </form>
+        </div>
+
+        <!-- System Tab -->
+        <div id="system" class="tab-content">
+            <h3>System Configuration Test</h3>
+            <form id="systemForm">
+                <div class="form-group">
+                    <label><input type="checkbox" id="auto_restart_enabled" name="auto_restart_enabled"> Auto Restart</label>
+                </div>
+                <div class="form-group">
+                    <label for="restart_interval">Restart Interval (hours):</label>
+                    <input type="number" id="restart_interval" name="restart_interval" value="24" min="1" max="168">
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="debug_enabled" name="debug_enabled"> Debug Mode</label>
+                </div>
+                <button type="submit" class="button">Save System Settings</button>
+                <button type="button" class="button" onclick="resetSystemDefaults()">Reset to Defaults</button>
+            </form>
+        </div>
+
+        <!-- Status Tab -->
+        <div id="status" class="tab-content">
+            <h3>System Status Test</h3>
+            <div class="form-group">
+                <label>System Uptime:</label>
+                <span id="system-uptime" class="status-indicator status-ok">2h 35m</span>
+            </div>
+            <div class="form-group">
+                <label>Free Memory:</label>
+                <span id="free-memory" class="status-indicator status-ok">485 KB</span>
+            </div>
+            <div class="form-group">
+                <label>GPS Fix Status:</label>
+                <span id="gps-fix-status" class="status-indicator status-ok">3D Fix</span>
+            </div>
+            <div class="form-group">
+                <label>Satellites:</label>
+                <span id="satellite-count" class="status-indicator status-ok">12 / 8</span>
+            </div>
+            <div class="form-group">
+                <label>GPS Position:</label>
+                <span id="gps-position" class="status-indicator status-ok">35.681382, 139.766084</span>
+            </div>
+            <div class="form-group">
+                <label>PPS Status:</label>
+                <span id="pps-status" class="status-indicator status-ok">Active</span>
+            </div>
+            <div class="form-group">
+                <label>NTP Stratum:</label>
+                <span id="current-stratum" class="status-indicator status-ok">1</span>
+            </div>
+            <div class="form-group">
+                <label>NTP Requests:</label>
+                <span id="ntp-requests" class="status-indicator status-ok">1,247</span>
+            </div>
+            <button type="button" class="button" onclick="refreshStatus()">Refresh Status</button>
+        </div>
+
+        <!-- Test Results -->
+        <div id="testResults">
+            <h3>Test Execution Results</h3>
+            <button class="button" onclick="runAllTests()">Run All Frontend Tests</button>
+            <div id="testOutput"></div>
+        </div>
+    </div>
+
+    <script>
+        // Frontend Test Suite Implementation
+        
+        // Test counter and results
+        let testCount = 0;
+        let passCount = 0;
+        let failCount = 0;
+        let testResults = [];
+
+        // Helper functions from the actual web interface
+        function showTab(tabName) {
+            // Hide all tab contents
+            const contents = document.querySelectorAll('.tab-content');
+            contents.forEach(content => content.classList.remove('active'));
+            
+            // Remove active class from all buttons
+            const buttons = document.querySelectorAll('.tab-button');
+            buttons.forEach(button => button.classList.remove('active'));
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked button
+            const activeButton = Array.from(buttons).find(button => 
+                button.textContent.toLowerCase() === tabName.toLowerCase());
+            if (activeButton) {
+                activeButton.classList.add('active');
+            }
+        }
+
+        function validateIP(ip) {
+            const ipRegex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+            return ipRegex.test(ip);
+        }
+
+        function validatePort(port) {
+            const portNum = parseInt(port);
+            return !isNaN(portNum) && portNum >= 1 && portNum <= 65535;
+        }
+
+        function validateHostname(hostname) {
+            if (!hostname || hostname.length === 0 || hostname.length > 63) return false;
+            const hostnameRegex = /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$/;
+            return hostnameRegex.test(hostname);
+        }
+
+        function showMessage(message, type) {
+            const container = document.getElementById('messageContainer');
+            container.innerHTML = '<div class="message ' + type + '">' + message + '</div>';
+            setTimeout(() => container.innerHTML = '', 5000);
+        }
+
+        function clearFieldErrors() {
+            const errorFields = document.querySelectorAll('.error-field');
+            errorFields.forEach(field => field.classList.remove('error-field'));
+        }
+
+        // Reset functions
+        function resetNetworkDefaults() {
+            document.getElementById('hostname').value = 'gps-ntp-server';
+            document.querySelector('input[name="ip_mode"][value="dhcp"]').checked = true;
+            document.getElementById('static-ip-fields').style.display = 'none';
+            document.getElementById('ip_address').value = '';
+            document.getElementById('netmask').value = '';
+            document.getElementById('gateway').value = '';
+            clearFieldErrors();
+            showMessage('Network settings reset to defaults', 'success');
+        }
+
+        function resetGnssDefaults() {
+            document.getElementById('gps_enabled').checked = true;
+            document.getElementById('glonass_enabled').checked = true;
+            document.getElementById('galileo_enabled').checked = true;
+            document.getElementById('beidou_enabled').checked = false;
+            document.getElementById('qzss_enabled').checked = true;
+            document.getElementById('gnss_update_rate').value = '1';
+            clearFieldErrors();
+            showMessage('GNSS settings reset to defaults', 'success');
+        }
+
+        function resetNtpDefaults() {
+            document.getElementById('ntp_enabled').checked = true;
+            document.getElementById('ntp_port').value = '123';
+            document.getElementById('ntp_stratum').value = '1';
+            clearFieldErrors();
+            showMessage('NTP settings reset to defaults', 'success');
+        }
+
+        function resetSystemDefaults() {
+            document.getElementById('auto_restart_enabled').checked = false;
+            document.getElementById('restart_interval').value = '24';
+            document.getElementById('debug_enabled').checked = false;
+            clearFieldErrors();
+            showMessage('System settings reset to defaults', 'success');
+        }
+
+        function refreshStatus() {
+            // Mock status refresh
+            showMessage('Status refreshed successfully', 'success');
+        }
+
+        // Test suite implementation
+        function runTest(testName, testFunction) {
+            testCount++;
+            console.log(`Running test: ${testName}`);
+            
+            try {
+                const result = testFunction();
+                if (result === true || result === undefined) {
+                    passCount++;
+                    testResults.push(`✓ ${testName} - PASS`);
+                    console.log(`✓ ${testName} - PASS`);
+                } else {
+                    failCount++;
+                    testResults.push(`✗ ${testName} - FAIL: ${result}`);
+                    console.log(`✗ ${testName} - FAIL: ${result}`);
+                }
+            } catch (error) {
+                failCount++;
+                testResults.push(`✗ ${testName} - ERROR: ${error.message}`);
+                console.log(`✗ ${testName} - ERROR: ${error.message}`);
+            }
+        }
+
+        // Test 1: Tab Navigation Test
+        function testTabNavigation() {
+            showTab('network');
+            if (!document.getElementById('network').classList.contains('active')) {
+                return 'Network tab not activated';
+            }
+            
+            showTab('gnss');
+            if (!document.getElementById('gnss').classList.contains('active')) {
+                return 'GNSS tab not activated';
+            }
+            
+            if (document.getElementById('network').classList.contains('active')) {
+                return 'Previous tab still active';
+            }
+            
+            return true;
+        }
+
+        // Test 2: Form Validation Test
+        function testFormValidation() {
+            // Test IP validation
+            if (!validateIP('192.168.1.1')) return 'Valid IP failed validation';
+            if (validateIP('256.1.1.1')) return 'Invalid IP passed validation';
+            if (validateIP('192.168.1')) return 'Incomplete IP passed validation';
+            
+            // Test port validation  
+            if (!validatePort('123')) return 'Valid port failed validation';
+            if (validatePort('0')) return 'Invalid port 0 passed validation';
+            if (validatePort('65536')) return 'Invalid port 65536 passed validation';
+            
+            // Test hostname validation
+            if (!validateHostname('test-server')) return 'Valid hostname failed validation';
+            if (validateHostname('')) return 'Empty hostname passed validation';
+            if (validateHostname('a'.repeat(64))) return 'Too long hostname passed validation';
+            if (validateHostname('-invalid')) return 'Invalid hostname with leading dash passed validation';
+            
+            return true;
+        }
+
+        // Test 3: Form Field Interaction Test
+        function testFormFieldInteraction() {
+            // Test static IP fields visibility
+            const dhcpRadio = document.querySelector('input[name="ip_mode"][value="dhcp"]');
+            const staticRadio = document.querySelector('input[name="ip_mode"][value="static"]');
+            const staticFields = document.getElementById('static-ip-fields');
+            
+            dhcpRadio.checked = true;
+            staticRadio.dispatchEvent(new Event('change'));
+            
+            staticRadio.checked = true;
+            staticRadio.dispatchEvent(new Event('change'));
+            
+            if (staticFields.style.display !== 'block') {
+                return 'Static IP fields not shown when static mode selected';
+            }
+            
+            dhcpRadio.checked = true;
+            dhcpRadio.dispatchEvent(new Event('change'));
+            
+            if (staticFields.style.display !== 'none') {
+                return 'Static IP fields not hidden when DHCP mode selected';
+            }
+            
+            return true;
+        }
+
+        // Test 4: Reset Functions Test
+        function testResetFunctions() {
+            // Test network reset
+            document.getElementById('hostname').value = 'custom-name';
+            resetNetworkDefaults();
+            
+            if (document.getElementById('hostname').value !== 'gps-ntp-server') {
+                return 'Network reset did not restore default hostname';
+            }
+            
+            // Test GNSS reset
+            document.getElementById('gps_enabled').checked = false;
+            resetGnssDefaults();
+            
+            if (!document.getElementById('gps_enabled').checked) {
+                return 'GNSS reset did not restore GPS enabled state';
+            }
+            
+            return true;
+        }
+
+        // Test 5: Message Display Test
+        function testMessageDisplay() {
+            showMessage('Test success message', 'success');
+            
+            const messageContainer = document.getElementById('messageContainer');
+            if (!messageContainer.innerHTML.includes('success')) {
+                return 'Success message not displayed correctly';
+            }
+            
+            showMessage('Test error message', 'error');
+            
+            if (!messageContainer.innerHTML.includes('error')) {
+                return 'Error message not displayed correctly';
+            }
+            
+            return true;
+        }
+
+        // Test 6: Form Data Collection Test
+        function testFormDataCollection() {
+            // Set form values
+            document.getElementById('hostname').value = 'test-data';
+            document.getElementById('ntp_port').value = '1123';
+            document.getElementById('gps_enabled').checked = true;
+            document.getElementById('glonass_enabled').checked = false;
+            
+            // Collect network form data
+            const networkForm = document.getElementById('networkForm');
+            const networkFormData = new FormData(networkForm);
+            const networkJsonData = {};
+            for (let [key, value] of networkFormData.entries()) {
+                networkJsonData[key] = value;
+            }
+            
+            if (networkJsonData.hostname !== 'test-data') {
+                return 'Network form data collection failed';
+            }
+            
+            // Collect NTP form data
+            const ntpForm = document.getElementById('ntpForm');
+            const ntpFormData = new FormData(ntpForm);
+            const ntpJsonData = {};
+            for (let [key, value] of ntpFormData.entries()) {
+                ntpJsonData[key] = value;
+            }
+            
+            if (ntpJsonData.ntp_port !== '1123') {
+                return 'NTP form data collection failed';
+            }
+            
+            return true;
+        }
+
+        // Test 7: Status Display Test
+        function testStatusDisplay() {
+            const statusElements = [
+                'system-uptime',
+                'free-memory', 
+                'gps-fix-status',
+                'satellite-count',
+                'gps-position',
+                'pps-status',
+                'current-stratum',
+                'ntp-requests'
+            ];
+            
+            for (const elementId of statusElements) {
+                const element = document.getElementById(elementId);
+                if (!element) {
+                    return `Status element ${elementId} not found`;
+                }
+                if (!element.textContent.trim()) {
+                    return `Status element ${elementId} has no content`;
+                }
+            }
+            
+            return true;
+        }
+
+        // Test 8: Browser Compatibility Test
+        function testBrowserCompatibility() {
+            // Test modern JavaScript features
+            try {
+                // Test ES6 features
+                const testArray = [1, 2, 3];
+                const doubled = testArray.map(x => x * 2);
+                
+                // Test DOM query methods
+                const testElements = document.querySelectorAll('.tab-button');
+                if (testElements.length === 0) {
+                    return 'querySelectorAll not working';
+                }
+                
+                // Test event handling
+                const testButton = document.createElement('button');
+                testButton.addEventListener('click', function() {});
+                
+                // Test FormData API
+                const testForm = document.getElementById('networkForm');
+                const testFormData = new FormData(testForm);
+                
+                return true;
+            } catch (error) {
+                return `Browser compatibility issue: ${error.message}`;
+            }
+        }
+
+        // Run all tests
+        function runAllTests() {
+            testCount = 0;
+            passCount = 0;
+            failCount = 0;
+            testResults = [];
+            
+            console.log('=== Frontend Test Suite Starting ===');
+            
+            runTest('Tab Navigation', testTabNavigation);
+            runTest('Form Validation', testFormValidation);
+            runTest('Form Field Interaction', testFormFieldInteraction);
+            runTest('Reset Functions', testResetFunctions);
+            runTest('Message Display', testMessageDisplay);
+            runTest('Form Data Collection', testFormDataCollection);
+            runTest('Status Display', testStatusDisplay);
+            runTest('Browser Compatibility', testBrowserCompatibility);
+            
+            // Display results
+            const outputDiv = document.getElementById('testOutput');
+            const summary = `
+                <h4>Test Summary</h4>
+                <p>Total Tests: ${testCount}</p>
+                <p class="test-pass">Passed: ${passCount}</p>
+                <p class="test-fail">Failed: ${failCount}</p>
+                <p>Success Rate: ${((passCount / testCount) * 100).toFixed(1)}%</p>
+                
+                <h4>Detailed Results</h4>
+                <ul>
+                    ${testResults.map(result => `<li>${result}</li>`).join('')}
+                </ul>
+            `;
+            
+            outputDiv.innerHTML = summary;
+            
+            console.log('=== Frontend Test Suite Completed ===');
+            console.log(`Results: ${passCount}/${testCount} tests passed`);
+            
+            showMessage(`Frontend tests completed: ${passCount}/${testCount} passed`, 
+                       failCount === 0 ? 'success' : 'warning');
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Frontend test page loaded');
+            
+            // Add event listeners for IP mode radio buttons
+            const ipModeRadios = document.querySelectorAll('input[name="ip_mode"]');
+            ipModeRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    document.getElementById('static-ip-fields').style.display = 
+                        this.value === 'static' ? 'block' : 'none';
+                });
+            });
+            
+            // Add form submit handlers
+            document.getElementById('networkForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                showMessage('Network form submitted (test mode)', 'success');
+            });
+            
+            document.getElementById('gnssForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                showMessage('GNSS form submitted (test mode)', 'success');
+            });
+            
+            document.getElementById('ntpForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                showMessage('NTP form submitted (test mode)', 'success');
+            });
+            
+            document.getElementById('systemForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                showMessage('System form submitted (test mode)', 'success');
+            });
+            
+            showMessage('Frontend test suite loaded successfully', 'success');
+        });
+    </script>
+</body>
+</html>
