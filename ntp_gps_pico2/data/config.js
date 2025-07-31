@@ -166,6 +166,50 @@ function handleFormSubmit(formId, apiEndpoint) {
         }
     }
     
+    // Handle custom dropdown values and ensure proper type conversion
+    if (formId === 'logsForm') {
+        // Ensure log_level is converted to integer
+        if (jsonData.log_level !== undefined) {
+            jsonData.log_level = parseInt(jsonData.log_level);
+        }
+        // Ensure syslog_port is converted to integer
+        if (jsonData.syslog_port !== undefined) {
+            jsonData.syslog_port = parseInt(jsonData.syslog_port);
+        }
+    }
+    
+    if (formId === 'ntpForm') {
+        // Ensure ntp_stratum is converted to integer
+        if (jsonData.ntp_stratum !== undefined) {
+            jsonData.ntp_stratum = parseInt(jsonData.ntp_stratum);
+        }
+        // Ensure ntp_port is converted to integer
+        if (jsonData.ntp_port !== undefined) {
+            jsonData.ntp_port = parseInt(jsonData.ntp_port);
+        }
+    }
+    
+    if (formId === 'gnssForm') {
+        // Ensure disaster_alert_priority is converted to integer
+        if (jsonData.disaster_alert_priority !== undefined) {
+            jsonData.disaster_alert_priority = parseInt(jsonData.disaster_alert_priority);
+        }
+        // Ensure gnss_update_rate is converted to integer
+        if (jsonData.gnss_update_rate !== undefined) {
+            jsonData.gnss_update_rate = parseInt(jsonData.gnss_update_rate);
+        }
+    }
+    
+    if (formId === 'systemForm') {
+        // Ensure restart_interval is converted to integer
+        if (jsonData.restart_interval !== undefined) {
+            jsonData.restart_interval = parseInt(jsonData.restart_interval);
+        }
+    }
+    
+    // Debug: Log the data being sent (remove in production)
+    console.log('Form submission data for', formId, ':', jsonData);
+    
     // Validate form data
     if (!validateFormData(formId, jsonData)) {
         showMessage('Please correct the highlighted errors before saving', 'error');
@@ -181,17 +225,29 @@ function handleFormSubmit(formId, apiEndpoint) {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify(jsonData)
-    }).then(response => response.json())
+    }).then(response => {
+          if (!response.ok) {
+              // Log response details for debugging
+              console.error('HTTP Error:', response.status, response.statusText);
+              return response.text().then(text => {
+                  console.error('Response body:', text);
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              });
+          }
+          return response.json();
+      })
       .then(data => {
           hideLoading();
           if (data.success) {
               showMessage(data.message || 'Configuration saved successfully', 'success');
           } else {
+              console.error('Server error:', data);
               showMessage(data.error || 'Failed to save configuration', 'error');
           }
       }).catch(error => {
           hideLoading();
-          showMessage('Network error: ' + error, 'error');
+          console.error('Request failed:', error);
+          showMessage('Network error: ' + error.message, 'error');
       });
 }
 
@@ -328,6 +384,7 @@ function resetGnssDefaults() {
         document.getElementById('qzss_l1s_enabled').checked = true;
         document.getElementById('gnss_update_rate').value = '1';
         document.getElementById('disaster_alert_priority').value = '1';
+        updateCustomDropdown('disaster_alert_priority_dropdown', 1);
         clearFieldErrors();
         showMessage('GNSS settings reset to defaults', 'success');
     }
@@ -359,6 +416,7 @@ function resetLogsDefaults() {
         document.getElementById('syslog_server').value = '192.168.1.100';
         document.getElementById('syslog_port').value = '514';
         document.getElementById('log_level').value = '6';
+        updateCustomDropdown('log_level_dropdown', 6);
         document.getElementById('prometheus_enabled').checked = true;
         clearFieldErrors();
         showMessage('Logging settings reset to defaults', 'success');
@@ -434,6 +492,9 @@ async function loadConfiguration() {
         document.getElementById('gnss_update_rate').value = gnssData.gnss_update_rate || 1;
         document.getElementById('disaster_alert_priority').value = gnssData.disaster_alert_priority || 1;
         
+        // Update custom dropdown for disaster alert priority
+        updateCustomDropdown('disaster_alert_priority_dropdown', gnssData.disaster_alert_priority || 1);
+        
         // Populate NTP form
         document.getElementById('ntp_enabled').checked = ntpData.ntp_enabled || false;
         document.getElementById('ntp_port').value = ntpData.ntp_port || 123;
@@ -452,6 +513,9 @@ async function loadConfiguration() {
         document.getElementById('syslog_port').value = logsData.syslog_port || 514;
         document.getElementById('log_level').value = logsData.log_level || 6;
         document.getElementById('prometheus_enabled').checked = logsData.prometheus_enabled || false;
+        
+        // Update custom dropdown for log level
+        updateCustomDropdown('log_level_dropdown', logsData.log_level || 6);
         
         configLoaded = true;
         console.log('Configuration loaded successfully');
@@ -552,62 +616,69 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Custom Dropdown Implementation
 function initializeCustomDropdown() {
-    const dropdown = document.getElementById('ntp_stratum_dropdown');
-    if (!dropdown) return;
+    // Initialize all custom dropdowns
+    const dropdownIds = ['ntp_stratum_dropdown', 'disaster_alert_priority_dropdown', 'log_level_dropdown'];
     
-    const button = dropdown.querySelector('.custom-dropdown-button');
-    const options = dropdown.querySelector('.custom-dropdown-options');
-    const arrow = dropdown.querySelector('.custom-dropdown-arrow');
-    const selectedSpan = dropdown.querySelector('#ntp_stratum_selected');
-    const hiddenInput = document.getElementById('ntp_stratum');
-    
-    // Toggle dropdown
-    button.addEventListener('click', function() {
-        const isOpen = options.classList.contains('open');
-        closeAllDropdowns();
+    dropdownIds.forEach(dropdownId => {
+        const dropdown = document.getElementById(dropdownId);
+        if (!dropdown) return;
         
-        if (!isOpen) {
-            options.classList.add('open');
-            arrow.classList.add('open');
-        }
-    });
-    
-    // Handle keyboard navigation
-    button.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            button.click();
-        }
-    });
-    
-    // Handle option selection
-    dropdown.querySelectorAll('.custom-dropdown-option').forEach(option => {
-        option.addEventListener('click', function() {
-            const value = this.getAttribute('data-value');
-            const text = this.textContent;
+        const button = dropdown.querySelector('.custom-dropdown-button');
+        const options = dropdown.querySelector('.custom-dropdown-options');
+        const arrow = dropdown.querySelector('.custom-dropdown-arrow');
+        const selectedSpan = dropdown.querySelector(`#${dropdownId.replace('_dropdown', '_selected')}`);
+        const hiddenInput = document.getElementById(dropdownId.replace('_dropdown', ''));
+        
+        if (!button || !options || !arrow || !selectedSpan || !hiddenInput) return;
+        
+        // Toggle dropdown
+        button.addEventListener('click', function() {
+            const isOpen = options.classList.contains('open');
+            closeAllDropdowns();
             
-            // Update selected option
-            dropdown.querySelectorAll('.custom-dropdown-option').forEach(opt => {
-                opt.classList.remove('selected');
-            });
-            this.classList.add('selected');
-            
-            // Update display and hidden input
-            selectedSpan.textContent = text;
-            hiddenInput.value = value;
-            
-            // Close dropdown
-            options.classList.remove('open');
-            arrow.classList.remove('open');
+            if (!isOpen) {
+                options.classList.add('open');
+                arrow.classList.add('open');
+            }
         });
-    });
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', function(e) {
-        if (!dropdown.contains(e.target)) {
-            options.classList.remove('open');
-            arrow.classList.remove('open');
-        }
+        
+        // Handle keyboard navigation
+        button.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                button.click();
+            }
+        });
+        
+        // Handle option selection
+        dropdown.querySelectorAll('.custom-dropdown-option').forEach(option => {
+            option.addEventListener('click', function() {
+                const value = this.getAttribute('data-value');
+                const text = this.textContent;
+                
+                // Update selected option
+                dropdown.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+                    opt.classList.remove('selected');
+                });
+                this.classList.add('selected');
+                
+                // Update display and hidden input
+                selectedSpan.textContent = text;
+                hiddenInput.value = value;
+                
+                // Close dropdown
+                options.classList.remove('open');
+                arrow.classList.remove('open');
+            });
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!dropdown.contains(e.target)) {
+                options.classList.remove('open');
+                arrow.classList.remove('open');
+            }
+        });
     });
 }
 
@@ -621,13 +692,13 @@ function closeAllDropdowns() {
     });
 }
 
-// Update stratum dropdown to show selected value
-function updateStratumDropdown(value) {
-    const dropdown = document.getElementById('ntp_stratum_dropdown');
+// Update dropdown to show selected value (generic function)
+function updateCustomDropdown(dropdownId, value) {
+    const dropdown = document.getElementById(dropdownId);
     if (!dropdown) return;
     
-    const selectedSpan = dropdown.querySelector('#ntp_stratum_selected');
-    const hiddenInput = document.getElementById('ntp_stratum');
+    const selectedSpan = dropdown.querySelector(`#${dropdownId.replace('_dropdown', '_selected')}`);
+    const hiddenInput = document.getElementById(dropdownId.replace('_dropdown', ''));
     const options = dropdown.querySelectorAll('.custom-dropdown-option');
     
     // Find and select the matching option
@@ -639,4 +710,9 @@ function updateStratumDropdown(value) {
             hiddenInput.value = value;
         }
     });
+}
+
+// Backward compatibility function for stratum dropdown
+function updateStratumDropdown(value) {
+    updateCustomDropdown('ntp_stratum_dropdown', value);
 }
