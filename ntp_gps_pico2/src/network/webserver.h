@@ -76,6 +76,7 @@ private:
     void systemRebootApiPost(EthernetClient &client);
     void systemMetricsApiGet(EthernetClient &client);
     void systemLogsApiGet(EthernetClient &client);
+    void debugFilesApiGet(EthernetClient &client); // Debug API for filesystem
     void printHeader(EthernetClient &client, String contentType);
     bool parsePostData(const String& data, String& key, String& value);
     void sendJsonResponse(EthernetClient &client, const String& json, int statusCode = 200);

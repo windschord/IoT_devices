@@ -338,6 +338,7 @@ function resetNtpDefaults() {
         document.getElementById('ntp_enabled').checked = true;
         document.getElementById('ntp_port').value = '123';
         document.getElementById('ntp_stratum').value = '1';
+        updateStratumDropdown(1);
         clearFieldErrors();
         showMessage('NTP settings reset to defaults', 'success');
     }
@@ -437,6 +438,9 @@ async function loadConfiguration() {
         document.getElementById('ntp_enabled').checked = ntpData.ntp_enabled || false;
         document.getElementById('ntp_port').value = ntpData.ntp_port || 123;
         document.getElementById('ntp_stratum').value = ntpData.ntp_stratum || 1;
+        
+        // Update custom dropdown for stratum level
+        updateStratumDropdown(ntpData.ntp_stratum || 1);
         
         // Populate System form
         document.getElementById('auto_restart_enabled').checked = systemData.auto_restart_enabled || false;
@@ -540,5 +544,99 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Initialize custom dropdown for Stratum Level
+    initializeCustomDropdown();
+    
     console.log('Configuration page initialized');
 });
+
+// Custom Dropdown Implementation
+function initializeCustomDropdown() {
+    const dropdown = document.getElementById('ntp_stratum_dropdown');
+    if (!dropdown) return;
+    
+    const button = dropdown.querySelector('.custom-dropdown-button');
+    const options = dropdown.querySelector('.custom-dropdown-options');
+    const arrow = dropdown.querySelector('.custom-dropdown-arrow');
+    const selectedSpan = dropdown.querySelector('#ntp_stratum_selected');
+    const hiddenInput = document.getElementById('ntp_stratum');
+    
+    // Toggle dropdown
+    button.addEventListener('click', function() {
+        const isOpen = options.classList.contains('open');
+        closeAllDropdowns();
+        
+        if (!isOpen) {
+            options.classList.add('open');
+            arrow.classList.add('open');
+        }
+    });
+    
+    // Handle keyboard navigation
+    button.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            button.click();
+        }
+    });
+    
+    // Handle option selection
+    dropdown.querySelectorAll('.custom-dropdown-option').forEach(option => {
+        option.addEventListener('click', function() {
+            const value = this.getAttribute('data-value');
+            const text = this.textContent;
+            
+            // Update selected option
+            dropdown.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            this.classList.add('selected');
+            
+            // Update display and hidden input
+            selectedSpan.textContent = text;
+            hiddenInput.value = value;
+            
+            // Close dropdown
+            options.classList.remove('open');
+            arrow.classList.remove('open');
+        });
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!dropdown.contains(e.target)) {
+            options.classList.remove('open');
+            arrow.classList.remove('open');
+        }
+    });
+}
+
+// Helper function to close all dropdowns
+function closeAllDropdowns() {
+    document.querySelectorAll('.custom-dropdown-options').forEach(options => {
+        options.classList.remove('open');
+    });
+    document.querySelectorAll('.custom-dropdown-arrow').forEach(arrow => {
+        arrow.classList.remove('open');
+    });
+}
+
+// Update stratum dropdown to show selected value
+function updateStratumDropdown(value) {
+    const dropdown = document.getElementById('ntp_stratum_dropdown');
+    if (!dropdown) return;
+    
+    const selectedSpan = dropdown.querySelector('#ntp_stratum_selected');
+    const hiddenInput = document.getElementById('ntp_stratum');
+    const options = dropdown.querySelectorAll('.custom-dropdown-option');
+    
+    // Find and select the matching option
+    options.forEach(option => {
+        option.classList.remove('selected');
+        if (option.getAttribute('data-value') === value.toString()) {
+            option.classList.add('selected');
+            selectedSpan.textContent = option.textContent;
+            hiddenInput.value = value;
+        }
+    });
+}

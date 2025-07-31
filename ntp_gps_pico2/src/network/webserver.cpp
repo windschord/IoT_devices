@@ -42,57 +42,141 @@ void GpsWebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_
     }
 
     // HTTP request logging moved to LoggingService - raw request no longer printed
-
-    if (s.indexOf("GET /gps ") >= 0)
-    {
-      if (loggingService) {
-        loggingService->info("WEB", "Serving GPS page from file system");
-      }
-      handleFileRequest(client, "/gps.html", "text/html");
+    
+    // Extract the request line (first line of HTTP request)
+    String requestLine = "";
+    int firstNewline = s.indexOf('\n');
+    if (firstNewline > 0) {
+      requestLine = s.substring(0, firstNewline);
+      requestLine.trim();
     }
-    else if (s.indexOf("GET /gps.js ") >= 0)
+    
+    if (loggingService) {
+      loggingService->info("WEB", ("HTTP Request: " + requestLine).c_str());
+    }
+
+    if (requestLine.startsWith("GET /gps.js"))
     {
       if (loggingService) {
         loggingService->info("WEB", "Serving GPS JavaScript from file system");
       }
       handleFileRequest(client, "/gps.js", "text/javascript");
     }
-    else if (s.indexOf("GET /metrics ") >= 0)
+    else if (requestLine.startsWith("GET /gps"))
     {
       if (loggingService) {
-        loggingService->info("WEB", "Serving Prometheus metrics page");
+        loggingService->info("WEB", "Serving GPS page from file system");
       }
-      metricsPage(client);
+      handleFileRequest(client, "/gps.html", "text/html");
     }
-    else if (s.indexOf("GET /config ") >= 0)
-    {
-      if (loggingService) {
-        loggingService->info("WEB", "Serving configuration page from file system");
-      }
-      handleFileRequest(client, "/config.html", "text/html");
-    }
-    else if (s.indexOf("GET /config.js ") >= 0)
+    else if (requestLine.startsWith("GET /config.js"))
     {
       if (loggingService) {
         loggingService->info("WEB", "Serving configuration JavaScript from file system");
       }
       handleFileRequest(client, "/config.js", "text/javascript");
     }
-    else if (s.indexOf("GET /api/gps ") >= 0)
+    else if (requestLine.startsWith("GET /config"))
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Serving configuration page from file system");
+      }
+      handleFileRequest(client, "/config.html", "text/html");
+    }
+    else if (requestLine.startsWith("GET /metrics"))
+    {
+      if (loggingService) {
+        loggingService->info("WEB", "Serving Prometheus metrics page");
+      }
+      metricsPage(client);
+    }
+    else if (requestLine.startsWith("GET /api/gps"))
     {
       if (loggingService) {
         loggingService->info("WEB", "Serving GPS API GET");
       }
       gpsApiGet(client);
     }
-    else if (s.indexOf("GET /api/config ") >= 0)
+    // Category-specific API endpoints (must be before general /api/config)
+    else if (requestLine.startsWith("GET /api/config/network"))
+    {
+      configNetworkApiGet(client);
+    }
+    else if (requestLine.startsWith("POST /api/config/network"))
+    {
+      int contentStart = s.indexOf("\r\n\r\n");
+      if (contentStart >= 0) {
+        String postData = s.substring(contentStart + 4);
+        configNetworkApiPost(client, postData);
+      } else {
+        send404(client);
+      }
+    }
+    else if (requestLine.startsWith("GET /api/config/gnss"))
+    {
+      configGnssApiGet(client);
+    }
+    else if (requestLine.startsWith("POST /api/config/gnss"))
+    {
+      int contentStart = s.indexOf("\r\n\r\n");
+      if (contentStart >= 0) {
+        String postData = s.substring(contentStart + 4);
+        configGnssApiPost(client, postData);
+      } else {
+        send404(client);
+      }
+    }
+    else if (requestLine.startsWith("GET /api/config/ntp"))
+    {
+      configNtpApiGet(client);
+    }
+    else if (requestLine.startsWith("POST /api/config/ntp"))
+    {
+      int contentStart = s.indexOf("\r\n\r\n");
+      if (contentStart >= 0) {
+        String postData = s.substring(contentStart + 4);
+        configNtpApiPost(client, postData);
+      } else {
+        send404(client);
+      }
+    }
+    else if (requestLine.startsWith("GET /api/config/system"))
+    {
+      configSystemApiGet(client);
+    }
+    else if (requestLine.startsWith("POST /api/config/system"))
+    {
+      int contentStart = s.indexOf("\r\n\r\n");
+      if (contentStart >= 0) {
+        String postData = s.substring(contentStart + 4);
+        configSystemApiPost(client, postData);
+      } else {
+        send404(client);
+      }
+    }
+    else if (requestLine.startsWith("GET /api/config/log"))
+    {
+      configLogApiGet(client);
+    }
+    else if (requestLine.startsWith("POST /api/config/log"))
+    {
+      int contentStart = s.indexOf("\r\n\r\n");
+      if (contentStart >= 0) {
+        String postData = s.substring(contentStart + 4);
+        configLogApiPost(client, postData);
+      } else {
+        send404(client);
+      }
+    }
+    // General config API endpoints (must be after specific category endpoints)
+    else if (requestLine.startsWith("GET /api/config"))
     {
       if (loggingService) {
         loggingService->info("WEB", "Serving config API GET");
       }
       configApiGet(client);
     }
-    else if (s.indexOf("POST /api/config ") >= 0)
+    else if (requestLine.startsWith("POST /api/config") && requestLine.indexOf("/api/config/") < 0)
     {
       if (loggingService) {
         loggingService->info("WEB", "Processing config API POST");
@@ -106,101 +190,34 @@ void GpsWebServer::handleClient(Stream &stream, EthernetServer &server, UBX_NAV_
         send404(client);
       }
     }
-    else if (s.indexOf("POST /api/reset ") >= 0)
+    else if (requestLine.startsWith("POST /api/reset"))
     {
       if (loggingService) {
         loggingService->info("WEB", "Processing factory reset request");
       }
       configApiReset(client);
     }
-    // Category-specific API endpoints
-    else if (s.indexOf("GET /api/config/network ") >= 0)
-    {
-      configNetworkApiGet(client);
-    }
-    else if (s.indexOf("POST /api/config/network ") >= 0)
-    {
-      int contentStart = s.indexOf("\r\n\r\n");
-      if (contentStart >= 0) {
-        String postData = s.substring(contentStart + 4);
-        configNetworkApiPost(client, postData);
-      } else {
-        send404(client);
-      }
-    }
-    else if (s.indexOf("GET /api/config/gnss ") >= 0)
-    {
-      configGnssApiGet(client);
-    }
-    else if (s.indexOf("POST /api/config/gnss ") >= 0)
-    {
-      int contentStart = s.indexOf("\r\n\r\n");
-      if (contentStart >= 0) {
-        String postData = s.substring(contentStart + 4);
-        configGnssApiPost(client, postData);
-      } else {
-        send404(client);
-      }
-    }
-    else if (s.indexOf("GET /api/config/ntp ") >= 0)
-    {
-      configNtpApiGet(client);
-    }
-    else if (s.indexOf("POST /api/config/ntp ") >= 0)
-    {
-      int contentStart = s.indexOf("\r\n\r\n");
-      if (contentStart >= 0) {
-        String postData = s.substring(contentStart + 4);
-        configNtpApiPost(client, postData);
-      } else {
-        send404(client);
-      }
-    }
-    else if (s.indexOf("GET /api/config/system ") >= 0)
-    {
-      configSystemApiGet(client);
-    }
-    else if (s.indexOf("POST /api/config/system ") >= 0)
-    {
-      int contentStart = s.indexOf("\r\n\r\n");
-      if (contentStart >= 0) {
-        String postData = s.substring(contentStart + 4);
-        configSystemApiPost(client, postData);
-      } else {
-        send404(client);
-      }
-    }
-    else if (s.indexOf("GET /api/config/log ") >= 0)
-    {
-      configLogApiGet(client);
-    }
-    else if (s.indexOf("POST /api/config/log ") >= 0)
-    {
-      int contentStart = s.indexOf("\r\n\r\n");
-      if (contentStart >= 0) {
-        String postData = s.substring(contentStart + 4);
-        configLogApiPost(client, postData);
-      } else {
-        send404(client);
-      }
-    }
-    else if (s.indexOf("GET /api/status ") >= 0)
+    else if (requestLine.startsWith("GET /api/status"))
     {
       statusApiGet(client);
     }
-    else if (s.indexOf("POST /api/system/reboot ") >= 0)
+    else if (requestLine.startsWith("POST /api/system/reboot"))
     {
       systemRebootApiPost(client);
     }
-    else if (s.indexOf("GET /api/system/metrics ") >= 0)
+    else if (requestLine.startsWith("GET /api/system/metrics"))
     {
       systemMetricsApiGet(client);
     }
-    else if (s.indexOf("GET /api/system/logs ") >= 0)
+    else if (requestLine.startsWith("GET /api/system/logs"))
     {
       systemLogsApiGet(client);
     }
-    else if (s.indexOf("GET / ") >= 0)
+    else if (requestLine.startsWith("GET /api/debug/files"))
+    {
+      debugFilesApiGet(client);
+    }
+    else if (requestLine.startsWith("GET /") && (requestLine == "GET /" || requestLine.startsWith("GET / ")))
     {
       if (loggingService) {
         loggingService->info("WEB", "Serving main page");
@@ -1029,6 +1046,45 @@ String GpsWebServer::sanitizeInput(const String &input) {
   sanitized.replace("/", "&#x2F;");
   
   return sanitized;
+}
+
+void GpsWebServer::debugFilesApiGet(EthernetClient &client) {
+  DynamicJsonDocument doc(2048);
+  
+  // Check LittleFS status
+  bool littleFSMounted = LittleFS.begin();
+  doc["littlefs_mounted"] = littleFSMounted;
+  
+  if (littleFSMounted) {
+    JsonArray files = doc.createNestedArray("files");
+    
+    // List files in root directory
+    File root = LittleFS.open("/", "r");
+    if (root) {
+      while (true) {
+        File entry = root.openNextFile();
+        if (!entry) break;
+        
+        JsonObject fileObj = files.createNestedObject();
+        fileObj["name"] = String(entry.name());
+        fileObj["size"] = entry.size();
+        fileObj["is_directory"] = entry.isDirectory();
+        entry.close();
+      }
+      root.close();
+    }
+    
+    // Test specific files
+    JsonObject testFiles = doc.createNestedObject("test_files");
+    testFiles["config_html"] = LittleFS.exists("/config.html");
+    testFiles["config_js"] = LittleFS.exists("/config.js");
+    testFiles["gps_html"] = LittleFS.exists("/gps.html");
+    testFiles["gps_js"] = LittleFS.exists("/gps.js");
+  }
+  
+  String jsonString;
+  serializeJson(doc, jsonString);
+  sendJsonResponse(client, jsonString);
 }
 
 // Note: Static member variables and setter methods are now defined inline in the header file
