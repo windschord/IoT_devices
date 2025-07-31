@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Input Field Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; margin: 10px 0; }
+        .debug-info { background: #f0f0f0; padding: 10px; margin: 10px 0; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <h1>Input Field Debug Test</h1>
+    
+    <div class="debug-info">
+        <p>このページは入力フィールドの問題を診断するためのテストページです。</p>
+        <p>以下の入力フィールドが正常に編集できるかテストしてください：</p>
+    </div>
+    
+    <form id="testForm">
+        <div>
+            <label for="test1">Test 1 - 基本的なテキスト入力:</label>
+            <input type="text" id="test1" name="test1" class="test-input" value="初期値1" placeholder="テキストを入力してください">
+        </div>
+        
+        <div>
+            <label for="test2">Test 2 - ホスト名形式入力:</label>
+            <input type="text" id="test2" name="test2" class="test-input" value="gps-ntp-server" placeholder="hostname">
+        </div>
+        
+        <div>
+            <label for="test3">Test 3 - 数値入力:</label>
+            <input type="number" id="test3" name="test3" class="test-input" value="123" min="1" max="65535">
+        </div>
+        
+        <div>
+            <label for="test4">Test 4 - チェックボックス:</label>
+            <input type="checkbox" id="test4" name="test4" checked>
+            <label for="test4">チェックボックステスト</label>
+        </div>
+        
+        <div>
+            <label for="test5">Test 5 - セレクトボックス:</label>
+            <select id="test5" name="test5" class="test-input">
+                <option value="1">オプション1</option>
+                <option value="2" selected>オプション2</option>
+                <option value="3">オプション3</option>
+            </select>
+        </div>
+        
+        <button type="button" onclick="testFormData()">フォームデータテスト</button>
+        <button type="button" onclick="resetForm()">フォームリセット</button>
+    </form>
+    
+    <div class="debug-info" id="debugOutput">
+        <h3>デバッグ出力:</h3>
+        <div id="debugContent">ここにデバッグ情報が表示されます</div>
+    </div>
+    
+    <script>
+        function debugLog(message) {
+            const debugContent = document.getElementById('debugContent');
+            const timestamp = new Date().toLocaleTimeString();
+            debugContent.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+        }
+        
+        function testFormData() {
+            const form = document.getElementById('testForm');
+            const formData = new FormData(form);
+            
+            debugLog('=== フォームデータテスト ===');
+            for (let [key, value] of formData.entries()) {
+                debugLog(`${key}: ${value}`);
+            }
+            
+            // JSON形式でのテスト
+            const jsonData = {};
+            for (let [key, value] of formData.entries()) {
+                const field = form.querySelector(`[name="${key}"]`);
+                if (field.type === 'checkbox') {
+                    jsonData[key] = field.checked;
+                } else if (field.type === 'number') {
+                    jsonData[key] = parseInt(value);
+                } else {
+                    jsonData[key] = value;
+                }
+            }
+            
+            debugLog('JSON形式: ' + JSON.stringify(jsonData, null, 2));
+        }
+        
+        function resetForm() {
+            document.getElementById('test1').value = '初期値1';
+            document.getElementById('test2').value = 'gps-ntp-server';
+            document.getElementById('test3').value = '123';
+            document.getElementById('test4').checked = true;
+            document.getElementById('test5').value = '2';
+            debugLog('フォームをリセットしました');
+        }
+        
+        // イベントリスナーをテスト
+        document.addEventListener('DOMContentLoaded', function() {
+            debugLog('DOM読み込み完了');
+            
+            // 各入力フィールドにイベントリスナーを追加
+            const inputs = document.querySelectorAll('input, select');
+            inputs.forEach((input, index) => {
+                input.addEventListener('focus', function() {
+                    debugLog(`フォーカス: ${this.id || 'ID無し'} (${this.type})`);
+                });
+                
+                input.addEventListener('blur', function() {
+                    debugLog(`ブラー: ${this.id || 'ID無し'} (${this.type}) = ${this.value}`);
+                });
+                
+                input.addEventListener('input', function() {
+                    debugLog(`入力変更: ${this.id || 'ID無し'} = ${this.value}`);
+                });
+                
+                input.addEventListener('change', function() {
+                    debugLog(`値変更: ${this.id || 'ID無し'} = ${this.value}`);
+                });
+            });
+            
+            debugLog('イベントリスナー設定完了');
+        });
+        
+        // キーボードイベントのテスト
+        document.addEventListener('keydown', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+                debugLog(`キー押下: ${e.key} (${e.keyCode}) on ${e.target.id}`);
+            }
+        });
+        
+        // マウスイベントのテスト
+        document.addEventListener('click', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+                debugLog(`クリック: ${e.target.id} (${e.target.type})`);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -46,7 +46,7 @@ private:
     unsigned long requestCount = 0;
     unsigned long totalResponseTime = 0;
     
-    void rootPage(EthernetClient &client, GpsSummaryData gpsSummaryData);
+    void mainPage(EthernetClient &client, GpsSummaryData gpsSummaryData);
     // DEPRECATED: GPS display now served from LittleFS files
     // void gpsPage(EthernetClient &client, UBX_NAV_SAT_data_t *ubxNavSatData_t);
     void metricsPage(EthernetClient &client);
