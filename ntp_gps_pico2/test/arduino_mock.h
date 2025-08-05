@@ -6,9 +6,14 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
+#include <cstring>
+#include <cstdlib>
 #include <string>
+
+// Basic time types - simple approach
+typedef long arduino_time_t;
 
 // Basic Arduino types
 typedef uint8_t byte;
@@ -93,10 +98,49 @@ public:
 extern MockWire Wire;
 extern MockWire Wire1;
 
+// Forward declaration - definition is in separate header files
+class MockEEPROM;
+
+// Mock SPI class
+class MockSPI {
+public:
+    void begin() {}
+    void end() {}
+    uint8_t transfer(uint8_t data) { return 0; }
+    void beginTransaction(uint32_t) {}
+    void endTransaction() {}
+    void setClockDivider(uint8_t) {}
+    void setDataMode(uint8_t) {}
+    void setBitOrder(uint8_t) {}
+};
+
+extern MockSPI SPI;
+
+// SPI constants
+#define SPI_MODE0 0
+#define SPI_MODE1 1
+#define SPI_MODE2 2
+#define SPI_MODE3 3
+#define MSBFIRST 1
+#define LSBFIRST 0
+
 // Mock GPIO functions
 inline void pinMode(uint8_t, uint8_t) {}
 inline void digitalWrite(uint8_t, uint8_t) {}
 inline int digitalRead(uint8_t) { return LOW; }
+inline int analogRead(uint8_t) { return 0; }
+inline void analogWrite(uint8_t, int) {}
+
+// Mock interrupt functions
+inline void attachInterrupt(uint8_t, void(*)(), int) {}
+inline void detachInterrupt(uint8_t) {}
+
+// Interrupt modes
+#define RISING 1
+#define FALLING 2
+#define CHANGE 3
+#define LOW 0
+#define HIGH 1
 
 // PROGMEM mock
 #define PROGMEM
