@@ -23,8 +23,9 @@ Test Requirements:
 */
 
 #include <unity.h>
-#include <time.h>
+#include "Arduino.h"
 
+// Use Arduino Mock environment
 // Enable debugging for test execution
 #define DEBUG_TIME_MANAGER
 #define DEBUG_GPS_SYNC

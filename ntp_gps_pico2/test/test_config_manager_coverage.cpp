@@ -24,74 +24,9 @@ Test Requirements:
 */
 
 #include <unity.h>
+#include "Arduino.h"
 
-// Mock Arduino String class
-class String {
-private:
-    char* buffer;
-    size_t len;
-    size_t capacity;
-    
-public:
-    String() : buffer(nullptr), len(0), capacity(0) {}
-    
-    String(const char* str) : buffer(nullptr), len(0), capacity(0) {
-        if (str) {
-            len = strlen(str);
-            capacity = len + 1;
-            buffer = new char[capacity];
-            strcpy(buffer, str);
-        }
-    }
-    
-    String(const String& other) : buffer(nullptr), len(0), capacity(0) {
-        if (other.buffer) {
-            len = other.len;
-            capacity = other.capacity;
-            buffer = new char[capacity];
-            strcpy(buffer, other.buffer);
-        }
-    }
-    
-    ~String() {
-        delete[] buffer;
-    }
-    
-    String& operator=(const String& other) {
-        if (this != &other) {
-            delete[] buffer;
-            buffer = nullptr;
-            len = 0;
-            capacity = 0;
-            
-            if (other.buffer) {
-                len = other.len;
-                capacity = other.capacity;
-                buffer = new char[capacity];
-                strcpy(buffer, other.buffer);
-            }
-        }
-        return *this;
-    }
-    
-    const char* c_str() const {
-        return buffer ? buffer : "";
-    }
-    
-    size_t length() const { return len; }
-    
-    bool operator==(const String& other) const {
-        if (!buffer && !other.buffer) return true;
-        if (!buffer || !other.buffer) return false;
-        return strcmp(buffer, other.buffer) == 0;
-    }
-    
-    int indexOf(const char* str) const {
-        if (!buffer || !str) return -1;
-        char* pos = strstr(buffer, str);
-        return pos ? (pos - buffer) : -1;
-    }
-};
+// Use Arduino Mock environment (String, C string functions, etc.)
 
 // Mock configuration structure
 struct SystemConfig {

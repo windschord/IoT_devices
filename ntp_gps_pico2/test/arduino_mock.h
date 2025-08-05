@@ -10,7 +10,6 @@
 #include <string.h>
 #include <cstring>
 #include <cstdlib>
-#include <string>
 
 // Basic time types - simple approach
 typedef long arduino_time_t;
@@ -52,32 +51,62 @@ public:
 
 extern MockSerial Serial;
 
-// Mock String class
+// Mock String class - simplified without std::string dependency
 class String {
+private:
+    static const size_t MAX_STRING_LENGTH = 256;
+    char data[MAX_STRING_LENGTH];
+    size_t len;
+    
 public:
-    String() {}
-    String(const char* str) : data(str ? str : "") {}
-    String(const String& other) : data(other.data) {}
+    String() : len(0) { data[0] = '\0'; }
+    
+    String(const char* str) : len(0) {
+        if (str) {
+            strncpy(data, str, MAX_STRING_LENGTH - 1);
+            data[MAX_STRING_LENGTH - 1] = '\0';
+            len = strlen(data);
+        } else {
+            data[0] = '\0';
+        }
+    }
+    
+    String(const String& other) : len(other.len) {
+        strcpy(data, other.data);
+    }
     
     String& operator=(const String& other) {
-        data = other.data;
+        if (this != &other) {
+            strcpy(data, other.data);
+            len = other.len;
+        }
         return *this;
     }
     
     String& operator=(const char* str) {
-        data = str ? str : "";
+        if (str) {
+            strncpy(data, str, MAX_STRING_LENGTH - 1);
+            data[MAX_STRING_LENGTH - 1] = '\0';
+            len = strlen(data);
+        } else {
+            data[0] = '\0';
+            len = 0;
+        }
         return *this;
     }
     
     bool operator==(const String& other) const {
-        return data == other.data;
+        return strcmp(data, other.data) == 0;
     }
     
-    const char* c_str() const { return data.c_str(); }
-    size_t length() const { return data.length(); }
+    const char* c_str() const { return data; }
+    size_t length() const { return len; }
     
-private:
-    std::string data;
+    int indexOf(const char* str) const {
+        if (!str) return -1;
+        const char* pos = strstr(data, str);
+        return pos ? (int)(pos - data) : -1;
+    }
 };
 
 // Mock Wire class

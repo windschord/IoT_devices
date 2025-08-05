@@ -23,11 +23,9 @@ Test Requirements:
 */
 
 #include <unity.h>
+#include "Arduino.h"
 
-// Mock Arduino framework functions
-void pinMode(int pin, int mode) { /* Mock */ }
-void delay(int ms) { /* Mock */ }
-unsigned long millis() { return 5000; }
+// Use Arduino Mock environment
 
 // Mock display modes enum
 enum DisplayMode {
@@ -201,8 +199,8 @@ public:
     }
 };
 
-// Mock TwoWire for I2C testing
-class MockTwoWire {
+// Extended Wire mock for I2C testing (extends Arduino Mock Wire)
+class TestWire {
 public:
     uint8_t test_address = 0;
     uint8_t transmit_result = 0;
@@ -272,10 +270,12 @@ public:
     }
 };
 
-// Global mock instances
-MockTwoWire Wire;
+// Global mock instances  
 MockOLED mockOled;
 MockLoggingService mockLoggingService;
+
+// Test-specific Wire instance
+TestWire testWire;
 
 // Embedded DisplayManager implementation (simplified for testing)
 class DisplayManager {
@@ -319,8 +319,8 @@ public:
     }
     
     bool testI2CAddress(uint8_t address) {
-        Wire.beginTransmission(address);
-        uint8_t result = Wire.endTransmission();
+        testWire.beginTransmission(address);
+        uint8_t result = testWire.endTransmission();
         
         if (loggingService) {
             if (result == 0) {
@@ -633,7 +633,7 @@ void test_display_manager_initialization() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // Setup I2C device at 0x3C
-    Wire.addFoundDevice(0x3C);
+    testWire.addFoundDevice(0x3C);
     mockOled.simulateInitSuccess();
     
     bool result = displayManager.initialize();
@@ -652,7 +652,7 @@ void test_display_manager_initialization_failure() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // No I2C devices found
-    Wire.clearFoundDevices();
+    testWire.clearFoundDevices();
     
     bool result = displayManager.initialize();
     
@@ -667,8 +667,8 @@ void test_i2c_address_detection() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // Test address 0x3C not found, 0x3D found
-    Wire.clearFoundDevices();
-    Wire.addFoundDevice(0x3D);
+    testWire.clearFoundDevices();
+    testWire.addFoundDevice(0x3D);
     mockOled.simulateInitSuccess();
     
     bool result = displayManager.initialize();
@@ -682,7 +682,7 @@ void test_display_mode_switching() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // Initialize display
-    Wire.addFoundDevice(0x3C);
+    testWire.addFoundDevice(0x3C);
     mockOled.simulateInitSuccess();
     displayManager.initialize();
     
@@ -712,7 +712,7 @@ void test_gps_info_display() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // Initialize display
-    Wire.addFoundDevice(0x3C);
+    testWire.addFoundDevice(0x3C);
     mockOled.simulateInitSuccess();
     displayManager.initialize();
     
@@ -734,7 +734,7 @@ void test_ntp_stats_display() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // Initialize display
-    Wire.addFoundDevice(0x3C);
+    testWire.addFoundDevice(0x3C);
     mockOled.simulateInitSuccess();
     displayManager.initialize();
     
@@ -755,7 +755,7 @@ void test_system_status_display() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // Initialize display
-    Wire.addFoundDevice(0x3C);
+    testWire.addFoundDevice(0x3C);
     mockOled.simulateInitSuccess();
     displayManager.initialize();
     
@@ -773,7 +773,7 @@ void test_error_display() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // Initialize display
-    Wire.addFoundDevice(0x3C);
+    testWire.addFoundDevice(0x3C);
     mockOled.simulateInitSuccess();
     displayManager.initialize();
     
@@ -798,7 +798,7 @@ void test_display_sleep_wake_functionality() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // Initialize display
-    Wire.addFoundDevice(0x3C);
+    testWire.addFoundDevice(0x3C);
     mockOled.simulateInitSuccess();
     displayManager.initialize();
     
@@ -824,7 +824,7 @@ void test_display_clear_functionality() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // Initialize display
-    Wire.addFoundDevice(0x3C);
+    testWire.addFoundDevice(0x3C);
     mockOled.simulateInitSuccess();
     displayManager.initialize();
     
@@ -846,7 +846,7 @@ void test_display_update_functionality() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // Initialize display
-    Wire.addFoundDevice(0x3C);
+    testWire.addFoundDevice(0x3C);
     mockOled.simulateInitSuccess();
     displayManager.initialize();
     
@@ -886,7 +886,7 @@ void test_display_mode_after_error() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // Initialize display
-    Wire.addFoundDevice(0x3C);
+    testWire.addFoundDevice(0x3C);
     mockOled.simulateInitSuccess();
     displayManager.initialize();
     
@@ -909,7 +909,7 @@ void test_display_trigger_wakes_display() {
     displayManager.setLoggingService(&mockLoggingService);
     
     // Initialize display
-    Wire.addFoundDevice(0x3C);
+    testWire.addFoundDevice(0x3C);
     mockOled.simulateInitSuccess();
     displayManager.initialize();
     
@@ -928,7 +928,7 @@ void setUp(void) {
     // Reset mock states before each test
     mockOled.resetMockState();
     mockLoggingService.resetCallCounts();
-    Wire.clearFoundDevices();
+    testWire.clearFoundDevices();
 }
 
 void tearDown(void) {

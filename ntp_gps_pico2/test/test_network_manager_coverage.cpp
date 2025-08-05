@@ -1,25 +1,7 @@
 #include <unity.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
+#include "Arduino.h"
 
-// Mock Arduino functions
-extern "C" {
-    uint32_t millis() { return 15000; }
-    void delay(uint32_t ms) { (void)ms; }
-    void digitalWrite(uint8_t pin, uint8_t val) { (void)pin; (void)val; }
-    int digitalRead(uint8_t pin) { return 1; }
-}
-
-// Mock SPI
-class MockSPI {
-public:
-    void begin() { }
-    void end() { }
-    void setClockDivider(uint8_t divider) { (void)divider; }
-};
-
-MockSPI SPI;
+// Use Arduino Mock environment
 
 // Mock LoggingService
 class MockLoggingService {
