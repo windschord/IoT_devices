@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS NTP Server - Configuration</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background-color: #f5f5f5; 
+        }
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+        }
+        .header { 
+            text-align: center; 
+            margin-bottom: 30px; 
+        }
+        .nav { 
+            margin-bottom: 20px; 
+        }
+        .nav a { 
+            text-decoration: none; 
+            color: #4CAF50; 
+            margin-right: 15px; 
+        }
+        .tabs { 
+            display: flex; 
+            border-bottom: 2px solid #ddd; 
+            margin-bottom: 20px; 
+        }
+        .tab { 
+            padding: 10px 20px; 
+            cursor: pointer; 
+            border: none; 
+            background: none; 
+            border-bottom: 2px solid transparent; 
+            color: #333; 
+            font-weight: 500; 
+            transition: all 0.3s ease; 
+        }
+        .tab:hover { 
+            background-color: #f5f5f5; 
+            color: #4CAF50; 
+        }
+        .tab.active { 
+            border-bottom-color: #4CAF50; 
+            background-color: #f9f9f9; 
+            color: #4CAF50; 
+            font-weight: 600; 
+        }
+        .tab-content { 
+            display: none; 
+        }
+        .tab-content.active { 
+            display: block; 
+        }
+        .form-group { 
+            margin-bottom: 15px; 
+        }
+        label { 
+            display: block; 
+            margin-bottom: 5px; 
+            font-weight: bold; 
+        }
+        input[type=text], input[type=number] { 
+            width: 100%; 
+            padding: 8px; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            box-sizing: border-box; 
+            background-color: white; 
+            cursor: text; 
+            user-select: text; 
+            pointer-events: auto; 
+            font-size: 14px;
+        }
+        select { 
+            width: 100%; 
+            padding: 8px 12px; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            box-sizing: border-box; 
+            background-color: white; 
+            cursor: pointer; 
+            font-size: 14px;
+            appearance: none; 
+            -webkit-appearance: none; 
+            -moz-appearance: none; 
+            background-image: url("data:image/svg+xml;charset=US-ASCII,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'><path fill='%23666' d='M2 0L0 2h4zm0 5L0 3h4z'/></svg>");
+            background-repeat: no-repeat; 
+            background-position: right 8px center; 
+            background-size: 12px; 
+            padding-right: 30px;
+        }
+        select:hover { 
+            border-color: #4CAF50; 
+        }
+        select:focus { 
+            outline: none; 
+            border-color: #4CAF50; 
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2); 
+        }
+        input[type=checkbox] { 
+            margin-right: 8px; 
+        }
+        .checkbox-group { 
+            display: flex; 
+            align-items: center; 
+            margin-bottom: 5px; 
+        }
+        .form-row { 
+            display: flex; 
+            gap: 15px; 
+        }
+        .form-row .form-group { 
+            flex: 1; 
+        }
+        button { 
+            background-color: #4CAF50; 
+            color: white; 
+            padding: 10px 20px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            margin-right: 10px; 
+        }
+        button:hover { 
+            background-color: #45a049; 
+        }
+        button.secondary { 
+            background-color: #f44336; 
+        }
+        button.secondary:hover { 
+            background-color: #da190b; 
+        }
+        button.reset-defaults { 
+            background-color: #6c757d; 
+        }
+        button.reset-defaults:hover { 
+            background-color: #5a6268; 
+        }
+        .message { 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 4px; 
+        }
+        .success { 
+            background-color: #d4edda; 
+            color: #155724; 
+            border: 1px solid #c3e6cb; 
+        }
+        .error { 
+            background-color: #f8d7da; 
+            color: #721c24; 
+            border: 1px solid #f5c6cb; 
+        }
+        .warning { 
+            background-color: #fff3cd; 
+            color: #856404; 
+            border: 1px solid #ffeaa7; 
+        }
+        .loading { 
+            display: none; 
+            padding: 10px; 
+            text-align: center; 
+        }
+        .error-field { 
+            border-color: #dc3545 !important; 
+            background-color: #fff5f5; 
+        }
+        .field-error { 
+            color: #dc3545; 
+            font-size: 12px; 
+            margin-top: 2px; 
+        }
+        .button-row { 
+            margin-top: 20px; 
+            padding-top: 15px; 
+            border-top: 1px solid #ddd; 
+        }
+        .status-section { 
+            margin-bottom: 25px; 
+            padding: 15px; 
+            background-color: #f8f9fa; 
+            border-radius: 8px; 
+            border: 1px solid #e9ecef; 
+        }
+        .status-section h4 { 
+            margin-top: 0; 
+            margin-bottom: 15px; 
+            color: #495057; 
+            border-bottom: 2px solid #4CAF50; 
+            padding-bottom: 5px; 
+        }
+        .status-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
+            gap: 15px; 
+        }
+        .status-item { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            padding: 8px 12px; 
+            background: white; 
+            border-radius: 4px; 
+            border: 1px solid #dee2e6; 
+        }
+        .status-item label { 
+            font-weight: bold; 
+            color: #495057; 
+            margin: 0; 
+        }
+        .status-item span { 
+            color: #6c757d; 
+            font-family: monospace; 
+        }
+        .status-indicator { 
+            padding: 2px 8px; 
+            border-radius: 12px; 
+            font-size: 12px; 
+            font-weight: bold; 
+        }
+        .status-ok { 
+            background-color: #d4edda; 
+            color: #155724; 
+        }
+        .status-warning { 
+            background-color: #fff3cd; 
+            color: #856404; 
+        }
+        .status-error { 
+            background-color: #f8d7da; 
+            color: #721c24; 
+        }
+        
+        /* Custom Dropdown for Stratum Level */
+        .custom-dropdown { 
+            position: relative; 
+            width: 100%; 
+        }
+        .custom-dropdown-button { 
+            width: 100%; 
+            padding: 8px 12px; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            background-color: white; 
+            cursor: pointer; 
+            text-align: left; 
+            font-size: 14px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .custom-dropdown-button:hover { 
+            border-color: #4CAF50; 
+        }
+        .custom-dropdown-button:focus { 
+            outline: none; 
+            border-color: #4CAF50; 
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2); 
+        }
+        .custom-dropdown-arrow { 
+            transition: transform 0.3s ease; 
+        }
+        .custom-dropdown-arrow.open { 
+            transform: rotate(180deg); 
+        }
+        .custom-dropdown-options { 
+            position: absolute; 
+            top: 100%; 
+            left: 0; 
+            right: 0; 
+            background: white; 
+            border: 1px solid #ddd; 
+            border-top: none; 
+            border-radius: 0 0 4px 4px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+            z-index: 1000; 
+            max-height: 0; 
+            overflow: hidden; 
+            transition: max-height 0.3s ease; 
+        }
+        .custom-dropdown-options.open { 
+            max-height: 200px; 
+        }
+        .custom-dropdown-option { 
+            padding: 10px 12px; 
+            cursor: pointer; 
+            border-bottom: 1px solid #f0f0f0; 
+        }
+        .custom-dropdown-option:hover { 
+            background-color: #f5f5f5; 
+        }
+        .custom-dropdown-option:last-child { 
+            border-bottom: none; 
+        }
+        .custom-dropdown-option.selected { 
+            background-color: #4CAF50; 
+            color: white; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>GPS NTP Server Configuration</h1>
+            <div class="nav">
+                <a href="/">← Home</a>
+                <a href="/gps">GPS Status</a>
+                <a href="/metrics">Metrics</a>
+            </div>
+        </div>
+        
+        <!-- Status Display Section -->
+        <div class="status-section">
+            <h4>Current System Status</h4>
+            <div class="status-grid" id="statusGrid">
+                <!-- Status items will be populated by JavaScript -->
+            </div>
+            <div style="text-align: center; margin-top: 15px;">
+                <button type="button" onclick="updateStatus()">Refresh Status</button>
+            </div>
+        </div>
+        
+        <!-- Message Display -->
+        <div id="messageContainer"></div>
+        <div id="loadingIndicator" class="loading">
+            <div>⏳ Processing request...</div>
+        </div>
+        
+        <!-- Tab Navigation -->
+        <div class="tabs">
+            <button class="tab active" onclick="openTab(event, 'network')">Network</button>
+            <button class="tab" onclick="openTab(event, 'gnss')">GNSS</button>
+            <button class="tab" onclick="openTab(event, 'ntp')">NTP Server</button>
+            <button class="tab" onclick="openTab(event, 'system')">System</button>
+            <button class="tab" onclick="openTab(event, 'logs')">Logging</button>
+        </div>
+        
+        <!-- Network Configuration Tab -->
+        <div id="network" class="tab-content active">
+            <h3>Network Configuration</h3>
+            <form id="networkForm">
+                <div class="form-group">
+                    <label for="hostname">Device Hostname:</label>
+                    <input type="text" id="hostname" name="hostname" required>
+                </div>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="use_dhcp" name="use_dhcp" checked>
+                    <label for="use_dhcp">Use DHCP (Dynamic IP)</label>
+                </div>
+                
+                <div id="staticIpGroup" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="ip_address">IP Address:</label>
+                            <input type="text" id="ip_address" name="ip_address" placeholder="192.168.1.100">
+                        </div>
+                        <div class="form-group">
+                            <label for="netmask">Subnet Mask:</label>
+                            <input type="text" id="netmask" name="netmask" placeholder="255.255.255.0">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="gateway">Gateway:</label>
+                            <input type="text" id="gateway" name="gateway" placeholder="192.168.1.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="dns_server">DNS Server:</label>
+                            <input type="text" id="dns_server" name="dns_server" placeholder="8.8.8.8">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>MAC Address:</label>
+                    <span id="mac_address" style="font-family: monospace; color: #666;">Loading...</span>
+                </div>
+                
+                <div class="button-row">
+                    <button type="submit">Save Network Configuration</button>
+                    <button type="button" class="reset-defaults" onclick="resetNetworkDefaults()">Reset to Defaults</button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- GNSS Configuration Tab -->
+        <div id="gnss" class="tab-content">
+            <h3>GNSS Configuration</h3>
+            <form id="gnssForm">
+                <div class="form-group">
+                    <label>Satellite Constellations:</label>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="gps_enabled" name="gps_enabled">
+                        <label for="gps_enabled">GPS (USA)</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="glonass_enabled" name="glonass_enabled">
+                        <label for="glonass_enabled">GLONASS (Russia)</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="galileo_enabled" name="galileo_enabled">
+                        <label for="galileo_enabled">Galileo (Europe)</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="beidou_enabled" name="beidou_enabled">
+                        <label for="beidou_enabled">BeiDou (China)</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="qzss_enabled" name="qzss_enabled">
+                        <label for="qzss_enabled">QZSS (Japan)</label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="qzss_l1s_enabled" name="qzss_l1s_enabled">
+                        <label for="qzss_l1s_enabled">QZSS L1S Disaster Alert</label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="gnss_update_rate">GNSS Update Rate (Hz):</label>
+                    <input type="number" id="gnss_update_rate" name="gnss_update_rate" min="1" max="10">
+                </div>
+                
+                <div class="form-group">
+                    <label for="disaster_alert_priority">Disaster Alert Priority:</label>
+                    <select id="disaster_alert_priority" name="disaster_alert_priority">
+                        <option value="0">Low</option>
+                        <option value="1">Medium</option>
+                        <option value="2">High</option>
+                    </select>
+                </div>
+                
+                <div class="button-row">
+                    <button type="submit">Save GNSS Configuration</button>
+                    <button type="button" class="reset-defaults" onclick="resetGnssDefaults()">Reset to Defaults</button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- NTP Server Configuration Tab -->
+        <div id="ntp" class="tab-content">
+            <h3>NTP Server Configuration</h3>
+            <form id="ntpForm">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="ntp_enabled" name="ntp_enabled">
+                    <label for="ntp_enabled">Enable NTP Server</label>
+                </div>
+                
+                <div class="form-group">
+                    <label for="ntp_port">NTP Port:</label>
+                    <input type="number" id="ntp_port" name="ntp_port" min="1" max="65535">
+                </div>
+                
+                <div class="form-group">
+                    <label for="ntp_stratum">Stratum Level:</label>
+                    <div class="custom-dropdown" id="ntp_stratum_dropdown">
+                        <div class="custom-dropdown-button" tabindex="0">
+                            <span id="ntp_stratum_selected">1 (Primary - GPS Synchronized)</span>
+                            <span class="custom-dropdown-arrow">▼</span>
+                        </div>
+                        <div class="custom-dropdown-options">
+                            <div class="custom-dropdown-option selected" data-value="1">1 (Primary - GPS Synchronized)</div>
+                            <div class="custom-dropdown-option" data-value="2">2 (Secondary)</div>
+                            <div class="custom-dropdown-option" data-value="3">3 (Fallback)</div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="ntp_stratum" name="ntp_stratum" value="1">
+                </div>
+                
+                <div class="button-row">
+                    <button type="submit">Save NTP Configuration</button>
+                    <button type="button" class="reset-defaults" onclick="resetNtpDefaults()">Reset to Defaults</button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- System Configuration Tab -->
+        <div id="system" class="tab-content">
+            <h3>System Configuration</h3>
+            <form id="systemForm">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="auto_restart_enabled" name="auto_restart_enabled">
+                    <label for="auto_restart_enabled">Enable Auto Restart</label>
+                </div>
+                
+                <div class="form-group">
+                    <label for="restart_interval">Restart Interval (hours):</label>
+                    <input type="number" id="restart_interval" name="restart_interval" min="1" max="168">
+                </div>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="debug_enabled" name="debug_enabled">
+                    <label for="debug_enabled">Enable Debug Mode</label>
+                </div>
+                
+                <div class="button-row">
+                    <button type="submit">Save System Configuration</button>
+                    <button type="button" class="reset-defaults" onclick="resetSystemDefaults()">Reset to Defaults</button>
+                    <button type="button" class="secondary" onclick="factoryReset()">Factory Reset</button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Logging Configuration Tab -->
+        <div id="logs" class="tab-content">
+            <h3>Logging Configuration</h3>
+            <form id="logsForm">
+                <div class="form-group">
+                    <label for="syslog_server">Syslog Server:</label>
+                    <input type="text" id="syslog_server" name="syslog_server">
+                </div>
+                
+                <div class="form-group">
+                    <label for="syslog_port">Syslog Port:</label>
+                    <input type="number" id="syslog_port" name="syslog_port" min="1" max="65535">
+                </div>
+                
+                <div class="form-group">
+                    <label for="log_level">Log Level:</label>
+                    <select id="log_level" name="log_level">
+                        <option value="0">Emergency</option>
+                        <option value="1">Alert</option>
+                        <option value="2">Critical</option>
+                        <option value="3">Error</option>
+                        <option value="4">Warning</option>
+                        <option value="5">Notice</option>
+                        <option value="6">Info</option>
+                        <option value="7">Debug</option>
+                    </select>
+                </div>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="prometheus_enabled" name="prometheus_enabled">
+                    <label for="prometheus_enabled">Enable Prometheus Metrics</label>
+                </div>
+                
+                <div class="button-row">
+                    <button type="submit">Save Logging Configuration</button>
+                    <button type="button" class="reset-defaults" onclick="resetLogsDefaults()">Reset to Defaults</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script src="/config.js"></script>
+</body>
+</html>

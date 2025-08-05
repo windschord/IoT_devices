@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-07-30T19:07:17.365172",
+  "project_root": "/Users/tsk/Sync/git/IoT_devices/ntp_gps_pico2",
+  "build_info": {
+    "elf_size": 1743556,
+    "uf2_size": 1012736,
+    "libraries": [
+      "\u2514\u2500\u2500 SparkFun u-blox GNSS Arduino Library @ 2.2.27+sha.4e542ba (required: git+https://github.com/sparkfun/SparkFun_u-blox_GNSS_Arduino_Library.git)"
+    ],
+    "library_count": 1
+  },
+  "memory_analysis": {
+    "ram": {
+      "used_bytes": 21024,
+      "total_bytes": 524288,
+      "used_percent": 4.0,
+      "free_bytes": 503264,
+      "free_percent": 96.0
+    },
+    "flash": {
+      "used_bytes": 493900,
+      "total_bytes": 4059136,
+      "used_percent": 12.2,
+      "free_bytes": 3565236,
+      "free_percent": 87.8
+    }
+  },
+  "performance_metrics": {
+    "ram_efficiency": 0.96,
+    "estimated_concurrent_capacity": 491,
+    "flash_efficiency": 0.878,
+    "expansion_capacity_mb": 3.400074005126953,
+    "estimated_cpu_usage": 70.0
+  },
+  "recommendations": [
+    {
+      "type": "info",
+      "category": "memory",
+      "message": "RAM usage is optimal (4.0%). Good memory efficiency.",
+      "suggestions": []
+    },
+    {
+      "type": "info",
+      "category": "storage",
+      "message": "Flash usage is reasonable (12.2%). Good expansion capacity.",
+      "suggestions": []
+    }
+  ]
+}
