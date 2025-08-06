@@ -138,9 +138,12 @@ public:
      */
     static void formatTimeString(uint32_t unix_time, char* buffer, size_t buffer_size,
                                bool include_microseconds = false, uint32_t microseconds = 0) {
-        if (!buffer || buffer_size < 20) { // 最低限の文字数チェック
+        if (!buffer || buffer_size < 9) { // 最低限の文字数チェック（HH:MM:SS = 8文字 + NULL）
             return;
         }
+        
+        // Initialize buffer
+        buffer[0] = '\0';
         
         // 簡易的な時刻フォーマット（実用的な実装では time.h を使用）
         uint32_t days = unix_time / 86400;
@@ -153,10 +156,10 @@ public:
         // Unix エポック（1970年1月1日）からの日数計算は複雑なため、
         // ここでは時:分:秒のみフォーマット
         if (include_microseconds && buffer_size >= 26) {
-            snprintf(buffer, buffer_size, "%02lu:%02lu:%02lu.%06lu", 
+            snprintf(buffer, buffer_size, "%02u:%02u:%02u.%06u", 
                     hours, minutes, seconds, microseconds);
         } else {
-            snprintf(buffer, buffer_size, "%02lu:%02lu:%02lu", 
+            snprintf(buffer, buffer_size, "%02u:%02u:%02u", 
                     hours, minutes, seconds);
         }
     }
