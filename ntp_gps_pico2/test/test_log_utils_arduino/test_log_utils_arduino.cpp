@@ -227,7 +227,15 @@ void test_logutils_buffer_overflow() {
     TEST_ASSERT_EQUAL(3, mockLogger.info_count); // Should still work
 }
 
-void setup() {
+void setUp(void) {
+    mockLogger.reset();
+}
+
+void tearDown(void) {
+    // Cleanup
+}
+
+int main() {
     UNITY_BEGIN();
     
     RUN_TEST(test_logutils_all_log_levels);
@@ -236,9 +244,5 @@ void setup() {
     RUN_TEST(test_logutils_high_frequency);
     RUN_TEST(test_logutils_buffer_overflow);
     
-    UNITY_END();
-}
-
-void loop() {
-    // Empty - tests run in setup()
+    return UNITY_END();
 }
