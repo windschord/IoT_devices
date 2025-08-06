@@ -4,14 +4,14 @@
 // Use Arduino Mock environment
 // Define network functions separately to avoid system header conflicts
 namespace MockNetwork {
-    uint32_t ntohl(uint32_t netlong) {
+    uint32_t mock_ntohl(uint32_t netlong) {
         return ((netlong & 0xFF000000) >> 24) |
                ((netlong & 0x00FF0000) >> 8) |
                ((netlong & 0x0000FF00) << 8) |
                ((netlong & 0x000000FF) << 24);
     }
     
-    uint32_t htonl(uint32_t hostlong) {
+    uint32_t mock_htonl(uint32_t hostlong) {
         return ((hostlong & 0xFF000000) >> 24) |
                ((hostlong & 0x00FF0000) >> 8) |
                ((hostlong & 0x0000FF00) << 8) |
@@ -280,11 +280,11 @@ private:
         responsePacket.precision = calculatePrecision();
         
         // Set root delay and dispersion
-        responsePacket.root_delay = MockNetwork::htonl(calculateRootDelay());
-        responsePacket.root_dispersion = MockNetwork::htonl(calculateRootDispersion());
+        responsePacket.root_delay = MockNetwork::mock_htonl(calculateRootDelay());
+        responsePacket.root_dispersion = MockNetwork::mock_htonl(calculateRootDispersion());
         
         // Set reference ID
-        responsePacket.reference_id = MockNetwork::htonl(getReferenceId());
+        responsePacket.reference_id = MockNetwork::mock_htonl(getReferenceId());
         
         // Set reference timestamp
         responsePacket.reference_timestamp = getReferenceTimestamp();
@@ -294,13 +294,13 @@ private:
         
         // Set receive timestamp
         NtpTimestamp receiveTime = getCurrentNtpTimestamp();
-        responsePacket.receive_timestamp.seconds = MockNetwork::htonl(receiveTime.seconds);
-        responsePacket.receive_timestamp.fraction = MockNetwork::htonl(receiveTime.fraction);
+        responsePacket.receive_timestamp.seconds = MockNetwork::mock_htonl(receiveTime.seconds);
+        responsePacket.receive_timestamp.fraction = MockNetwork::mock_htonl(receiveTime.fraction);
         
         // Set transmit timestamp
         NtpTimestamp transmitTime = getCurrentNtpTimestamp();
-        responsePacket.transmit_timestamp.seconds = MockNetwork::htonl(transmitTime.seconds);
-        responsePacket.transmit_timestamp.fraction = MockNetwork::htonl(transmitTime.fraction);
+        responsePacket.transmit_timestamp.seconds = MockNetwork::mock_htonl(transmitTime.seconds);
+        responsePacket.transmit_timestamp.fraction = MockNetwork::mock_htonl(transmitTime.fraction);
     }
     
     bool sendNtpResponse() {

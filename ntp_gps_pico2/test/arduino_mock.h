@@ -10,9 +10,30 @@
 #include <string.h>
 #include <cstring>
 #include <cstdlib>
+#include <cstdarg>
 
 // Basic time types - simple approach
 typedef long arduino_time_t;
+typedef long time_t;
+
+// Simple tm structure for time management
+struct tm {
+    int tm_sec;    // seconds after the minute - [0, 60] including leap second
+    int tm_min;    // minutes after the hour - [0, 59]
+    int tm_hour;   // hours since midnight - [0, 23]
+    int tm_mday;   // day of the month - [1, 31]
+    int tm_mon;    // months since January - [0, 11]
+    int tm_year;   // years since 1900
+    int tm_wday;   // days since Sunday - [0, 6]
+    int tm_yday;   // days since January 1 - [0, 365]
+    int tm_isdst;  // daylight savings time flag
+};
+
+// Simple time functions
+inline time_t mktime(struct tm* timeptr) {
+    // Simple mock implementation - returns fixed time for testing
+    return 1577836800; // 2020-01-01 00:00:00 UTC
+}
 
 // Basic Arduino types
 typedef uint8_t byte;
@@ -24,6 +45,11 @@ typedef bool boolean;
 #define INPUT 0
 #define OUTPUT 1
 #define INPUT_PULLUP 2
+
+// Additional Arduino constants
+#define RISING 1
+#define FALLING 2
+#define CHANGE 3
 
 // Mock Arduino functions
 inline unsigned long millis() { return 0; }

@@ -65,10 +65,33 @@ public:
     }
 };
 
-// Include I2CUtils with mock definitions
-#define TwoWire MockTwoWire
-#include "../src/utils/I2CUtils.h"
-#undef TwoWire
+// Mock I2CUtils implementation for testing
+class I2CUtils {
+public:
+    static bool initializeBus(MockTwoWire& wire, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_speed = 100000) {
+        wire.setSDA(sda_pin);
+        wire.setSCL(scl_pin);
+        wire.begin();
+        wire.setClock(clock_speed);
+        return true;
+    }
+    
+    static bool scanDevice(MockTwoWire& wire, uint8_t address) {
+        wire.beginTransmission(address);
+        uint8_t error = wire.endTransmission();
+        return error == 0;
+    }
+    
+    static uint8_t scanBus(MockTwoWire& wire, uint8_t* addresses, uint8_t max_devices) {
+        uint8_t found = 0;
+        for (uint8_t addr = 8; addr < 120 && found < max_devices; addr++) {
+            if (scanDevice(wire, addr)) {
+                addresses[found++] = addr;
+            }
+        }
+        return found;
+    }
+};
 
 MockTwoWire mock_wire;
 

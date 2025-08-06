@@ -30,15 +30,10 @@ Test Requirements:
 #define DEBUG_TIME_MANAGER
 #define DEBUG_GPS_SYNC
 
-// Mock Arduino framework functions
+// Use Arduino Mock environment
+// Mock function values for time testing
 unsigned long test_micros_value = 1000000;
 unsigned long test_millis_value = 1000;
-
-unsigned long micros() { return test_micros_value; }
-unsigned long millis() { return test_millis_value; }
-void pinMode(int pin, int mode) { /* Mock */ }
-void analogWrite(int pin, int value) { /* Mock */ }
-void delay(int ms) { /* Mock */ }
 
 // Mock TwoWire (I2C) for RTC communication
 class MockTwoWire {

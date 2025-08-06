@@ -1,15 +1,8 @@
 #include <unity.h>
 #include <Arduino.h>
 
-// Mock Arduino functions for testing
-uint32_t mock_millis_value = 0;
-uint32_t mock_micros_value = 0;
-
-extern "C" {
-uint32_t millis() { return mock_millis_value; }
-uint32_t micros() { return mock_micros_value; }
-void delayMicroseconds(unsigned int us) { mock_micros_value += us; }
-}
+// Use Arduino Mock environment
+// millis/micros functions are defined in arduino_mock.h
 
 // Simple NTP types for testing
 struct NtpTimestamp {
