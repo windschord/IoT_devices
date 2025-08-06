@@ -1,10 +1,13 @@
 #include <unity.h>
+
+// Use existing Arduino Mock environment
 #include <Arduino.h>
 
-// Use Arduino Mock environment
-// millis/micros functions are defined in arduino_mock.h
+// Override mock time functions for this test
+extern unsigned long mock_millis_counter;
+extern unsigned long mock_micros_counter;
 
-// Include TimeUtils with path resolution - contains NtpTimestamp definition
+// Include TimeUtils with path resolution
 #include "utils/TimeUtils.h"
 
 /**
