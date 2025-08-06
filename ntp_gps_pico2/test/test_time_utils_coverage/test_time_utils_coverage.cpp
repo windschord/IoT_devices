@@ -4,13 +4,7 @@
 // Use Arduino Mock environment
 // millis/micros functions are defined in arduino_mock.h
 
-// Simple NTP types for testing
-struct NtpTimestamp {
-    uint32_t seconds;
-    uint32_t fraction;
-};
-
-// Include TimeUtils with path resolution
+// Include TimeUtils with path resolution - contains NtpTimestamp definition
 #include "utils/TimeUtils.h"
 
 /**

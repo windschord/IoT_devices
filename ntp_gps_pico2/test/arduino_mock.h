@@ -51,11 +51,27 @@ typedef bool boolean;
 #define FALLING 2
 #define CHANGE 3
 
-// Mock Arduino functions
-inline unsigned long millis() { return 0; }
-inline unsigned long micros() { return 0; }
-inline void delay(unsigned long) {}
-inline void delayMicroseconds(unsigned int) {}
+// Mock Arduino functions with incrementing time
+static unsigned long mock_millis_counter = 1000;
+static unsigned long mock_micros_counter = 1000000;
+
+inline unsigned long millis() { 
+    return mock_millis_counter++;
+}
+
+inline unsigned long micros() { 
+    return mock_micros_counter++;
+}
+
+inline void delay(unsigned long ms) {
+    mock_millis_counter += ms;
+    mock_micros_counter += ms * 1000;
+}
+
+inline void delayMicroseconds(unsigned int us) {
+    mock_micros_counter += us;
+    mock_millis_counter += us / 1000;
+}
 
 // Mock Serial class
 class MockSerial {
