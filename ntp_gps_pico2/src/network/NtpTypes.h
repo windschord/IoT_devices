@@ -3,6 +3,20 @@
 
 #include <stdint.h>
 
+// Network byte order conversion functions for Arduino/embedded environment
+#ifndef ntohl
+#define ntohl(x) __builtin_bswap32(x)
+#endif
+#ifndef htonl
+#define htonl(x) __builtin_bswap32(x)
+#endif
+#ifndef ntohs
+#define ntohs(x) __builtin_bswap16(x)
+#endif
+#ifndef htons
+#define htons(x) __builtin_bswap16(x)
+#endif
+
 // NTP Constants
 #define NTP_PACKET_SIZE 48
 #define NTP_PORT 123
