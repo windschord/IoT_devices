@@ -118,7 +118,7 @@ monitor:
 .PHONY: test
 test:
 	@echo "🧪 Running tests..."
-	$(PIO) test -e $(ENV)
+	$(PIO) test -e native
 
 # コードチェック（コンパイルのみ）
 .PHONY: check
@@ -214,3 +214,76 @@ safe-upload:
 	@echo "4️⃣ Uploading filesystem..."
 	@$(MAKE) uploadfs
 	@echo "✅ Safe upload completed successfully"
+
+# === Advanced Testing Commands ===
+
+# 包括的テストレポート生成
+.PHONY: test-report
+test-report:
+	@echo "📊 Generating comprehensive test report..."
+	python3 scripts/generate_test_report.py
+	@echo "✅ Test report generated: test_report.html"
+
+# 並列テスト実行
+.PHONY: test-parallel
+test-parallel:
+	@echo "⚡ Running parallel tests..."
+	python3 scripts/parallel_test_runner.py . 4
+	@echo "✅ Parallel tests completed"
+
+# 高速並列テスト（2ワーカー）
+.PHONY: test-fast
+test-fast:
+	@echo "🏃 Running fast parallel tests..."
+	python3 scripts/parallel_test_runner.py . 2
+	@echo "✅ Fast tests completed"
+
+# クロスプラットフォームテスト
+.PHONY: test-cross-platform
+test-cross-platform:
+	@echo "🌐 Running cross-platform tests..."
+	python3 scripts/cross_platform_test.py
+	@echo "✅ Cross-platform tests completed"
+
+# 全テストスイート実行
+.PHONY: test-all
+test-all: test test-parallel test-report
+	@echo ""
+	@echo "🎉 All test suites completed!"
+	@echo "📊 Reports available:"
+	@echo "  - test_report.html (comprehensive test report)"
+	@echo "  - parallel_test_results.json (parallel execution results)"
+	@echo ""
+
+# テスト環境確認
+.PHONY: test-env
+test-env:
+	@echo "🔍 Checking test environment..."
+	@echo "Python version: $$(python3 --version)"
+	@echo "PlatformIO: $$($(PIO) --version)"
+	@if command -v docker >/dev/null 2>&1; then \
+		echo "Docker: $$(docker --version)"; \
+	else \
+		echo "Docker: Not available"; \
+	fi
+	@echo ""
+	@echo "📁 Available test environments:"
+	@$(PIO) test --list-tests || echo "  Run tests to see available environments"
+
+# テスト結果クリーンアップ
+.PHONY: test-clean
+test-clean:
+	@echo "🧹 Cleaning test results..."
+	@rm -f test_report.html test_report.json
+	@rm -f parallel_test_results.json parallel_test_summary.txt
+	@rm -f cross_platform_results.json cross_platform_summary.txt
+	@echo "✅ Test results cleaned"
+
+# CI環境用テスト
+.PHONY: test-ci
+test-ci:
+	@echo "🤖 Running CI tests..."
+	@$(MAKE) build
+	@$(MAKE) test-fast
+	@$(MAKE) test-report
+	@echo "✅ CI tests completed"

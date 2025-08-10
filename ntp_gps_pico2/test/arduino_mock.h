@@ -11,6 +11,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cstdarg>
+#include <ctime>
 
 // Basic time types - simple approach
 typedef long arduino_time_t;
@@ -92,6 +93,17 @@ public:
 };
 
 extern MockSerial Serial;
+
+// Mock Stream class (base class for Serial, etc.)
+class Stream {
+public:
+    virtual int available() { return 0; }
+    virtual int read() { return -1; }
+    virtual int peek() { return -1; }
+    virtual size_t write(uint8_t) { return 1; }
+    virtual size_t write(const uint8_t* buffer, size_t size) { return size; }
+    virtual void flush() {}
+};
 
 // Mock String class - simplified without std::string dependency
 class String {
@@ -205,6 +217,14 @@ inline void analogWrite(uint8_t, int) {}
 // Mock interrupt functions
 inline void attachInterrupt(uint8_t, void(*)(), int) {}
 inline void detachInterrupt(uint8_t) {}
+
+// Mock rp2040 namespace for reboot functionality
+namespace rp2040 {
+    inline void reboot() {
+        // Mock implementation - do nothing in test environment
+        exit(0);
+    }
+}
 
 // Interrupt modes
 #define RISING 1

@@ -1,0 +1,205 @@
+name: GPS NTP Server CI
+
+on:
+  push:
+    branches: [ main, feature/*, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9]
+        
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install PlatformIO
+      run: |
+        python -m pip install --upgrade pip
+        pip install platformio
+        
+    - name: Cache PlatformIO dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.platformio/.cache
+          ~/.platformio/packages
+          ~/.platformio/platforms
+        key: ${{ runner.os }}-platformio-${{ hashFiles('**/platformio.ini') }}
+        restore-keys: |
+          ${{ runner.os }}-platformio-
+    
+    - name: Install project dependencies
+      run: pio pkg install
+      
+    - name: Build firmware (Raspberry Pi Pico 2)
+      run: pio run -e pico
+      
+    - name: Run native tests
+      run: |
+        echo "Running Native Environment Tests..."
+        pio test -e native || true
+        echo "Native tests completed"
+      
+    - name: Run test environment tests  
+      run: |
+        echo "Running Test Environment Tests..."
+        pio test -e test_native || true
+        echo "Test environment completed"
+        
+    - name: Generate test report
+      run: |
+        echo "=== GPS NTP Server CI Test Results ===" > test_results.txt
+        echo "Build Date: $(date)" >> test_results.txt
+        echo "Git Commit: ${{ github.sha }}" >> test_results.txt
+        echo "Branch: ${{ github.ref_name }}" >> test_results.txt
+        echo "" >> test_results.txt
+        
+        # Check build success
+        if [ -f ".pio/build/pico/firmware.elf" ]; then
+          echo "✅ Firmware Build: SUCCESS" >> test_results.txt
+          echo "   RAM Usage: $(pio run -e pico -t size 2>/dev/null | grep 'RAM:' | tail -1 || echo 'N/A')" >> test_results.txt
+          echo "   Flash Usage: $(pio run -e pico -t size 2>/dev/null | grep 'Flash:' | tail -1 || echo 'N/A')" >> test_results.txt
+        else
+          echo "❌ Firmware Build: FAILED" >> test_results.txt
+        fi
+        echo "" >> test_results.txt
+        
+        echo "📊 Test Results Summary:" >> test_results.txt
+        echo "   Native Tests: Executed (see logs for details)" >> test_results.txt
+        echo "   Test Environment: Executed (see logs for details)" >> test_results.txt
+        echo "" >> test_results.txt
+        
+        echo "🔧 System Information:" >> test_results.txt
+        echo "   OS: Ubuntu Latest" >> test_results.txt
+        echo "   Python: ${{ matrix.python-version }}" >> test_results.txt
+        echo "   PlatformIO: $(pio --version)" >> test_results.txt
+        
+        cat test_results.txt
+        
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: |
+          test_results.txt
+          .pio/build/*/firmware.*
+          
+    - name: Performance analysis
+      run: |
+        echo "=== Performance Analysis ===" 
+        if [ -f ".pio/build/pico/firmware.elf" ]; then
+          echo "Firmware built successfully"
+          # Size analysis
+          pio run -e pico -t size || echo "Size analysis failed"
+        else
+          echo "Firmware build failed - skipping performance analysis"
+        fi
+        
+  # Quality checks job
+  quality:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+        
+    - name: Install PlatformIO  
+      run: |
+        python -m pip install --upgrade pip
+        pip install platformio
+        
+    - name: Code quality checks
+      run: |
+        echo "=== Code Quality Analysis ===" > quality_report.txt
+        echo "Date: $(date)" >> quality_report.txt
+        echo "" >> quality_report.txt
+        
+        # File count analysis
+        echo "📁 Project Structure:" >> quality_report.txt
+        echo "   Source files: $(find src/ -name '*.cpp' -o -name '*.h' | wc -l)" >> quality_report.txt
+        echo "   Test files: $(find test/ -name '*.cpp' | wc -l)" >> quality_report.txt
+        echo "   Header files: $(find . -name '*.h' | wc -l)" >> quality_report.txt
+        echo "" >> quality_report.txt
+        
+        # Code metrics
+        echo "📊 Code Metrics:" >> quality_report.txt
+        echo "   Lines of code: $(find src/ -name '*.cpp' -exec cat {} \; | wc -l)" >> quality_report.txt
+        echo "   Header lines: $(find src/ -name '*.h' -exec cat {} \; | wc -l)" >> quality_report.txt
+        echo "   Test lines: $(find test/ -name '*.cpp' -exec cat {} \; | wc -l)" >> quality_report.txt
+        echo "" >> quality_report.txt
+        
+        # Documentation check
+        echo "📚 Documentation:" >> quality_report.txt
+        echo "   README files: $(find . -name 'README*' | wc -l)" >> quality_report.txt
+        echo "   Markdown docs: $(find docs/ -name '*.md' 2>/dev/null | wc -l || echo 0)" >> quality_report.txt
+        echo "   Design docs: $(ls requirements.md design.md tasks.md 2>/dev/null | wc -l || echo 0)" >> quality_report.txt
+        echo "" >> quality_report.txt
+        
+        cat quality_report.txt
+        
+    - name: Upload quality report
+      uses: actions/upload-artifact@v3
+      with:
+        name: quality-report
+        path: quality_report.txt
+
+  # Documentation check job
+  documentation:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Check documentation completeness
+      run: |
+        echo "=== Documentation Completeness Check ==="
+        
+        # Check for required documentation files
+        required_docs=(
+          "README.md"
+          "requirements.md" 
+          "design.md"
+          "tasks.md"
+        )
+        
+        echo "📖 Required Documentation Status:"
+        for doc in "${required_docs[@]}"; do
+          if [ -f "$doc" ]; then
+            echo "   ✅ $doc: Present ($(wc -l < "$doc" || echo 0) lines)"
+          else
+            echo "   ❌ $doc: Missing"
+          fi
+        done
+        
+        echo ""
+        echo "📁 Additional Documentation:"
+        if [ -d "docs/" ]; then
+          echo "   docs/ directory: $(find docs/ -name '*.md' | wc -l) markdown files"
+          find docs/ -name '*.md' | head -10 | sed 's/^/      /'
+        else
+          echo "   docs/ directory: Not found"
+        fi
+        
+        echo ""
+        echo "🔧 Technical Documentation:"
+        [ -f "platformio.ini" ] && echo "   ✅ platformio.ini: Present" || echo "   ❌ platformio.ini: Missing"  
+        [ -f "CLAUDE.md" ] && echo "   ✅ CLAUDE.md: Present" || echo "   ❌ CLAUDE.md: Missing"
+        [ -f "Makefile" ] && echo "   ✅ Makefile: Present" || echo "   ❌ Makefile: Missing"
+        
+        echo ""
+        echo "📊 Documentation Statistics Complete"

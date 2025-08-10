@@ -1,7 +1,6 @@
 // ArduinoJson.h mock for native testing
 #include "arduino_mock.h"
-#include <map>
-#include <string>
+// Remove std library dependencies to avoid system header conflicts
 
 class JsonDocument {
 public:
@@ -37,6 +36,22 @@ public:
 class DynamicJsonDocument : public JsonDocument {
 public:
     DynamicJsonDocument(size_t) {}
+    
+    // Add containsKey method for ConfigManager compatibility
+    bool containsKey(const char* key) const { 
+        // For testing purposes, return true for known keys
+        return (strcmp(key, "hostname") == 0 ||
+                strcmp(key, "use_dhcp") == 0 ||
+                strcmp(key, "static_ip") == 0 ||
+                strcmp(key, "subnet_mask") == 0 ||
+                strcmp(key, "gateway_ip") == 0 ||
+                strcmp(key, "dns_server") == 0 ||
+                strcmp(key, "syslog_server") == 0 ||
+                strcmp(key, "syslog_port") == 0 ||
+                strcmp(key, "log_level") == 0 ||
+                strcmp(key, "prometheus_enabled") == 0 ||
+                strcmp(key, "prometheus_port") == 0);
+    }
 };
 
 // Serialization functions

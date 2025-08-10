@@ -1,0 +1,68 @@
+# GPS NTP Server - Cross-Platform Test Environment
+# 
+# This Dockerfile creates a consistent test environment across different platforms
+# including Linux, Windows, and macOS for CI/CD and local development.
+
+FROM ubuntu:22.04
+
+LABEL maintainer="GPS NTP Server Project"
+LABEL description="Cross-platform test environment for GPS NTP Server"
+LABEL version="1.0"
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    git \
+    curl \
+    wget \
+    build-essential \
+    gcc-multilib \
+    g++-multilib \
+    libc6-dev \
+    libc6-dev-i386 \
+    pkg-config \
+    cmake \
+    ninja-build \
+    clang \
+    llvm \
+    valgrind \
+    lcov \
+    gcovr \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PlatformIO
+RUN python3 -m pip install --upgrade pip
+RUN pip3 install platformio
+
+# Create non-root user for security
+RUN useradd -m -s /bin/bash testuser
+USER testuser
+WORKDIR /home/testuser
+
+# Create project directory
+RUN mkdir -p /home/testuser/project
+
+# Set up PlatformIO environment
+RUN pio system info
+
+# Copy project files (this will be done at runtime)
+# COPY --chown=testuser:testuser . /home/testuser/project/
+
+# Set working directory
+WORKDIR /home/testuser/project
+
+# Environment variables
+ENV PLATFORMIO_WORKSPACE_DIR=/home/testuser/project
+ENV PLATFORMIO_HOME_DIR=/home/testuser/.platformio
+
+# Default command
+CMD ["bash"]
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python3 --version && pio --version || exit 1
+
+# Expose any ports if needed (for future web testing)
+EXPOSE 8080 8123
