@@ -16,6 +16,25 @@ NetworkManager::NetworkManager(EthernetUDP* udpInstance) : ntpUdp(udpInstance), 
     // Initialize non-blocking state machine
     initState = INIT_START;
     stateChangeTime = 0;
+    
+    // Initialize auto-recovery configuration
+    autoRecovery = {
+        .lastRecoveryAttempt = 0,
+        .consecutiveFailures = 0,
+        .maxConsecutiveFailures = 3,
+        .recoveryBackoffTime = 30000, // 30秒
+        .maxBackoffTime = 300000,     // 5分
+        .hardwareResetRequired = false
+    };
+    
+    // Initialize hardware monitoring
+    hardwareStatus = {
+        .lastHealthCheck = 0,
+        .healthCheckInterval = 60,     // 60秒間隔
+        .hardwareResponsive = true,
+        .consecutiveTimeouts = 0,
+        .maxTimeouts = 3
+    };
 }
 
 void NetworkManager::init() {
@@ -622,4 +641,203 @@ void NetworkManager::manageUdpSockets() {
     if (udpManager.ntpSocketOpen && udpManager.socketErrors > 0 && udpManager.socketErrors < 10) {
         udpManager.socketErrors = 0;
     }
+}
+
+// ========== 強化された自動復旧機能 ==========
+
+/**
+ * @brief W5500ハードウェアヘルスチェック実行
+ * 定期的にハードウェアの応答性を確認し、問題を早期検出
+ */
+void NetworkManager::performHealthCheck() {
+    unsigned long now = millis();
+    
+    if (now - hardwareStatus.lastHealthCheck < (hardwareStatus.healthCheckInterval * 1000)) {
+        return; // まだヘルスチェック間隔に達していない
+    }
+    
+    hardwareStatus.lastHealthCheck = now;
+    
+    if (loggingService) {
+        loggingService->debug("NETWORK", "Performing W5500 hardware health check");
+    }
+    
+    // ハードウェア応答性テスト
+    bool hardwareOk = true;
+    
+    // 1. リンクステータスチェック
+    EthernetLinkStatus linkStatus = Ethernet.linkStatus();
+    if (linkStatus == Unknown) {
+        hardwareOk = false;
+        hardwareStatus.consecutiveTimeouts++;
+    }
+    
+    // 2. ハードウェアステータスチェック  
+    EthernetHardwareStatus hwStatus = Ethernet.hardwareStatus();
+    if (hwStatus == EthernetNoHardware) {
+        hardwareOk = false;
+        hardwareStatus.consecutiveTimeouts++;
+    }
+    
+    // 3. UDP ソケット応答性テスト
+    if (udpManager.socketErrors > 10) {
+        hardwareOk = false;
+        hardwareStatus.consecutiveTimeouts++;
+    }
+    
+    if (hardwareOk) {
+        hardwareStatus.hardwareResponsive = true;
+        hardwareStatus.consecutiveTimeouts = 0;
+        if (loggingService) {
+            loggingService->debug("NETWORK", "Hardware health check: OK");
+        }
+    } else {
+        if (loggingService) {
+            loggingService->warningf("NETWORK", "Hardware health check failed - consecutive timeouts: %d/%d", 
+                                   hardwareStatus.consecutiveTimeouts, hardwareStatus.maxTimeouts);
+        }
+        
+        if (hardwareStatus.consecutiveTimeouts >= hardwareStatus.maxTimeouts) {
+            hardwareStatus.hardwareResponsive = false;
+            autoRecovery.hardwareResetRequired = true;
+            
+            if (loggingService) {
+                loggingService->error("NETWORK", "W5500 hardware appears unresponsive - hardware reset required");
+            }
+        }
+    }
+}
+
+/**
+ * @brief W5500ハードウェアリセット実行
+ * 物理的なハードウェアリセットを実行
+ */
+bool NetworkManager::performHardwareReset() {
+    if (loggingService) {
+        loggingService->info("NETWORK", "Performing enhanced W5500 hardware reset");
+    }
+    
+    // 既存のソケットを全て閉じる
+    if (udpManager.ntpSocketOpen) {
+        ntpUdp->stop();
+        udpManager.ntpSocketOpen = false;
+    }
+    
+    // SPI通信停止
+    SPI.end();
+    delay(100);
+    
+    // ハードウェアリセット（拡張シーケンス）
+    digitalWrite(W5500_RST_PIN, LOW);
+    delay(100);  // より長いリセット期間
+    digitalWrite(W5500_RST_PIN, HIGH);
+    delay(500);  // より長い安定化期間
+    
+    // SPI再初期化
+    SPI.begin();
+    delay(100);
+    
+    // W5500再初期化
+    initializeW5500();
+    delay(200);
+    
+    // 動作確認
+    EthernetHardwareStatus hwStatus = Ethernet.hardwareStatus();
+    if (hwStatus != EthernetNoHardware) {
+        if (loggingService) {
+            loggingService->info("NETWORK", "W5500 hardware reset successful");
+        }
+        
+        // 状態をリセット
+        hardwareStatus.hardwareResponsive = true;
+        hardwareStatus.consecutiveTimeouts = 0;
+        autoRecovery.hardwareResetRequired = false;
+        
+        return true;
+    } else {
+        if (loggingService) {
+            loggingService->error("NETWORK", "W5500 hardware reset failed - hardware still unresponsive");
+        }
+        return false;
+    }
+}
+
+/**
+ * @brief 接続失敗時の処理
+ * 段階的復旧アプローチとバックオフアルゴリズム
+ */
+void NetworkManager::handleConnectionFailure() {
+    unsigned long now = millis();
+    
+    autoRecovery.consecutiveFailures++;
+    
+    if (loggingService) {
+        loggingService->warningf("NETWORK", "Connection failure detected - consecutive failures: %d/%d", 
+                               autoRecovery.consecutiveFailures, autoRecovery.maxConsecutiveFailures);
+    }
+    
+    // エクスポネンシャルバックオフ計算
+    if (autoRecovery.consecutiveFailures > 1) {
+        autoRecovery.recoveryBackoffTime *= 2;
+        if (autoRecovery.recoveryBackoffTime > autoRecovery.maxBackoffTime) {
+            autoRecovery.recoveryBackoffTime = autoRecovery.maxBackoffTime;
+        }
+    }
+    
+    // 連続失敗が閾値を超えた場合はハードウェアリセット要求
+    if (autoRecovery.consecutiveFailures >= autoRecovery.maxConsecutiveFailures) {
+        autoRecovery.hardwareResetRequired = true;
+        
+        if (loggingService) {
+            loggingService->error("NETWORK", "Maximum consecutive failures reached - hardware reset will be performed");
+        }
+    }
+    
+    autoRecovery.lastRecoveryAttempt = now;
+}
+
+/**
+ * @brief 自動復旧が必要かどうかの判定
+ */
+bool NetworkManager::isAutoRecoveryNeeded() {
+    unsigned long now = millis();
+    
+    // バックオフ時間が経過していない場合は復旧しない
+    if (now - autoRecovery.lastRecoveryAttempt < autoRecovery.recoveryBackoffTime) {
+        return false;
+    }
+    
+    // ハードウェアリセットが必要な場合
+    if (autoRecovery.hardwareResetRequired) {
+        return true;
+    }
+    
+    // 接続失敗している場合
+    if (!networkMonitor.isConnected && autoRecovery.consecutiveFailures > 0) {
+        return true;
+    }
+    
+    // ハードウェアが応答しない場合
+    if (!hardwareStatus.hardwareResponsive) {
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * @brief 自動復旧カウンターのリセット
+ * 成功した接続後に呼び出される
+ */
+void NetworkManager::resetAutoRecoveryCounters() {
+    if (loggingService) {
+        loggingService->debug("NETWORK", "Resetting auto-recovery counters after successful operation");
+    }
+    
+    autoRecovery.consecutiveFailures = 0;
+    autoRecovery.recoveryBackoffTime = 30000; // 初期値にリセット
+    autoRecovery.hardwareResetRequired = false;
+    
+    hardwareStatus.hardwareResponsive = true;
+    hardwareStatus.consecutiveTimeouts = 0;
 }

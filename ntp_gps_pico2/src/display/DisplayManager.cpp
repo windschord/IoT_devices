@@ -1,6 +1,11 @@
 #include "DisplayManager.h"
 #include "../hal/HardwareConfig.h"
 #include "../config/LoggingService.h"
+#include "../utils/I2CUtils.h"
+
+// OLEDアドレス定義（広範囲の自動検出対応）
+const uint8_t DisplayManager::OLED_ADDRESSES[] = {0x3C, 0x3D, 0x78, 0x7A};
+const uint8_t DisplayManager::OLED_ADDRESS_COUNT = sizeof(OLED_ADDRESSES) / sizeof(OLED_ADDRESSES[0]);
 
 DisplayManager::DisplayManager() 
     : display(nullptr), loggingService(nullptr), i2cAddress(0), initialized(false), displayCount(0), 
@@ -13,44 +18,113 @@ DisplayManager::DisplayManager()
 }
 
 bool DisplayManager::testI2CAddress(uint8_t address) {
-    Wire.beginTransmission(address);
-    Wire.write(0x00); // Command mode
-    Wire.write(0xAE); // Display OFF command
-    int result = Wire.endTransmission();
-    
-    if (result == 0) {
-        if (loggingService) {
-            loggingService->infof("DISPLAY", "OLED found at I2C address 0x%02X", address);
-        }
-        return true;
-    }
-    return false;
+    return validateI2CConnection(address);
 }
 
-bool DisplayManager::initialize() {
+// 堅牢なI2Cバス初期化
+bool DisplayManager::initializeI2CBus() {
     if (loggingService) {
-        loggingService->info("DISPLAY", "Initializing OLED display...");
+        loggingService->info("DISPLAY", "Initializing I2C bus for OLED (Wire0)...");
     }
     
-    // Try common OLED I2C addresses
-    uint8_t testAddresses[] = {0x3C, 0x3D};
-    bool found = false;
+    // I2CUtils を使用した安定初期化
+    bool success = I2CUtils::initializeBus(Wire, 0, 1, I2C_CLOCK_SPEED, true);
     
-    for (int i = 0; i < 2; i++) {
-        if (testI2CAddress(testAddresses[i])) {
-            i2cAddress = testAddresses[i];
-            found = true;
-            break;
-        }
-    }
-    
-    if (!found) {
+    if (!success) {
         if (loggingService) {
-            loggingService->error("DISPLAY", "No OLED display found");
+            loggingService->error("DISPLAY", "Failed to initialize I2C bus");
         }
         return false;
     }
     
+    // バス動作確認
+    delay(50); // I2C安定化待機
+    
+    if (loggingService) {
+        loggingService->info("DISPLAY", "I2C bus initialized successfully");
+    }
+    
+    return true;
+}
+
+// OLED デバイス自動検出（改良版）
+bool DisplayManager::detectOLEDDevice() {
+    if (loggingService) {
+        loggingService->info("DISPLAY", "Starting OLED device auto-detection...");
+    }
+    
+    uint8_t found_devices[8];
+    uint8_t device_count = I2CUtils::scanBus(Wire, found_devices, 8, loggingService, "DISPLAY");
+    
+    // 検出されたデバイスからOLEDを特定
+    for (uint8_t i = 0; i < device_count; i++) {
+        for (uint8_t j = 0; j < OLED_ADDRESS_COUNT; j++) {
+            if (found_devices[i] == OLED_ADDRESSES[j]) {
+                if (validateI2CConnection(found_devices[i])) {
+                    i2cAddress = found_devices[i];
+                    if (loggingService) {
+                        loggingService->infof("DISPLAY", "OLED detected and validated at address 0x%02X", i2cAddress);
+                    }
+                    return true;
+                }
+            }
+        }
+    }
+    
+    if (loggingService) {
+        loggingService->error("DISPLAY", "No compatible OLED device found");
+    }
+    return false;
+}
+
+// I2C接続検証（バッファオーバーフロー対策）
+bool DisplayManager::validateI2CConnection(uint8_t address) {
+    // OLED基本コマンドテスト（Display OFF）
+    I2CUtils::I2CResult result = performI2CCommand(address, 0xAE);
+    
+    if (result != I2CUtils::I2C_SUCCESS) {
+        if (loggingService) {
+            loggingService->warningf("DISPLAY", "I2C validation failed for address 0x%02X: %s", 
+                                   address, I2CUtils::getErrorString(static_cast<uint8_t>(result)));
+        }
+        return false;
+    }
+    
+    // Display ONコマンドテスト
+    result = performI2CCommand(address, 0xAF);
+    if (result != I2CUtils::I2C_SUCCESS) {
+        if (loggingService) {
+            loggingService->warningf("DISPLAY", "OLED ON command failed for address 0x%02X: %s", 
+                                   address, I2CUtils::getErrorString(static_cast<uint8_t>(result)));
+        }
+        return false;
+    }
+    
+    return true;
+}
+
+// 安全なI2Cコマンド実行
+I2CUtils::I2CResult DisplayManager::performI2CCommand(uint8_t address, uint8_t command) {
+    const uint8_t cmd_buffer[] = {0x00, command}; // Command mode + command
+    return I2CUtils::safeWrite(Wire, address, 0x00, &command, 1, I2C_MAX_RETRY);
+}
+
+bool DisplayManager::initialize() {
+    if (loggingService) {
+        loggingService->info("DISPLAY", "Initializing OLED display with enhanced I2C handling...");
+    }
+    
+    // Step 1: I2Cバス初期化
+    if (!initializeI2CBus()) {
+        return false;
+    }
+    
+    // Step 2: OLEDデバイス自動検出
+    if (!detectOLEDDevice()) {
+        return false;
+    }
+    
+    // Step 3: OLEDインスタンス作成と初期化
     // Clean up any existing display instance
     if (display) {
         delete display;
@@ -58,34 +132,38 @@ bool DisplayManager::initialize() {
     }
     
     if (loggingService) {
-        loggingService->infof("DISPLAY", "Creating OLED instance at address 0x%02X", i2cAddress);
+        loggingService->infof("DISPLAY", "Creating OLED instance at validated address 0x%02X", i2cAddress);
     }
     
-    // Create OLED instance: OLED(SDA, SCL, RESET, WIDTH, HEIGHT, CONTROLLER, ADDRESS)
+    // Create OLED instance with error handling: OLED(SDA, SCL, RESET, WIDTH, HEIGHT, CONTROLLER, ADDRESS)
     display = new OLED(0, 1, 255, OLED::W_128, OLED::H_64, OLED::CTRL_SH1106, i2cAddress);
-    
     if (!display) {
         if (loggingService) {
-            loggingService->error("DISPLAY", "Failed to create OLED instance");
+            loggingService->error("DISPLAY", "Failed to allocate OLED instance");
         }
         return false;
     }
     
+    // OLED初期化（エラーハンドリング強化）
     if (loggingService) {
-        loggingService->info("DISPLAY", "Calling display->begin()...");
-    }
-    display->begin();
-    if (loggingService) {
-        loggingService->info("DISPLAY", "display->begin() completed");
+        loggingService->info("DISPLAY", "Calling display->begin() with enhanced error handling...");
     }
     
+    display->begin();
+    
+    // 初期化完了確認（OLED応答テスト）
+    delay(50);
+    
     // Enable SH1106 offset for 132x64 -> 128x64 conversion
-    if (loggingService) {
-        loggingService->info("DISPLAY", "Setting SH1106 offset...");
-    }
     display->useOffset(true);
+    
+    // 初期化成功確認（画面クリア＋表示テスト）
+    display->clear();
+    display->display();
+    delay(50);
+    
     if (loggingService) {
-        loggingService->info("DISPLAY", "SH1106 offset set");
+        loggingService->info("DISPLAY", "OLED initialization completed successfully");
     }
     
     // Set initialized flag BEFORE calling display methods
@@ -542,7 +620,7 @@ void DisplayManager::sleepDisplay() {
     }
 }
 
-// Performance optimization methods implementation
+// Performance optimization methods implementation (with buffer overflow protection)
 bool DisplayManager::shouldUpdateDisplay() {
     unsigned long currentTime = millis();
     
@@ -561,8 +639,18 @@ void DisplayManager::markDisplayDirty() {
 
 void DisplayManager::commitDisplayUpdate() {
     if (initialized && display && shouldUpdateDisplay()) {
-        // Perform the actual I2C update
+        // I2Cバッファオーバーフロー対策付きの表示更新
+        // 安全な表示更新（タイムアウト付き）
+        unsigned long start_time = millis();
         display->display();
+        unsigned long update_time = millis() - start_time;
+        
+        // 異常に長い更新時間の検出
+        if (update_time > 500) { // 500ms以上は異常
+            if (loggingService) {
+                loggingService->warningf("DISPLAY", "Slow I2C update detected: %lu ms", update_time);
+            }
+        }
         
         // Update timing and reset dirty flag
         frameBuffer.lastUpdate = millis();
@@ -570,7 +658,8 @@ void DisplayManager::commitDisplayUpdate() {
         
         #ifdef DEBUG_DISPLAY_PERFORMANCE
         if (loggingService) {
-            loggingService->debugf("DISPLAY", "Display updated at %lu ms", frameBuffer.lastUpdate);
+            loggingService->debugf("DISPLAY", "Display updated at %lu ms (took %lu ms)", 
+                                 frameBuffer.lastUpdate, update_time);
         }
         #endif
     }

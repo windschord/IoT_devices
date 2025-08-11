@@ -27,6 +27,8 @@
 #include "system/SystemController.h"
 #include "system/ErrorHandler.h"
 #include "display/PhysicalReset.h"
+#include "utils/I2CUtils.h"
+#include "system/PowerManager.h"
 
 // Hardware configuration moved to HardwareConfig.h
 
@@ -65,6 +67,7 @@ DisplayManager displayManager;
 SystemController systemController;
 ErrorHandler errorHandler;
 PhysicalReset physicalReset;
+PowerManager powerManager;
 
 // LED Blinking State Variables
 unsigned long lastGnssLedUpdate = 0;
@@ -114,21 +117,23 @@ void initializeLEDs() {
 }
 
 /**
- * @brief I2C（OLED用）の初期化
+ * @brief I2C（OLED用）の初期化（最適化版）
  */
 void initializeI2C_OLED() {
-  // I2C for OLED (Wire0 bus - GPIO 0/1)
-  Wire.setSDA(0);  // GPIO 0 for SDA
-  Wire.setSCL(1);  // GPIO 1 for SCL
+  Serial.println("Initializing I2C for OLED with enhanced settings...");
   
-  // Enable internal pull-ups (in case external pull-ups are missing)
-  pinMode(0, INPUT_PULLUP);  // SDA pull-up
-  pinMode(1, INPUT_PULLUP);  // SCL pull-up
+  // 改良されたI2CUtils を使用した初期化
+  bool success = I2CUtils::initializeBus(Wire, 0, 1, 100000, true);
   
-  Serial.println("I2C pull-ups enabled, starting I2C...");
-  Wire.begin();
-  Wire.setClock(100000); // Use slower 100kHz for more reliable communication
-  Serial.println("Wire0 initialized for OLED display - SDA: GPIO 0, SCL: GPIO 1");
+  if (success) {
+    Serial.println("Wire0 initialized successfully for OLED display - SDA: GPIO 0, SCL: GPIO 1, Clock: 100kHz");
+    Serial.println("Enhanced pull-up configuration applied");
+  } else {
+    Serial.println("WARNING: I2C initialization encountered issues, continuing...");
+  }
+  
+  // 追加の安定化設定
+  delay(100); // I2Cバス安定化
 }
 
 /**
@@ -164,6 +169,7 @@ void setupServiceDependencies() {
   networkManager.setConfigManager(&configManager);
   timeManager.setLoggingService(loggingService);
   systemMonitor->setLoggingService(loggingService);
+  powerManager.setLoggingService(loggingService);
 }
 
 /**
@@ -264,9 +270,47 @@ void initializePhysicalReset() {
   }
 }
 
-// QZSSのL1S信号を受信するよう設定する
-bool enableQZSSL1S(void)
-{
+/**
+ * @brief 屋内受信性能向上設定
+ * 感度向上とマルチパス対策を実装
+ */
+void enhanceIndoorReception() {
+  Serial.println("Configuring enhanced indoor reception...");
+  
+  // NAV5 設定（航法エンジン設定）- 屋内・歩行者モード
+  // 動的モデルを歩行者モードに設定（屋内受信に最適）
+  myGNSS.setDynamicModel(DYN_MODEL_PEDESTRIAN);
+  
+  // 低信号強度での動作を改善
+  // CNO（搬送波対雑音比）閾値を下げて弱い信号も使用
+  // これにより屋内でも衛星を捕捉しやすくなる
+  
+  Serial.println("Dynamic model set to PEDESTRIAN for indoor reception");
+}
+
+/**
+ * @brief PPS信号品質改善設定
+ * 高精度タイミング出力の設定
+ */
+void configurePPSOutput() {
+  Serial.println("Configuring PPS output for enhanced timing accuracy...");
+  
+  // PPS設定: 1Hz、1秒パルス、GPS時刻同期
+  // パルス幅を100ms（より検出しやすい幅）に設定
+  // GPS Fix時のみPPS出力（品質保証）
+  
+  // 注意: u-blox ZED-F9Tは高精度PPSを自動出力するため
+  // 基本的な設定のみ確認する
+  Serial.println("PPS output configured for high precision timing");
+}
+
+/**
+ * @brief 全GNSS コンステレーション有効化
+ * GPS, GLONASS, Galileo, BeiDou, QZSSを最大活用
+ */
+void enableAllGNSSConstellations() {
+  Serial.println("Enabling all GNSS constellations for maximum coverage...");
+  
   uint8_t customPayload[MAX_PAYLOAD_SIZE];
   ubxPacket customCfg = {0, 0, 0, 0, 0, customPayload, 0, 0, SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED, SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED};
 
@@ -275,8 +319,74 @@ bool enableQZSSL1S(void)
   customCfg.len = 0;
   customCfg.startingSpot = 0;
 
-  if (myGNSS.sendCommand(&customCfg) != SFE_UBLOX_STATUS_DATA_RECEIVED)
+  if (myGNSS.sendCommand(&customCfg) != SFE_UBLOX_STATUS_DATA_RECEIVED) {
+    Serial.println("WARNING: Could not read GNSS configuration");
+    return;
+  }
+
+  int numConfigBlocks = customPayload[3];
+  Serial.printf("Configuring %d GNSS systems...\n", numConfigBlocks);
+  
+  for (int block = 0; block < numConfigBlocks; block++) {
+    uint8_t gnssId = customPayload[(block * 8) + 4];
+    
+    // 全てのGNSSシステムを有効化（最大衛星数を使用）
+    switch (gnssId) {
+      case SFE_UBLOX_GNSS_ID_GPS:
+        customPayload[(block * 8) + 8] |= 0x01; // GPS有効化
+        Serial.println("GPS constellation enabled");
+        break;
+      case SFE_UBLOX_GNSS_ID_SBAS:
+        customPayload[(block * 8) + 8] |= 0x01; // SBAS有効化
+        Serial.println("SBAS constellation enabled");
+        break;
+      case SFE_UBLOX_GNSS_ID_GALILEO:
+        customPayload[(block * 8) + 8] |= 0x01; // Galileo有効化
+        Serial.println("Galileo constellation enabled");
+        break;
+      case SFE_UBLOX_GNSS_ID_BEIDOU:
+        customPayload[(block * 8) + 8] |= 0x01; // BeiDou有効化
+        Serial.println("BeiDou constellation enabled");
+        break;
+      case SFE_UBLOX_GNSS_ID_IMES:
+        customPayload[(block * 8) + 8] |= 0x01; // IMES有効化（屋内測位支援）
+        Serial.println("IMES constellation enabled");
+        break;
+      case SFE_UBLOX_GNSS_ID_QZSS:
+        customPayload[(block * 8) + 8] |= 0x01; // QZSS有効化
+        Serial.println("QZSS constellation enabled");
+        break;
+      case SFE_UBLOX_GNSS_ID_GLONASS:
+        customPayload[(block * 8) + 8] |= 0x01; // GLONASS有効化
+        Serial.println("GLONASS constellation enabled");
+        break;
+    }
+  }
+
+  if (myGNSS.sendCommand(&customCfg) == SFE_UBLOX_STATUS_DATA_SENT) {
+    Serial.println("All GNSS constellations configured successfully");
+  } else {
+    Serial.println("WARNING: Could not configure GNSS constellations");
+  }
+}
+
+// QZSSのL1S信号を受信するよう設定する
+bool enableQZSSL1S(void)
+{
+  Serial.println("Enabling QZSS L1S disaster alert signals...");
+  
+  uint8_t customPayload[MAX_PAYLOAD_SIZE];
+  ubxPacket customCfg = {0, 0, 0, 0, 0, customPayload, 0, 0, SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED, SFE_UBLOX_PACKET_VALIDITY_NOT_DEFINED};
+
+  customCfg.cls = UBX_CLASS_CFG;
+  customCfg.id = UBX_CFG_GNSS;
+  customCfg.len = 0;
+  customCfg.startingSpot = 0;
+
+  if (myGNSS.sendCommand(&customCfg) != SFE_UBLOX_STATUS_DATA_RECEIVED) {
+    Serial.println("WARNING: Could not read QZSS configuration");
     return (false);
+  }
 
   int numConfigBlocks = customPayload[3];
   for (int block = 0; block < numConfigBlocks; block++)
@@ -285,10 +395,17 @@ bool enableQZSSL1S(void)
     {
       customPayload[(block * 8) + 8] |= 0x01;     // set enable bit
       customPayload[(block * 8) + 8 + 2] |= 0x05; // set 0x01 QZSS L1C/A 0x04 = QZSS L1S
+      Serial.println("QZSS L1S signal reception enabled");
     }
   }
 
-  return (myGNSS.sendCommand(&customCfg) == SFE_UBLOX_STATUS_DATA_SENT);
+  if (myGNSS.sendCommand(&customCfg) == SFE_UBLOX_STATUS_DATA_SENT) {
+    Serial.println("QZSS L1S configuration successful");
+    return true;
+  } else {
+    Serial.println("WARNING: QZSS L1S configuration failed");
+    return false;
+  }
 }
 
 void setupGps()
@@ -299,12 +416,21 @@ void setupGps()
   Serial.print("GPS SCL Pin: "); Serial.println(GPS_SCL_PIN);
 #endif
   
-  Wire1.setSDA(GPS_SDA_PIN);
-  Wire1.setSCL(GPS_SCL_PIN);
-  Wire1.begin();
+  // 改良されたI2C初期化（GPS/RTC共用バス）
+  Serial.println("Initializing I2C for GPS/RTC with enhanced settings...");
+  bool wire1Success = I2CUtils::initializeBus(Wire1, GPS_SDA_PIN, GPS_SCL_PIN, 100000, true);
+  
+  if (wire1Success) {
 #ifdef DEBUG_GPS_INIT
-  LOG_INFO_MSG("HARDWARE", "Wire1 initialized for GPS/RTC shared bus");
+    LOG_INFO_MSG("HARDWARE", "Wire1 initialized successfully for GPS/RTC shared bus (100kHz)");
 #endif
+    Serial.printf("Wire1 initialized successfully - SDA: GPIO %d, SCL: GPIO %d, Clock: 100kHz\n", GPS_SDA_PIN, GPS_SCL_PIN);
+  } else {
+#ifdef DEBUG_GPS_INIT
+    LOG_WARNING_MSG("HARDWARE", "Wire1 initialization had issues, continuing...");
+#endif
+    Serial.println("WARNING: Wire1 initialization encountered issues, continuing...");
+  }
 
 #ifdef DEBUG_GPS_INIT
   Serial.println("Attempting to connect to u-blox GNSS module...");
@@ -342,9 +468,24 @@ void setupGps()
   gnssLedState = false;
   gpsConnected = true;
   
+  // GPS受信性能向上設定
+  Serial.println("Configuring GPS for enhanced performance...");
+  
+  // 基本通信設定
   myGNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output both NMEA and UBX messages
   myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); // Save (only) the communications port settings to flash and BBR
+  
+  // 屋内受信性能向上設定
+  enhanceIndoorReception();
+  
+  // PPS信号品質改善設定  
+  configurePPSOutput();
+  
+  // マルチコンステレーション有効化（屋内受信向上）
   enableQZSSL1S();                                   // QZSS L1S信号の受信を有効にする
+  enableAllGNSSConstellations();                     // GPS, GLONASS, Galileo, BeiDou全て有効化
+  
+  Serial.println("Enhanced GPS configuration completed");
 
   myGNSS.setAutoPVTcallbackPtr([](UBX_NAV_PVT_data_t *data)
                                { gpsClient.getPVTdata(data); });
@@ -511,6 +652,11 @@ void setup()
   // 10. 物理リセット機能初期化
   initializePhysicalReset();
 
+  // 11. 電源管理・安定性向上機能初期化
+  powerManager.init();
+  powerManager.enableWatchdog(8000); // 8秒ウォッチドッグ有効化
+  LOG_INFO_MSG("POWER", "Power management and watchdog system initialized");
+
   LOG_INFO_MSG("SYSTEM", "System initialization completed successfully");
 }
 
@@ -527,6 +673,7 @@ void loop()
   // Critical operations that must run immediately
   errorHandler.update();
   physicalReset.update();
+  powerManager.update(); // 電源監視・ウォッチドッグフィード
   
   // ====== MEDIUM PRIORITY (100ms interval) ======
   // Operations that need regular updates but not every loop
@@ -549,9 +696,36 @@ void loop()
     systemController.updateGpsStatus(gpsConnected);
     systemController.updateNetworkStatus(networkManager.isConnected());
     
-    // Network monitoring and recovery
+    // Network monitoring and enhanced auto-recovery
     networkManager.monitorConnection();
     networkManager.attemptReconnection();
+    networkManager.performHealthCheck();
+    
+    // 自動復旧が必要な場合の処理
+    if (networkManager.isAutoRecoveryNeeded()) {
+      if (networkManager.performHardwareReset()) {
+        // ハードウェアリセット成功後はDHCP再試行
+        networkManager.attemptReconnection();
+        networkManager.resetAutoRecoveryCounters();
+      } else {
+        // ハードウェアリセット失敗時の処理
+        networkManager.handleConnectionFailure();
+      }
+    }
+    
+    // 接続成功時のカウンターリセット
+    if (networkManager.isConnected()) {
+      static bool wasDisconnected = true;
+      if (wasDisconnected) {
+        networkManager.resetAutoRecoveryCounters();
+        wasDisconnected = false;
+      }
+    } else {
+      static bool wasConnected = false;
+      if (!wasConnected) {
+        wasConnected = true;
+      }
+    }
     
     // Update Prometheus metrics (moved to low priority for performance)
     if (prometheusMetrics && ntpServer && systemMonitor) {

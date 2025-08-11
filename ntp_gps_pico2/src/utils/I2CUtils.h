@@ -24,35 +24,77 @@ public:
     };
 
     /**
-     * @brief I2Cバスの初期化（統一処理）
+     * @brief I2Cバスの初期化（統一処理・最適化版）
      * @param wire I2Cバスインスタンス
      * @param sda_pin SDAピン番号
      * @param scl_pin SCLピン番号
-     * @param clock_speed クロック速度（デフォルト: 100kHz）
+     * @param clock_speed クロック速度（デフォルト: 100kHz安定動作）
      * @param enable_pullups プルアップ抵抗有効化（デフォルト: true）
      * @return true: 成功, false: 失敗
      */
     static bool initializeBus(TwoWire& wire, uint8_t sda_pin, uint8_t scl_pin, 
                              uint32_t clock_speed = 100000, bool enable_pullups = true) {
+        // ピン設定前の安全化
+        wire.end(); // 既存の接続をクリア
+        delay(10);
+        
         // ピン設定
         wire.setSDA(sda_pin);
         wire.setSCL(scl_pin);
         
-        // プルアップ抵抗の有効化（必要に応じて）
+        // 改善されたプルアップ抵抗設定
         if (enable_pullups) {
+            // 強力なプルアップ抵抗を有効化（Pico2特有の設定）
             pinMode(sda_pin, INPUT_PULLUP);
             pinMode(scl_pin, INPUT_PULLUP);
+            
+            // 追加の安定化遅延
+            delay(20);
         }
         
-        // I2C初期化
+        // I2C初期化（エラーハンドリング強化）
         wire.begin();
-        wire.setClock(clock_speed);
         
-        // 初期化完了の確認（簡易テスト）
-        wire.beginTransmission(0x00); // ブロードキャストアドレス
-        uint8_t result = wire.endTransmission();
+        // 段階的クロック設定（安定性向上）
+        if (clock_speed > 100000) {
+            // 高速モード要求の場合は段階的に上げる
+            wire.setClock(50000);   // 50kHz
+            delay(50);
+            wire.setClock(100000);  // 100kHz
+            delay(50);
+            wire.setClock(clock_speed);
+        } else {
+            // 標準100kHzまたはそれ以下
+            wire.setClock(clock_speed);
+        }
         
-        return true; // 初期化は通常成功と見なす
+        delay(50); // 設定安定化
+        
+        // バス動作確認（より詳細なテスト）
+        return validateBusOperation(wire);
+    }
+    
+    /**
+     * @brief I2Cバス動作検証
+     * @param wire I2Cバスインスタンス
+     * @return true: バス正常, false: バス異常
+     */
+    static bool validateBusOperation(TwoWire& wire) {
+        // バス占有状態チェック（疑似テスト）
+        for (int retry = 0; retry < 3; retry++) {
+            wire.beginTransmission(0x00); // General Call Address
+            uint8_t result = wire.endTransmission();
+            
+            // エラーコード2（Address NACK）は予想される応答（正常）
+            if (result == 0 || result == 2) {
+                return true;
+            }
+            
+            // バスリセット試行
+            delay(10);
+        }
+        
+        return false; // バス異常
     }
 
     /**

@@ -31,6 +31,25 @@ private:
     };
     InitState initState;
     unsigned long stateChangeTime;
+    
+    // 強化された自動復旧機能
+    struct AutoRecoveryConfig {
+        unsigned long lastRecoveryAttempt;
+        uint8_t consecutiveFailures;
+        uint8_t maxConsecutiveFailures;
+        unsigned long recoveryBackoffTime;
+        unsigned long maxBackoffTime;
+        bool hardwareResetRequired;
+    } autoRecovery;
+    
+    // W5500ハードウェア監視
+    struct HardwareMonitoring {
+        unsigned long lastHealthCheck;
+        uint8_t healthCheckInterval;
+        bool hardwareResponsive;
+        uint8_t consecutiveTimeouts;
+        uint8_t maxTimeouts;
+    } hardwareStatus;
 
 public:
     NetworkManager(EthernetUDP* udpInstance);
@@ -44,6 +63,13 @@ public:
     
     // Performance optimization: Non-blocking initialization
     bool updateInitialization(); // Returns true when complete
+    
+    // 強化された自動復旧機能
+    void performHealthCheck();
+    bool performHardwareReset();
+    void handleConnectionFailure();
+    bool isAutoRecoveryNeeded();
+    void resetAutoRecoveryCounters();
     
     bool isConnected() const { return networkMonitor.isConnected; }
     bool isNtpServerActive() const { return networkMonitor.ntpServerActive; }

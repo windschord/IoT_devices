@@ -7,6 +7,7 @@
 #include "../gps/Gps_model.h"
 #include "../system/SystemTypes.h"
 #include "../network/NtpTypes.h"
+#include "../utils/I2CUtils.h"
 
 // Forward declaration for LoggingService
 class LoggingService;
@@ -27,6 +28,15 @@ private:
     LoggingService* loggingService;
     uint8_t i2cAddress;
     bool initialized;
+    
+    // I2C通信設定
+    static const uint32_t I2C_CLOCK_SPEED = 100000; // 100kHz安定動作
+    static const uint8_t I2C_MAX_RETRY = 3;
+    static const uint8_t I2C_BUFFER_SIZE = 32; // バッファオーバーフロー防止
+    
+    // 自動検出用アドレスリスト
+    static const uint8_t OLED_ADDRESSES[];
+    static const uint8_t OLED_ADDRESS_COUNT;
     int displayCount;
     unsigned long lastDisplay;
     DisplayMode currentMode;
@@ -58,6 +68,12 @@ public:
     // I2C address auto-detection and connection test
     bool testI2CAddress(uint8_t address);
     bool isInitialized() const { return initialized; }
+    
+    // 強化されたI2C管理
+    bool initializeI2CBus();
+    bool detectOLEDDevice();
+    bool validateI2CConnection(uint8_t address);
+    I2CUtils::I2CResult performI2CCommand(uint8_t address, uint8_t command);
     void displayInfo(const GpsSummaryData& gpsSummaryData);
     void displayNtpStats(const NtpStatistics& ntpStats);
     void displaySystemStatus(bool gpsConnected, bool networkConnected, uint32_t uptimeSeconds);

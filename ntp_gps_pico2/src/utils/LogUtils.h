@@ -20,7 +20,7 @@ public:
      */
     static void logInfo(LoggingService* loggingService, const char* component, const char* message) {
         if (loggingService) {
-            loggingService->logInfo(component, message);
+            loggingService->info(component, message);
         }
     }
 
@@ -32,7 +32,7 @@ public:
      */
     static void logError(LoggingService* loggingService, const char* component, const char* message) {
         if (loggingService) {
-            loggingService->logError(component, message);
+            loggingService->error(component, message);
         }
     }
 
@@ -44,7 +44,7 @@ public:
      */
     static void logWarning(LoggingService* loggingService, const char* component, const char* message) {
         if (loggingService) {
-            loggingService->logWarning(component, message);
+            loggingService->warning(component, message);
         }
     }
 
@@ -56,7 +56,7 @@ public:
      */
     static void logDebug(LoggingService* loggingService, const char* component, const char* message) {
         if (loggingService) {
-            loggingService->logDebug(component, message);
+            loggingService->debug(component, message);
         }
     }
 
@@ -74,7 +74,7 @@ public:
             char buffer[256];
             vsnprintf(buffer, sizeof(buffer), format, args);
             va_end(args);
-            loggingService->logInfo(component, buffer);
+            loggingService->info(component, buffer);
         }
     }
 
@@ -92,7 +92,7 @@ public:
             char buffer[256];
             vsnprintf(buffer, sizeof(buffer), format, args);
             va_end(args);
-            loggingService->logError(component, buffer);
+            loggingService->error(component, buffer);
         }
     }
 };
