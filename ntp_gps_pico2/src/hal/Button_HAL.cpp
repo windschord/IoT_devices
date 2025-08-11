@@ -7,7 +7,8 @@ ButtonHAL g_button_hal;
 ButtonHAL::ButtonHAL() : 
     short_press_callback(nullptr),
     long_press_callback(nullptr),
-    initialized(false) {
+    initialized(false),
+    lastError(nullptr) {
     
     // 制御構造体の初期化
     resetState();
@@ -241,4 +242,19 @@ void ButtonHAL::triggerCallback(ButtonState state) {
         default:
             break;
     }
+}
+
+bool ButtonHAL::reset() {
+    lastError = nullptr;
+    
+    if (initialized) {
+        shutdown();
+    }
+    
+    bool result = initialize();
+    if (!result) {
+        lastError = "Button reset failed";
+    }
+    
+    return result;
 }

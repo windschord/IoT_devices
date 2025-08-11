@@ -23,6 +23,9 @@
 #include "../network/webserver.h"
 #include "../system/SystemTypes.h"
 
+// Forward declaration to avoid circular dependency
+class ServiceContainer;
+
 /**
  * @brief システム状態を管理するシングルトンクラス
  * 
@@ -104,6 +107,71 @@ public:
     // TimeSync構造体アクセス
     TimeSync& getTimeSync() { return timeSync; }
 
+    // ========== ハードウェア状態管理 ==========
+    struct HardwareStatus {
+        bool gpsReady = false;
+        bool networkReady = false;
+        bool displayReady = false;
+        bool rtcReady = false;
+        bool storageReady = false;
+        unsigned long lastGpsUpdate = 0;
+        unsigned long lastNetworkCheck = 0;
+        float cpuTemperature = 0.0f;
+        uint32_t freeMemory = 0;
+    };
+    
+    HardwareStatus& getHardwareStatus() { return hardwareStatus; }
+    const HardwareStatus& getHardwareStatus() const { return hardwareStatus; }
+    
+    // ========== システム統計情報 ==========
+    struct SystemStatistics {
+        unsigned long systemUptime = 0;
+        unsigned long ntpRequestsTotal = 0;
+        unsigned long ntpResponsesTotal = 0;
+        unsigned long ntpDroppedTotal = 0;
+        unsigned long gpsFixCount = 0;
+        unsigned long ppsCount = 0;
+        unsigned long errorCount = 0;
+        unsigned long restartCount = 0;
+        float averageResponseTime = 0.0f;
+        float currentAccuracy = 0.0f;
+    };
+    
+    SystemStatistics& getSystemStatistics() { return systemStatistics; }
+    const SystemStatistics& getSystemStatistics() const { return systemStatistics; }
+    
+    // 統計更新メソッド
+    void incrementNtpRequests() { systemStatistics.ntpRequestsTotal++; }
+    void incrementNtpResponses() { systemStatistics.ntpResponsesTotal++; }
+    void incrementNtpDropped() { systemStatistics.ntpDroppedTotal++; }
+    void incrementGpsFixCount() { systemStatistics.gpsFixCount++; }
+    void incrementPpsCount() { systemStatistics.ppsCount++; }
+    void incrementErrorCount() { systemStatistics.errorCount++; }
+    void updateResponseTime(float responseTime) {
+        // 簡単な移動平均
+        systemStatistics.averageResponseTime = 
+            (systemStatistics.averageResponseTime * 0.9f) + (responseTime * 0.1f);
+    }
+    void updateAccuracy(float accuracy) { systemStatistics.currentAccuracy = accuracy; }
+    
+    // ========== スレッドセーフアクセス ==========
+    void lockState() { /* 組み込み環境のため、割り込み制御を使用 */ noInterrupts(); }
+    void unlockState() { interrupts(); }
+    
+    // ========== DI コンテナアクセス ==========
+    /**
+     * @brief DIコンテナ取得
+     * @return ServiceContainerインスタンス
+     */
+    ServiceContainer& getServiceContainer();
+    
+    /**
+     * @brief DIコンテナ初期化
+     * ハードウェアとサービスをDIコンテナに登録
+     * @return true 成功, false 失敗
+     */
+    bool initializeDIContainer();
+
     // ========== PPS割り込みコールバック ==========
     /**
      * @brief PPS割り込み処理
@@ -156,4 +224,10 @@ private:
     // タイミング制御
     unsigned long lastLowPriorityUpdate = 0;
     unsigned long lastMediumPriorityUpdate = 0;
+    
+    // ハードウェア状態
+    HardwareStatus hardwareStatus;
+    
+    // システム統計
+    SystemStatistics systemStatistics;
 };

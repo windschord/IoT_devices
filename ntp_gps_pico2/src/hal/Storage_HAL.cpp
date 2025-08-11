@@ -80,7 +80,8 @@ const uint32_t StorageHAL::crc32_table[256] = {
 StorageHAL::StorageHAL() : 
     initialized(false),
     last_write_timestamp(0),
-    power_safe_mode(false) {
+    power_safe_mode(false),
+    lastError(nullptr) {
     
     // CRC32テーブル初期化
     if (!crc32_table_initialized) {
@@ -410,3 +411,19 @@ void StorageHAL::initializeCRC32Table() {
     // テーブルは静的に定義されているため、初期化不要
     LOG_DEBUG_MSG("STORAGE", "StorageHAL: CRC32 table initialization completed");
 }
+bool StorageHAL::reset() {
+    lastError = nullptr;
+    
+    // 現在のデータを保存する必要はないため、単純に再初期化
+    initialized = false;
+    last_write_timestamp = 0;
+    power_safe_mode = false;
+    
+    bool result = initialize();
+    if (!result) {
+        lastError = "Storage reset failed";
+    }
+    
+    return result;
+}
+

@@ -2,6 +2,7 @@
 #define STORAGE_HAL_H
 
 #include <Arduino.h>
+#include "../interfaces/IHardwareInterface.h"
 
 // ストレージ設定定数
 #define STORAGE_SECTOR_SIZE        4096    // 4KB セクターサイズ
@@ -36,7 +37,7 @@ struct ConfigHeader {
     uint32_t reserved[2];         // 将来の拡張用
 };
 
-class StorageHAL {
+class StorageHAL : public IHardwareInterface {
 public:
     StorageHAL();
     ~StorageHAL();
@@ -68,11 +69,18 @@ public:
     size_t getAvailableSpace() const;
     uint32_t getLastWriteTimestamp() const;
     bool isPowerSafeWrite() const;
+    
+    // ========== IHardwareInterface 実装 ==========
+    bool isReady() const override { return initialized; }
+    bool reset() override;
+    const char* getHardwareName() const override { return "StorageHAL"; }
+    const char* getLastError() const override { return lastError; }
 
 private:
     bool initialized;
     uint32_t last_write_timestamp;
     bool power_safe_mode;
+    const char* lastError;
 
     // 内部処理
     StorageResult writeHeader(const ConfigHeader& header, uint32_t offset);

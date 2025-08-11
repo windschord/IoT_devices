@@ -58,6 +58,7 @@ private:
     static InitializationResult initializeI2C_OLED();
     static InitializationResult initializeFileSystem();
     static InitializationResult initializeCoreServices();
+    static InitializationResult initializeDIContainer();
     static InitializationResult setupServiceDependencies();
     static InitializationResult initializeSystemModules();
     static InitializationResult initializeNTPServer();

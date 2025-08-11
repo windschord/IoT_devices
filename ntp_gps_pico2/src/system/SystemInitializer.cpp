@@ -38,6 +38,10 @@ SystemInitializer::InitializationResult SystemInitializer::initialize() {
     result = initializeCoreServices();
     if (!result.success) return result;
     
+    // DI コンテナ初期化
+    result = initializeDIContainer();
+    if (!result.success) return result;
+    
     // 4. サービス間依存関係設定
     result = setupServiceDependencies();
     if (!result.success) return result;
@@ -478,3 +482,13 @@ void SystemInitializer::logInitializationError(const char* component, const char
 void SystemInitializer::logInitializationSuccess(const char* component, const char* message) {
     Serial.printf("✅ [%s] %s\n", component, message);
 }
+SystemInitializer::InitializationResult SystemInitializer::initializeDIContainer() {
+    SystemState& state = SystemState::getInstance();
+    
+    if (!state.initializeDIContainer()) {
+        return InitializationResult(false, "Failed to initialize DI container", -1);
+    }
+    
+    return InitializationResult(true, "DI container initialized successfully");
+}
+

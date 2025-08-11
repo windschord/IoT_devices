@@ -2,6 +2,7 @@
 #define BUTTON_HAL_H
 
 #include <Arduino.h>
+#include "../interfaces/IHardwareInterface.h"
 
 enum ButtonState {
     BUTTON_IDLE,              // ボタンが押されていない
@@ -22,7 +23,7 @@ struct ButtonControl {
 
 typedef void (*ButtonCallback)(ButtonState state);
 
-class ButtonHAL {
+class ButtonHAL : public IHardwareInterface {
 public:
     static const uint8_t BUTTON_PIN = 11;           // GPIO 11
     static const uint32_t DEBOUNCE_DELAY = 20;      // 20ms
@@ -51,12 +52,19 @@ public:
 
     // デバッグ情報
     void printStatus() const;
+    
+    // ========== IHardwareInterface 実装 ==========
+    bool isReady() const override { return initialized; }
+    bool reset() override;
+    const char* getHardwareName() const override { return "ButtonHAL"; }
+    const char* getLastError() const override { return lastError; }
 
 private:
     ButtonControl control;
     ButtonCallback short_press_callback;
     ButtonCallback long_press_callback;
     bool initialized;
+    const char* lastError;
 
     // 内部処理
     bool readButton();
