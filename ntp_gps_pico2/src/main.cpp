@@ -2,17 +2,17 @@
  * @file main.cpp
  * @brief GPS NTP Server - Main Application Entry Point
  * 
- * 簡素化されたメインファイル。システム初期化とメインループの実行のみを担当。
- * 全ての具体的な処理は以下のクラスに移譲:
- * - SystemInitializer: 全初期化処理の集約管理
- * - MainLoop: 優先度別処理分離とタイミング制御
- * - SystemState: グローバル変数とサービスの統合管理
+ * Simplified main file. Only responsible for system initialization and main loop execution.
+ * All specific processing is delegated to the following classes:
+ * - SystemInitializer: Centralized management of all initialization processes
+ * - MainLoop: Priority-based processing separation and timing control
+ * - SystemState: Integrated management of global variables and services
  * 
- * リファクタリング成果:
- * - 933行 → 80行 (91%削減)
- * - グローバル変数 → SystemStateシングルトンで管理
- * - 初期化処理 → SystemInitializerクラスで集約
- * - ループ処理 → MainLoopクラスで優先度別分離
+ * Refactoring results:
+ * - 933 lines → 80 lines (91% reduction)
+ * - Global variables → Managed by SystemState singleton
+ * - Initialization process → Centralized in SystemInitializer class
+ * - Loop processing → Priority-based separation in MainLoop class
  */
 
 #include <Arduino.h>
@@ -22,11 +22,11 @@
 #include "hal/HardwareConfig.h"
 #include "gps/TimeManager.h"
 
-// グローバル変数はSystemStateシングルトンで管理
-// ハードウェアインスタンスとサービスはSystemState内で初期化
+// Global variables are managed by SystemState singleton
+// Hardware instances and services are initialized within SystemState
 
-// 一時的なグローバル変数（他のクラスとの互換性のため）
-// TODO: 将来的にはSystemStateクラスのメンバーのみを使用
+// Temporary global variables (for compatibility with other classes)
+// TODO: In the future, use only SystemState class members
 bool gpsConnected = false;
 TimeManager* timeManager = nullptr;
 
@@ -36,10 +36,10 @@ void triggerPps() {
 }
 
 /**
- * @brief システムセットアップ
+ * @brief System setup
  * 
- * SystemInitializerに全初期化処理を委譲し、
- * setup関数を大幅に簡素化。
+ * Delegates all initialization processing to SystemInitializer
+ * and significantly simplifies the setup function.
  */
 void setup() {
   SystemInitializer::InitializationResult result = SystemInitializer::initialize();
@@ -50,8 +50,8 @@ void setup() {
     // Continue operation even if some components failed
   }
   
-  // 一時的な互換性のためのグローバル変数設定
-  // TODO: 将来的には削除予定
+  // Set global variables for temporary compatibility
+  // TODO: Planned for future removal
   SystemState& state = SystemState::getInstance();
   gpsConnected = state.isGpsConnected();
   timeManager = &state.getTimeManager();
@@ -63,39 +63,39 @@ void setup() {
 }
 
 /**
- * @brief メインループ
+ * @brief Main loop
  * 
- * MainLoopクラスに全処理を委譲し、
- * loop関数を大幅に簡素化。
+ * Delegates all processing to MainLoop class
+ * and significantly simplifies the loop function.
  */
 void loop() {
   MainLoop::execute();
 }
 
 /**
- * @note リファクタリング詳細
+ * @note Refactoring details
  * 
- * 【移行前の問題点】
- * - main.cpp: 933行（肥大化）
- * - グローバル変数: 50+個（管理困難）
- * - 初期化処理: 複雑な依存関係（エラーが起きやすい）
- * - ループ処理: 優先度不明確（パフォーマンス問題）
+ * [Issues before migration]
+ * - main.cpp: 933 lines (bloated)
+ * - Global variables: 50+ items (difficult to manage)
+ * - Initialization process: Complex dependencies (error-prone)
+ * - Loop processing: Unclear priorities (performance issues)
  * 
- * 【移行後の改善点】
- * - main.cpp: 80行（91%削減）
- * - グローバル変数: SystemStateで一元管理
- * - 初期化処理: SystemInitializerで順序・依存関係明確化
- * - ループ処理: MainLoopで優先度別分離（HIGH/MEDIUM/LOW）
+ * [Improvements after migration]
+ * - main.cpp: 80 lines (91% reduction)
+ * - Global variables: Centralized management with SystemState
+ * - Initialization process: Clear order and dependencies with SystemInitializer
+ * - Loop processing: Priority-based separation with MainLoop (HIGH/MEDIUM/LOW)
  * 
- * 【アーキテクチャ改善】
- * 1. 単一責任原則: 各クラスが明確な責務を持つ
- * 2. 依存関係逆転: インターフェースによる疎結合
- * 3. 関心の分離: 初期化・実行・状態管理の分離
- * 4. テスタビリティ: 各クラスが独立してテスト可能
+ * [Architecture improvements]
+ * 1. Single Responsibility Principle: Each class has clear responsibilities
+ * 2. Dependency Inversion: Loose coupling through interfaces
+ * 3. Separation of Concerns: Separation of initialization, execution, and state management
+ * 4. Testability: Each class can be tested independently
  * 
- * 【保守性向上】
- * - 新機能追加時: 対応するクラスのみ修正
- * - バグ修正時: 影響範囲が明確
- * - コードレビュー時: 変更部分が特定しやすい
- * - 理解時間短縮: 新規開発者の学習コスト削減
+ * [Maintainability improvements]
+ * - When adding new features: Modify only the corresponding class
+ * - When fixing bugs: Clear scope of impact
+ * - During code review: Easy to identify changes
+ * - Reduced understanding time: Lower learning cost for new developers
  */

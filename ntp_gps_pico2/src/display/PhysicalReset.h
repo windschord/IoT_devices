@@ -2,7 +2,7 @@
 #define PHYSICAL_RESET_H
 
 #include <Arduino.h>
-#include "../hal/Button_HAL.h"
+#include "../hal/ButtonHal.h"
 
 class DisplayManager;
 class ConfigManager;

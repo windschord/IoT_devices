@@ -12,7 +12,7 @@
 #include "../system/PowerManager.h"
 #include "../system/SystemMonitor.h"
 #include "../system/PrometheusMetrics.h"
-#include "../gps/Gps_Client.h"
+#include "../gps/GpsClient.h"
 #include "../network/webserver.h"
 #include "../utils/I2CUtils.h"
 #include "SystemState.h"
@@ -331,15 +331,15 @@ bool SystemInitializer::setupGps() {
     
     // Setup callbacks
     state.getGNSS().setAutoPVTcallbackPtr([](UBX_NAV_PVT_data_t *data) {
-        SystemState::getInstance().getGpsClient().getPVTdata(data);
+        SystemState::getInstance().getGpsClient().getPvtData(data);
     });
     
     state.getGNSS().setAutoRXMSFRBXcallbackPtr([](UBX_RXM_SFRBX_data_t *data) {
-        SystemState::getInstance().getGpsClient().newSFRBX(data);
+        SystemState::getInstance().getGpsClient().newSfrBx(data);
     });
     
     state.getGNSS().setAutoNAVSATcallbackPtr([](UBX_NAV_SAT_data_t *data) {
-        SystemState::getInstance().getGpsClient().newNAVSAT(data);
+        SystemState::getInstance().getGpsClient().newNavSat(data);
     });
     
     return true;

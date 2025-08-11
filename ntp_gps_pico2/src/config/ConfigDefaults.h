@@ -89,10 +89,10 @@ namespace GNSS {
 }
 
 // =============================================================================
-// NTPサーバー設定デフォルト値
+// NTP Server Configuration Default Values
 // =============================================================================
 namespace NTP {
-    // NTPサーバー基本設定
+    // NTP Server Basic Settings
     constexpr bool NTP_ENABLED = true;
     constexpr uint16_t NTP_PORT = Network::NTP_SERVER_PORT;
     constexpr uint8_t NTP_STRATUM = Constants::Quality::NTP_STRATUM_REFERENCE_CLOCK;  // GPS = Stratum 1

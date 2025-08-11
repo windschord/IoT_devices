@@ -17,15 +17,9 @@
 #define W5500_INT_PIN 21
 #define W5500_CS_PIN 17
 
-// OLED Display Configuration
-#define SCREEN_WIDTH 128    // OLED display width, in pixels
-#define SCREEN_HEIGHT 64    // OLED display height, in pixels
-#define OLED_RESET -1       // Reset pin # (or -1 if sharing Arduino reset pin)
-#define SCREEN_ADDRESS 0x3D // See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+// OLED Display Configuration (definitions moved to Constants.h to avoid conflicts)
 
-// NTP Configuration
-#define NTP_PORT 123           // NTP standard port
-#define NTP_PACKET_SIZE 48     // NTP packet size
+// NTP Configuration (definitions moved to Constants.h to avoid conflicts)
 
 // Serial Communication
 #define SERIAL_BAUD_RATE 9600

@@ -19,7 +19,6 @@
 
 // NTP Constants
 #define NTP_PACKET_SIZE 48
-#define NTP_PORT 123
 #define NTP_TIMESTAMP_DELTA 2208988800UL  // Difference between Unix epoch (1970) and NTP epoch (1900)
 
 // NTP Leap Indicator values

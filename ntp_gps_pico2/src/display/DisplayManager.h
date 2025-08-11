@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <oled.h>
-#include "../gps/Gps_model.h"
+#include "../gps/GpsModel.h"
 #include "../system/SystemTypes.h"
 #include "../network/NtpTypes.h"
 #include "../utils/I2CUtils.h"

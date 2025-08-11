@@ -3,7 +3,7 @@
 
 #include <Ethernet.h>
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
-#include "../gps/Gps_model.h"
+#include "../gps/GpsModel.h"
 
 
 class NtpServer; // Forward declaration

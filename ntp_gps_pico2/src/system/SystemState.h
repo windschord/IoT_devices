@@ -19,7 +19,7 @@
 #include "../system/PowerManager.h"
 #include "../config/LoggingService.h"
 #include "../system/PrometheusMetrics.h"
-#include "../gps/Gps_Client.h"
+#include "../gps/GpsClient.h"
 #include "../network/webserver.h"
 #include "../system/SystemTypes.h"
 

@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <Ethernet.h>
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
-#include "../gps/Gps_model.h"
+#include "../gps/GpsModel.h"
 #include "http/HttpRequestParser.h"
 #include "http/HttpResponseBuilder.h"
 #include "routing/RouteHandler.h"

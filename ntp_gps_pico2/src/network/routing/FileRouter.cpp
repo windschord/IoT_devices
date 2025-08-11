@@ -1,6 +1,6 @@
 #include "FileRouter.h"
 #include "../../config/LoggingService.h"
-#include "../../gps/Gps_Client.h"
+#include "../../gps/GpsClient.h"
 #include "../../system/PrometheusMetrics.h"
 #include <LittleFS.h>
 

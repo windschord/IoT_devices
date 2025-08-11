@@ -1,4 +1,4 @@
-#include "Gps_Client.h"
+#include "GpsClient.h"
 #include <time.h>
 #include <math.h>
 
@@ -6,7 +6,7 @@ byte l1s_msg_buf[32]; // MAX 250 BITS
 QZQSM dc_report;
 DCXDecoder dcx_decoder;
 
-void GpsClient::getPVTdata(UBX_NAV_PVT_data_t *data)
+void GpsClient::getPvtData(UBX_NAV_PVT_data_t *data)
 {
   gpsSummaryData.latitude = data->lat;
   gpsSummaryData.longitude = data->lon;
@@ -23,17 +23,17 @@ void GpsClient::getPVTdata(UBX_NAV_PVT_data_t *data)
   gpsSummaryData.msec = data->iTOW % 1000;
   gpsSummaryData.fixType = data->fixType;
   
-  // Web GPS データも同期更新 (GPS APIとルートページのデータ整合性確保)
-  updateWebGpsData(data, ubxNavSatData_t);
+  // Also synchronously update Web GPS data (ensuring data consistency between GPS API and root page)
+  updateWebGpsData(data, ubxNavSatData);
 }
 
 // https://github.com/SWITCHSCIENCE/samplecodes/blob/master/GPS_shield_for_ESPr/espr_dev_qzss_drc_drx_decode/espr_dev_qzss_drc_drx_decode.ino
-// dwrdを16進数文字列に変換して出力する関数
-const char *GpsClient::dwrd_to_str(uint32_t value)
+// Function to convert dword to hexadecimal string for output
+const char *GpsClient::dwordToString(uint32_t value)
 {
   static const char hex_chars[] = "0123456789ABCDEF"; // 16進数文字
   static char buffer[9];                              // 8桁 + 終端文字
-  // リトルエンディアンなので入れ替える
+  // Swap bytes due to little endian format
   buffer[8] = '\0';
   buffer[7] = hex_chars[value & 0xF];
   buffer[6] = hex_chars[value >> 4 & 0xF];
@@ -46,32 +46,32 @@ const char *GpsClient::dwrd_to_str(uint32_t value)
   return buffer;
 }
 
-void GpsClient::newSFRBX(UBX_RXM_SFRBX_data_t *data)
+void GpsClient::newSfrBx(UBX_RXM_SFRBX_data_t *data)
 {
 #if defined(DEBUG_CONSOLE_GPS)
-  stream_.print("SFRBX gnssId: ");
-  stream_.print(data->gnssId);
-  stream_.print(" svId: ");
-  stream_.print(data->svId);
-  stream_.print(" freqId: ");
-  stream_.print(data->freqId);
-  stream_.print(" numWords: ");
-  stream_.print(data->numWords);
-  stream_.print(" version: ");
-  stream_.print(data->version);
-  stream_.print(" ");
+  stream.print("SFRBX gnssId: ");
+  stream.print(data->gnssId);
+  stream.print(" svId: ");
+  stream.print(data->svId);
+  stream.print(" freqId: ");
+  stream.print(data->freqId);
+  stream.print(" numWords: ");
+  stream.print(data->numWords);
+  stream.print(" version: ");
+  stream.print(data->version);
+  stream.print(" ");
   for (int i = 0; i < data->numWords; i++)
   {
-    stream_.print(dwrd_to_str(data->dwrd[i]));
+    stream.print(dwordToString(data->dwrd[i]));
   }
-  stream_.println();
+  stream.println();
 #endif
 
-  // QZSS L1Sメッセージ解析
+  // QZSS L1S message analysis
   if (data->gnssId == 5)
   {
 
-    // SFRBXのdwrdはリトルエンディアンなので入れ替える
+    // SFRBX dword is little endian so swap bytes
     for (int i = 0; i < min(int(data->numWords), 8); i++)
     {
       l1s_msg_buf[(i << 2) + 0] = (data->dwrd[i] >> 24) & 0xff;
@@ -105,39 +105,39 @@ void GpsClient::newSFRBX(UBX_RXM_SFRBX_data_t *data)
       {
         if (MTTable[i].mt == mt)
         {
-          stream_.print(mt);
-          stream_.print(" ");
-          stream_.println(MTTable[i].desc);
+          stream.print(mt);
+          stream.print(" ");
+          stream.println(MTTable[i].desc);
           break;
         }
       }
-      // 災害・危機管理通報サービス（DC Report）のメッセージ内容を表示
+      // Display disaster crisis management report service (DC Report) message content
       if (mt == 43)
       {
         dc_report.SetYear(2024); // todo
         dc_report.Decode(l1s_msg_buf);
-        stream_.println(dc_report.GetReport());
+        stream.println(dc_report.GetReport());
       }
-      // 災害・危機管理通報サービス（拡張）（DCX）のメッセージ内容を表示
+      // Display disaster crisis management report service (Extended DCX) message content
       else if (mt == 44)
       {
         dcx_decoder.decode(l1s_msg_buf);
-        dcx_decoder.printSummary(stream_, dcx_decoder.r);
+        dcx_decoder.printSummary(stream, dcx_decoder.r);
         
 #if defined(DEBUG_CONSOLE_DCX_ALL)
-        dcx_decoder.printAll(stream_, dcx_decoder.r);
+        dcx_decoder.printAll(stream, dcx_decoder.r);
 #endif
       }
     }
   }
 }
 
-void GpsClient::newNAVSAT(UBX_NAV_SAT_data_t *data)
+void GpsClient::newNavSat(UBX_NAV_SAT_data_t *data)
 {
 
-  ubxNavSatData_t = data;
+  ubxNavSatData = data;
 
-  // Web GPS表示用データ処理
+  // Process data for Web GPS display
   processNavSatData(data);
 
 #if defined(DEBUG_CONSOLE_GPS)
@@ -150,31 +150,31 @@ void GpsClient::newNAVSAT(UBX_NAV_SAT_data_t *data)
       nGNSS[data->blocks[block].gnssId]++;
     }
   }
-  stream_.print(F("Satellites: "));
-  stream_.print(data->header.numSvs);
+  stream.print(F("Satellites: "));
+  stream.print(data->header.numSvs);
   const char *gnssName[] = {"GPS", "SBAS", "Galileo", "BeiDou", "IMES", "QZSS", "GLONASS"};
   for (uint16_t i = 0; i < NUM_GNSS; i++)
   {
     if (nGNSS[i])
     {
-      stream_.print(" ");
-      stream_.print(gnssName[i]);
-      stream_.print(": ");
-      stream_.print(nGNSS[i]);
+      stream.print(" ");
+      stream.print(gnssName[i]);
+      stream.print(": ");
+      stream.print(nGNSS[i]);
     }
   }
-  stream_.println();
+  stream.println();
 #endif
 }
 
-// Web GPS表示用データ取得メソッド
-web_gps_data_t GpsClient::getWebGpsData() 
+// Method to get Web GPS display data
+WebGpsData GpsClient::getWebGpsData() 
 {
   webGpsData.last_update = millis();
   return webGpsData;
 }
 
-// Web GPS表示用データ更新メソッド
+// Web GPS data update method
 void GpsClient::updateWebGpsData(UBX_NAV_PVT_data_t *pvtData, UBX_NAV_SAT_data_t *satData) 
 {
   if (!pvtData) return;
@@ -229,7 +229,7 @@ void GpsClient::updateWebGpsData(UBX_NAV_PVT_data_t *pvtData, UBX_NAV_SAT_data_t
   webGpsData.last_update = millis();
 }
 
-// NAV-SATデータ処理メソッド
+// NAV-SAT data processing method
 void GpsClient::processNavSatData(UBX_NAV_SAT_data_t *satData) 
 {
   if (!satData) return;
@@ -242,7 +242,7 @@ void GpsClient::processNavSatData(UBX_NAV_SAT_data_t *satData)
   for (uint16_t i = 0; i < satData->header.numSvs && i < MAX_SATELLITES; i++) {
     if (webGpsData.satellite_count >= MAX_SATELLITES) break;
     
-    satellite_info_t &sat = webGpsData.satellites[webGpsData.satellite_count];
+    SatelliteInfo &sat = webGpsData.satellites[webGpsData.satellite_count];
     auto &block = satData->blocks[i];
     
     // Basic satellite information
@@ -299,7 +299,7 @@ void GpsClient::calculateConstellationStats()
   uint8_t used_count = 0;
   
   for (uint8_t i = 0; i < webGpsData.satellite_count; i++) {
-    satellite_info_t &sat = webGpsData.satellites[i];
+    SatelliteInfo &sat = webGpsData.satellites[i];
     
     switch (sat.constellation) {
       case 0: // GPS

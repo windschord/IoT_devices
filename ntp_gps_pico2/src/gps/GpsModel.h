@@ -26,7 +26,7 @@ struct GpsSummaryData
 #define MAX_SATELLITES 32
 
 // 個別衛星情報構造体
-struct satellite_info_t {
+struct SatelliteInfo {
     uint8_t  prn;             // Pseudo Random Number (satellite identifier)
     uint8_t  constellation;   // Constellation type (0=GPS, 1=SBAS, 2=Galileo, 3=BeiDou, 4=GLONASS, 5=QZSS)
     float    azimuth;         // Azimuth angle (0-359 degrees)
@@ -37,7 +37,7 @@ struct satellite_info_t {
 };
 
 // Web GPS表示用包括的データ構造体
-struct web_gps_data_t {
+struct WebGpsData {
     // Position and Time Information
     double   latitude;        // Latitude in degrees
     double   longitude;       // Longitude in degrees
@@ -73,7 +73,7 @@ struct web_gps_data_t {
     
     // Individual Satellite Information
     uint8_t  satellite_count;  // Number of satellites in array
-    satellite_info_t satellites[MAX_SATELLITES]; // Individual satellite data
+    SatelliteInfo satellites[MAX_SATELLITES]; // Individual satellite data
     
     // Constellation Enable Status
     bool     gps_enabled;      // GPS constellation enabled

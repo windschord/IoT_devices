@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <EthernetUdp.h>
 #include "SystemTypes.h"
-#include "../gps/Gps_model.h"
+#include "../gps/GpsModel.h"
 #include "../network/NtpServer.h"
 #include "SystemMonitor.h"
 

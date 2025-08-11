@@ -589,7 +589,7 @@ void NetworkManager::manageUdpSockets() {
                     delay(10); // Brief delay to ensure socket is properly closed
                 }
                 
-                if (ntpUdp->begin(NTP_PORT)) {
+                if (ntpUdp->begin(ConfigDefaults::NTP::NTP_PORT)) {
                     udpManager.ntpSocketOpen = true;
                     networkMonitor.ntpServerActive = true;
                     udpManager.socketErrors = 0;
@@ -611,7 +611,7 @@ void NetworkManager::manageUdpSockets() {
                 if (loggingService) {
                     loggingService->info("NETWORK", "Opening NTP UDP socket on port 123");
                 }
-                if (ntpUdp->begin(NTP_PORT)) {
+                if (ntpUdp->begin(ConfigDefaults::NTP::NTP_PORT)) {
                     udpManager.ntpSocketOpen = true;
                     networkMonitor.ntpServerActive = true;
                     if (loggingService) {

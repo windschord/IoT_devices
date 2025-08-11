@@ -1,6 +1,6 @@
 #include "MainLoop.h"
 #include "SystemState.h"
-#include "../gps/Gps_model.h"
+#include "../gps/GpsModel.h"
 #include "../network/NtpTypes.h"
 #include "../hal/HardwareConfig.h"
 
@@ -47,7 +47,7 @@ void MainLoop::executeHighPriorityTasks() {
     state.getWebServer().handleClient(
         Serial, 
         state.getEthernetServer(), 
-        state.getGpsClient().getUbxNavSatData_t(), 
+        state.getGpsClient().getUbxNavSatData(), 
         state.getGpsClient().getGpsSummaryData()
     );
 }

@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include "SystemTypes.h"
-#include "../gps/Gps_Client.h"
+#include "../gps/GpsClient.h"
 
 // Forward declaration for LoggingService
 class LoggingService;

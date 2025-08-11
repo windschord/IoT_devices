@@ -1,6 +1,6 @@
 #include "ApiRouter.h"
 #include "../../config/ConfigManager.h"
-#include "../../gps/Gps_Client.h"
+#include "../../gps/GpsClient.h"
 #include "../../system/PrometheusMetrics.h"
 #include "../../config/LoggingService.h"
 #include <ArduinoJson.h>
@@ -57,7 +57,7 @@ void ApiRouter::handleGpsGet(EthernetClient& client, const HttpRequestParser::Pa
     DynamicJsonDocument doc(4096);
     
     // GPS データ取得と JSON 生成
-    web_gps_data_t webGpsData = instance_->gpsClient_->getWebGpsData();
+    WebGpsData webGpsData = instance_->gpsClient_->getWebGpsData();
     
     if (webGpsData.data_valid) {
         // 詳細GPS情報をJSONに変換

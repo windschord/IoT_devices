@@ -5,7 +5,7 @@
 #include <time.h>
 #include "RTClib.h"
 #include "../system/SystemTypes.h"
-#include "Gps_model.h"
+#include "GpsModel.h"
 
 // Forward declaration for LoggingService
 class LoggingService;

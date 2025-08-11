@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include "Constants.h"
 #include "ConfigDefaults.h"
-#include "../hal/Storage_HAL.h"
+#include "../hal/StorageHal.h"
 
 // Configuration structure matching design.md specifications
 struct SystemConfig {
