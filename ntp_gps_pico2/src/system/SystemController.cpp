@@ -2,8 +2,8 @@
 #include "../config/LoggingService.h"
 
 SystemController::SystemController() 
-    : currentState(SystemState::INITIALIZING),
-      previousState(SystemState::INITIALIZING),
+    : currentState(SystemStatus::INITIALIZING),
+      previousState(SystemStatus::INITIALIZING),
       stateChangedTime(0),
       initializationComplete(false),
       initStartTime(0),
@@ -49,7 +49,7 @@ SystemController::SystemController()
 
 void SystemController::init() {
     initStartTime = millis();
-    currentState = SystemState::STARTUP;
+    currentState = SystemStatus::STARTUP;
     stateChangedTime = millis();
     
     // Note: LoggingService initialization message already handled
@@ -86,16 +86,16 @@ void SystemController::update() {
         lastHealthCheck = now;
         
         // 状態遷移の判定
-        SystemState newState = currentState;
+        SystemStatus newState = currentState;
         
-        if (currentState == SystemState::STARTUP && validateSystemIntegrity()) {
-            newState = SystemState::RUNNING;
-        } else if (currentState == SystemState::RUNNING && !isHealthy()) {
-            newState = SystemState::DEGRADED;
-        } else if (currentState == SystemState::DEGRADED && isHealthy()) {
-            newState = SystemState::RUNNING;
+        if (currentState == SystemStatus::STARTUP && validateSystemIntegrity()) {
+            newState = SystemStatus::RUNNING;
+        } else if (currentState == SystemStatus::RUNNING && !isHealthy()) {
+            newState = SystemStatus::DEGRADED;
+        } else if (currentState == SystemStatus::DEGRADED && isHealthy()) {
+            newState = SystemStatus::RUNNING;
         } else if (healthScore.overall < 30) {
-            newState = SystemState::ERROR;
+            newState = SystemStatus::ERROR;
         }
         
         if (newState != currentState) {
@@ -104,7 +104,7 @@ void SystemController::update() {
     }
     
     // 自動復旧処理
-    if (autoRecoveryEnabled && currentState == SystemState::ERROR && 
+    if (autoRecoveryEnabled && currentState == SystemStatus::ERROR && 
         now - lastRecoveryAttempt > 30000) { // 30秒間隔で復旧試行
         performRecoveryActions();
         lastRecoveryAttempt = now;
@@ -234,7 +234,7 @@ bool SystemController::validateSystemIntegrity() {
     return gpsOk && networkOk && configOk;
 }
 
-void SystemController::handleStateTransition(SystemState newState) {
+void SystemController::handleStateTransition(SystemStatus newState) {
     previousState = currentState;
     currentState = newState;
     stateChangedTime = millis();
@@ -250,28 +250,28 @@ void SystemController::handleStateTransition(SystemState newState) {
     
     // 状態に応じた処理
     switch (newState) {
-        case SystemState::RUNNING:
+        case SystemStatus::RUNNING:
             LOG_INFO_MSG("SYSTEM", "System is now fully operational");
             if (displayManager) {
                 displayManager->displaySystemStatus(true, true, getUptime() / 1000);
             }
             break;
             
-        case SystemState::DEGRADED:
+        case SystemStatus::DEGRADED:
             LOG_WARN_MSG("SYSTEM", "System running in degraded mode");
             if (displayManager) {
                 displayManager->displayError("Degraded Mode");
             }
             break;
             
-        case SystemState::ERROR:
+        case SystemStatus::ERROR:
             LOG_ERR_MSG("SYSTEM", "System in error state");
             if (displayManager) {
                 displayManager->displayError("System Error");
             }
             break;
             
-        case SystemState::RECOVERY:
+        case SystemStatus::RECOVERY:
             LOG_INFO_MSG("SYSTEM", "Attempting system recovery");
             break;
             
@@ -283,7 +283,7 @@ void SystemController::handleStateTransition(SystemState newState) {
 }
 
 void SystemController::performRecoveryActions() {
-    currentState = SystemState::RECOVERY;
+    currentState = SystemStatus::RECOVERY;
     LOG_INFO_MSG("SYSTEM", "Starting recovery actions");
     
     // 重大な問題があるサービスを特定して復旧を試行
@@ -367,7 +367,7 @@ void SystemController::printServiceStatus() {
 void SystemController::shutdown() {
     LOG_INFO_MSG("SYSTEM", "System shutdown initiated");
     
-    currentState = SystemState::SHUTDOWN;
+    currentState = SystemStatus::SHUTDOWN;
     stateChangedTime = millis();
     
     // 全サービスを順次停止
@@ -396,7 +396,7 @@ void SystemController::restart() {
 void SystemController::emergencyStop() {
     LOG_EMERG_MSG("SYSTEM", "Emergency stop activated");
     
-    currentState = SystemState::ERROR;
+    currentState = SystemStatus::ERROR;
     stateChangedTime = millis();
     
     // 緊急停止処理

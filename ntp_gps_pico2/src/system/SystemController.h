@@ -13,7 +13,7 @@
 #include "PrometheusMetrics.h"
 
 // システム全体の状態を管理する列挙型
-enum class SystemState {
+enum class SystemStatus {
     INITIALIZING,     // システム初期化中
     STARTUP,          // 起動処理中
     RUNNING,          // 正常運転中
@@ -54,8 +54,8 @@ struct SystemHealthScore {
 class SystemController {
 private:
     // システム状態
-    SystemState currentState;
-    SystemState previousState;
+    SystemStatus currentState;
+    SystemStatus previousState;
     unsigned long stateChangedTime;
     
     // サービス状態
@@ -92,7 +92,7 @@ private:
     void initializeServices();
     void checkServiceHealth();
     void updateHealthScore();
-    void handleStateTransition(SystemState newState);
+    void handleStateTransition(SystemStatus newState);
     void performRecoveryActions();
     bool validateSystemIntegrity();
     void logSystemState();
@@ -123,9 +123,9 @@ public:
     void emergencyStop();
     
     // 状態管理
-    SystemState getState() const { return currentState; }
+    SystemStatus getState() const { return currentState; }
     bool isHealthy() const;
-    bool isRunning() const { return currentState == SystemState::RUNNING; }
+    bool isRunning() const { return currentState == SystemStatus::RUNNING; }
     bool isInitialized() const { return initializationComplete; }
     
     // 健全性監視
