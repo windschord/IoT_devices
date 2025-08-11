@@ -1,11 +1,19 @@
 #include "ConfigManager.h"
+#include "Constants.h"
+#include "ConfigDefaults.h"
 #include "../hal/HardwareConfig.h"
 #include "LoggingService.h"
 #include <ArduinoJson.h>
+#include "../utils/TimeUtils.h"
 
 ConfigManager::ConfigManager() : 
     configValid(false),
-    storageHal(&g_storage_hal) {
+    storageHal(&g_storage_hal),
+    changeCallback(nullptr),
+    notificationsEnabled(true),
+    lastSaveTime(0),
+    configChanged(false),
+    autoSaveEnabled(ConfigDefaults::System::CONFIG_AUTO_SAVE) {
 }
 
 void ConfigManager::init() {
@@ -69,11 +77,13 @@ bool ConfigManager::saveConfig() {
     }
     
     // タイムスタンプ更新
-    currentConfig.config_version = 1;
+    currentConfig.config_version = ConfigDefaults::System::CONFIG_VERSION;
     
     StorageResult result = storageHal->writeConfig(&currentConfig, sizeof(SystemConfig));
     
     if (result == STORAGE_SUCCESS) {
+        updateLastSaveTime();
+        configChanged = false;
         LOG_INFO_MSG("CONFIG", "ConfigManager: 設定保存完了");
         return true;
     } else {
@@ -84,48 +94,15 @@ bool ConfigManager::saveConfig() {
 
 void ConfigManager::loadDefaults() {
     LOG_INFO_MSG("CONFIG", "ConfigManager: デフォルト設定読み込み...");
-    memset(&currentConfig, 0, sizeof(SystemConfig));
     
-    // Network Configuration
-    strcpy(currentConfig.hostname, "gps-ntp-server");
-    currentConfig.ip_address = 0;  // DHCP by default
-    currentConfig.netmask = 0;
-    currentConfig.gateway = 0;
-    currentConfig.dns_server = 0;
+    // 新しいデフォルト設定システムを使用
+    SystemConfig oldConfig = currentConfig;
+    currentConfig = createDefaultSystemConfig();
     
-    // Logging Configuration
-    strcpy(currentConfig.syslog_server, "192.168.1.100");
-    currentConfig.syslog_port = 514;
-    currentConfig.log_level = 1;  // INFO level
+    // 変更通知（デフォルト読み込みの場合は通知しない）
+    configChanged = true;
     
-    // Monitoring
-    currentConfig.prometheus_enabled = true;
-    currentConfig.prometheus_port = 80;  // Same as web server
-    
-    // GNSS Configuration
-    currentConfig.gps_enabled = true;
-    currentConfig.glonass_enabled = true;
-    currentConfig.galileo_enabled = true;
-    currentConfig.beidou_enabled = false;   // Optional for power saving
-    currentConfig.qzss_enabled = true;      // Important for Japan
-    currentConfig.qzss_l1s_enabled = true;  // Disaster alert system
-    currentConfig.gnss_update_rate = 1;     // 1Hz default
-    currentConfig.disaster_alert_priority = 2; // High priority
-    
-    // NTP Server Configuration
-    currentConfig.ntp_enabled = true;
-    currentConfig.ntp_port = 123;
-    currentConfig.ntp_stratum = 1;
-    
-    // System Configuration
-    currentConfig.auto_restart_enabled = false;
-    currentConfig.restart_interval = 24;   // 24 hours
-    currentConfig.debug_enabled = false;
-    
-    // Configuration metadata
-    currentConfig.config_version = 1;
-    
-    LOG_INFO_MSG("CONFIG", "ConfigManager: デフォルト設定設定完了");
+    LOG_INFO_MSG("CONFIG", "ConfigManager: デフォルト設定読み込み完了");
 }
 
 void ConfigManager::resetToDefaults() {
@@ -158,47 +135,7 @@ bool ConfigManager::setConfig(const SystemConfig& newConfig) {
     return saveConfig();
 }
 
-bool ConfigManager::validateConfig(const SystemConfig& config) const {
-    // 基本的なバリデーション
-    
-    // ホスト名チェック
-    if (strlen(config.hostname) == 0 || strlen(config.hostname) >= sizeof(config.hostname)) {
-        LOG_ERR_MSG("CONFIG", "ConfigManager: 無効なホスト名");
-        return false;
-    }
-    
-    // ログレベルチェック
-    if (config.log_level > 7) {  // 0=DEBUG to 7=EMERGENCY
-        LOG_ERR_F("CONFIG", "ConfigManager: 無効なログレベル (%d)", (int)config.log_level);
-        return false;
-    }
-    
-    // Syslogポートチェック
-    if (config.syslog_port == 0 || config.syslog_port > 65535) {
-        LOG_ERR_F("CONFIG", "ConfigManager: 無効なSyslogポート (%d)", (int)config.syslog_port);
-        return false;
-    }
-    
-    // GNSS更新レートチェック
-    if (config.gnss_update_rate == 0 || config.gnss_update_rate > 10) {
-        LOG_ERR_F("CONFIG", "ConfigManager: 無効なGNSS更新レート (%d)", (int)config.gnss_update_rate);
-        return false;
-    }
-    
-    // NTPポートチェック
-    if (config.ntp_port == 0 || config.ntp_port > 65535) {
-        LOG_ERR_F("CONFIG", "ConfigManager: 無効なNTPポート (%d)", (int)config.ntp_port);
-        return false;
-    }
-    
-    // 設定バージョンチェック
-    if (config.config_version == 0) {
-        LOG_ERR_MSG("CONFIG", "ConfigManager: 無効な設定バージョン");
-        return false;
-    }
-    
-    return true;
-}
+// validateConfig function is implemented below using performDeepValidation
 
 // Individual setting setters with validation
 bool ConfigManager::setHostname(const char* hostname) {
@@ -384,4 +321,445 @@ void ConfigManager::printConfig() const {
     LOG_INFO_F("CONFIG", "GNSS Update Rate: %d Hz", (int)currentConfig.gnss_update_rate);
     LOG_INFO_F("CONFIG", "NTP: %s", currentConfig.ntp_enabled ? "Enabled" : "Disabled");
     LOG_INFO_F("CONFIG", "Config Version: %d", (int)currentConfig.config_version);
+}
+
+// =============================================================================
+// 新しい拡張機能の実装
+// =============================================================================
+
+// Auto-save configuration management
+void ConfigManager::checkAutoSave() {
+    if (!autoSaveEnabled || !configChanged) {
+        return;
+    }
+    
+    uint32_t currentTime = millis();
+    uint32_t saveInterval = ConfigDefaults::System::CONFIG_SAVE_INTERVAL * Constants::Timing::MILLIS_PER_SEC;
+    
+    if (shouldAutoSave() && (currentTime - lastSaveTime > saveInterval)) {
+        if (saveConfig()) {
+            LOG_INFO_MSG("CONFIG", "ConfigManager: Auto-save completed");
+        } else {
+            LOG_WARN_MSG("CONFIG", "ConfigManager: Auto-save failed");
+        }
+    }
+}
+
+// Enhanced validation methods using new constants
+bool ConfigManager::validateConfig(const SystemConfig& config) const {
+    return performDeepValidation(config);
+}
+
+bool ConfigManager::validateNetworkConfig(uint32_t ip, uint32_t netmask, uint32_t gateway) const {
+    // Allow DHCP (all zeros)
+    if (ip == 0 && netmask == 0 && gateway == 0) {
+        return true;
+    }
+    
+    // Basic IP validation (simplified)
+    return ip != 0 && netmask != 0;
+}
+
+bool ConfigManager::validateHostname(const char* hostname) const {
+    if (!hostname) return false;
+    
+    size_t len = strlen(hostname);
+    return len >= ConfigDefaults::ValidationLimits::HOSTNAME_MIN_LENGTH && 
+           len <= ConfigDefaults::ValidationLimits::HOSTNAME_MAX_LENGTH;
+}
+
+bool ConfigManager::validateSyslogServer(const char* server) const {
+    if (!server) return false;
+    
+    // Empty string means syslog disabled
+    size_t len = strlen(server);
+    return len <= ConfigDefaults::ValidationLimits::SYSLOG_SERVER_MAX_LENGTH;
+}
+
+bool ConfigManager::validatePortNumber(uint16_t port) const {
+    return port >= ConfigDefaults::ValidationLimits::NTP_PORT_MIN && 
+           port <= ConfigDefaults::ValidationLimits::NTP_PORT_MAX;
+}
+
+bool ConfigManager::validateGnssUpdateRate(uint8_t rate) const {
+    return rate >= ConfigDefaults::ValidationLimits::GNSS_UPDATE_RATE_MIN && 
+           rate <= ConfigDefaults::ValidationLimits::GNSS_UPDATE_RATE_MAX;
+}
+
+bool ConfigManager::validateLogLevel(uint8_t level) const {
+    return level >= ConfigDefaults::ValidationLimits::LOG_LEVEL_MIN && 
+           level <= ConfigDefaults::ValidationLimits::LOG_LEVEL_MAX;
+}
+
+bool ConfigManager::validateNtpStratum(uint8_t stratum) const {
+    return stratum >= ConfigDefaults::ValidationLimits::NTP_STRATUM_MIN && 
+           stratum <= ConfigDefaults::ValidationLimits::NTP_STRATUM_MAX;
+}
+
+bool ConfigManager::validateDisasterAlertPriority(uint8_t priority) const {
+    return priority >= ConfigDefaults::ValidationLimits::DISASTER_ALERT_PRIORITY_MIN && 
+           priority <= ConfigDefaults::ValidationLimits::DISASTER_ALERT_PRIORITY_MAX;
+}
+
+// Extended setter methods
+bool ConfigManager::setNtpConfig(bool enabled, uint16_t port, uint8_t stratum) {
+    if (!validatePortNumber(port) || !validateNtpStratum(stratum)) {
+        LOG_ERR_MSG("CONFIG", "ConfigManager: Invalid NTP configuration");
+        return false;
+    }
+    
+    SystemConfig oldConfig = currentConfig;
+    currentConfig.ntp_enabled = enabled;
+    currentConfig.ntp_port = port;
+    currentConfig.ntp_stratum = stratum;
+    
+    markConfigChanged();
+    notifyConfigChange(oldConfig, currentConfig);
+    
+    return autoSaveEnabled ? saveConfig() : true;
+}
+
+bool ConfigManager::setSystemConfig(bool autoRestart, uint32_t restartInterval, bool debugEnabled) {
+    SystemConfig oldConfig = currentConfig;
+    currentConfig.auto_restart_enabled = autoRestart;
+    currentConfig.restart_interval = restartInterval;
+    currentConfig.debug_enabled = debugEnabled;
+    
+    markConfigChanged();
+    notifyConfigChange(oldConfig, currentConfig);
+    
+    return autoSaveEnabled ? saveConfig() : true;
+}
+
+bool ConfigManager::setQzssL1sConfig(bool enabled, uint8_t priority) {
+    if (!validateDisasterAlertPriority(priority)) {
+        LOG_ERR_MSG("CONFIG", "ConfigManager: Invalid QZSS L1S priority");
+        return false;
+    }
+    
+    SystemConfig oldConfig = currentConfig;
+    currentConfig.qzss_l1s_enabled = enabled;
+    currentConfig.disaster_alert_priority = priority;
+    
+    markConfigChanged();
+    notifyConfigChange(oldConfig, currentConfig);
+    
+    return autoSaveEnabled ? saveConfig() : true;
+}
+
+bool ConfigManager::setMonitoringConfig(bool prometheusEnabled, uint16_t port) {
+    if (!validatePortNumber(port)) {
+        LOG_ERR_MSG("CONFIG", "ConfigManager: Invalid monitoring port");
+        return false;
+    }
+    
+    SystemConfig oldConfig = currentConfig;
+    currentConfig.prometheus_enabled = prometheusEnabled;
+    currentConfig.prometheus_port = port;
+    
+    markConfigChanged();
+    notifyConfigChange(oldConfig, currentConfig);
+    
+    return autoSaveEnabled ? saveConfig() : true;
+}
+
+// Batch update methods
+bool ConfigManager::updateNetworkSettings(const char* hostname, uint32_t ip, uint32_t netmask, uint32_t gateway) {
+    if (!validateHostname(hostname) || !validateNetworkConfig(ip, netmask, gateway)) {
+        LOG_ERR_MSG("CONFIG", "ConfigManager: Invalid network settings");
+        return false;
+    }
+    
+    SystemConfig oldConfig = currentConfig;
+    strncpy(currentConfig.hostname, hostname, sizeof(currentConfig.hostname) - 1);
+    currentConfig.hostname[sizeof(currentConfig.hostname) - 1] = '\0';
+    currentConfig.ip_address = ip;
+    currentConfig.netmask = netmask;
+    currentConfig.gateway = gateway;
+    
+    markConfigChanged();
+    notifyConfigChange(oldConfig, currentConfig);
+    
+    return autoSaveEnabled ? saveConfig() : true;
+}
+
+bool ConfigManager::updateGnssSettings(bool gps, bool glonass, bool galileo, bool beidou, bool qzss, uint8_t rate) {
+    if (!validateGnssUpdateRate(rate)) {
+        LOG_ERR_MSG("CONFIG", "ConfigManager: Invalid GNSS update rate");
+        return false;
+    }
+    
+    SystemConfig oldConfig = currentConfig;
+    currentConfig.gps_enabled = gps;
+    currentConfig.glonass_enabled = glonass;
+    currentConfig.galileo_enabled = galileo;
+    currentConfig.beidou_enabled = beidou;
+    currentConfig.qzss_enabled = qzss;
+    currentConfig.gnss_update_rate = rate;
+    
+    markConfigChanged();
+    notifyConfigChange(oldConfig, currentConfig);
+    
+    return autoSaveEnabled ? saveConfig() : true;
+}
+
+bool ConfigManager::updateLoggingSettings(const char* server, uint16_t port, uint8_t level) {
+    if (!validateSyslogServer(server) || !validatePortNumber(port) || !validateLogLevel(level)) {
+        LOG_ERR_MSG("CONFIG", "ConfigManager: Invalid logging settings");
+        return false;
+    }
+    
+    SystemConfig oldConfig = currentConfig;
+    strncpy(currentConfig.syslog_server, server, sizeof(currentConfig.syslog_server) - 1);
+    currentConfig.syslog_server[sizeof(currentConfig.syslog_server) - 1] = '\0';
+    currentConfig.syslog_port = port;
+    currentConfig.log_level = level;
+    
+    markConfigChanged();
+    notifyConfigChange(oldConfig, currentConfig);
+    
+    return autoSaveEnabled ? saveConfig() : true;
+}
+
+// Configuration comparison and utilities
+bool ConfigManager::configEquals(const SystemConfig& config1, const SystemConfig& config2) const {
+    return memcmp(&config1, &config2, sizeof(SystemConfig)) == 0;
+}
+
+String ConfigManager::getConfigDifference(const SystemConfig& oldConfig, const SystemConfig& newConfig) const {
+    String diff = "Config changes: ";
+    bool hasChanges = false;
+    
+    if (strcmp(oldConfig.hostname, newConfig.hostname) != 0) {
+        diff += "hostname, ";
+        hasChanges = true;
+    }
+    if (oldConfig.ip_address != newConfig.ip_address) {
+        diff += "ip_address, ";
+        hasChanges = true;
+    }
+    if (oldConfig.log_level != newConfig.log_level) {
+        diff += "log_level, ";
+        hasChanges = true;
+    }
+    if (oldConfig.gnss_update_rate != newConfig.gnss_update_rate) {
+        diff += "gnss_update_rate, ";
+        hasChanges = true;
+    }
+    
+    if (!hasChanges) {
+        diff = "No configuration changes detected";
+    } else {
+        // Remove trailing ", "
+        diff.remove(diff.length() - 2);
+    }
+    
+    return diff;
+}
+
+// Factory reset and backup
+void ConfigManager::resetToFactoryDefaults() {
+    LOG_WARN_MSG("CONFIG", "ConfigManager: Factory reset initiated");
+    
+    SystemConfig oldConfig = currentConfig;
+    
+    // Clear storage
+    if (storageHal) {
+        StorageResult result = storageHal->factoryReset();
+        if (result != STORAGE_SUCCESS) {
+            LOG_ERR_F("CONFIG", "ConfigManager: Storage reset failed (%d)", (int)result);
+        }
+    }
+    
+    // Load factory defaults
+    loadDefaults();
+    
+    // Save new defaults
+    if (saveConfig()) {
+        LOG_INFO_MSG("CONFIG", "ConfigManager: Factory reset completed successfully");
+        notifyConfigChange(oldConfig, currentConfig);
+    } else {
+        LOG_ERR_MSG("CONFIG", "ConfigManager: Factory reset - failed to save defaults");
+    }
+}
+
+bool ConfigManager::isFactoryDefault() const {
+    SystemConfig defaultConfig = createDefaultSystemConfig();
+    return configEquals(currentConfig, defaultConfig);
+}
+
+// Configuration integrity and diagnostics
+uint32_t ConfigManager::getConfigChecksum() const {
+    // Simple checksum calculation
+    uint32_t checksum = 0;
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(&currentConfig);
+    
+    for (size_t i = 0; i < sizeof(SystemConfig); i++) {
+        checksum += data[i];
+    }
+    
+    return checksum;
+}
+
+bool ConfigManager::verifyConfigIntegrity() const {
+    return validateConfig(currentConfig) && configValid;
+}
+
+String ConfigManager::getConfigSummary() const {
+    String summary = "Config Summary: ";
+    summary += "Host=" + String(currentConfig.hostname) + ", ";
+    summary += "GNSS=" + String(currentConfig.gnss_update_rate) + "Hz, ";
+    summary += "NTP=" + String(currentConfig.ntp_enabled ? "ON" : "OFF") + ", ";
+    summary += "Log=" + String(currentConfig.log_level) + ", ";
+    summary += "Ver=" + String(currentConfig.config_version);
+    
+    return summary;
+}
+
+void ConfigManager::printConfigStats() const {
+    LOG_INFO_MSG("CONFIG", "=== Configuration Statistics ===");
+    LOG_INFO_F("CONFIG", "Config size: %d bytes", sizeof(SystemConfig));
+    LOG_INFO_F("CONFIG", "Checksum: 0x%08X", getConfigChecksum());
+    LOG_INFO_F("CONFIG", "Last saved: %lu ms ago", millis() - lastSaveTime);
+    LOG_INFO_F("CONFIG", "Unsaved changes: %s", configChanged ? "Yes" : "No");
+    LOG_INFO_F("CONFIG", "Auto-save: %s", autoSaveEnabled ? "Enabled" : "Disabled");
+    LOG_INFO_F("CONFIG", "Factory default: %s", isFactoryDefault() ? "Yes" : "No");
+    LOG_INFO_F("CONFIG", "Integrity check: %s", verifyConfigIntegrity() ? "PASS" : "FAIL");
+}
+
+// Private helper methods
+void ConfigManager::notifyConfigChange(const SystemConfig& oldConfig, const SystemConfig& newConfig) {
+    if (notificationsEnabled && changeCallback) {
+        changeCallback(oldConfig, newConfig, this);
+    }
+}
+
+bool ConfigManager::performDeepValidation(const SystemConfig& config) const {
+    // Hostname validation
+    if (!validateHostname(config.hostname)) {
+        LOG_ERR_MSG("CONFIG", "Validation failed: Invalid hostname");
+        return false;
+    }
+    
+    // Network validation
+    if (!validateNetworkConfig(config.ip_address, config.netmask, config.gateway)) {
+        LOG_ERR_MSG("CONFIG", "Validation failed: Invalid network configuration");
+        return false;
+    }
+    
+    // Syslog validation
+    if (!validateSyslogServer(config.syslog_server)) {
+        LOG_ERR_MSG("CONFIG", "Validation failed: Invalid syslog server");
+        return false;
+    }
+    
+    if (!validatePortNumber(config.syslog_port)) {
+        LOG_ERR_F("CONFIG", "Validation failed: Invalid syslog port (%d)", config.syslog_port);
+        return false;
+    }
+    
+    // Log level validation
+    if (!validateLogLevel(config.log_level)) {
+        LOG_ERR_F("CONFIG", "Validation failed: Invalid log level (%d)", config.log_level);
+        return false;
+    }
+    
+    // GNSS validation
+    if (!validateGnssUpdateRate(config.gnss_update_rate)) {
+        LOG_ERR_F("CONFIG", "Validation failed: Invalid GNSS update rate (%d)", config.gnss_update_rate);
+        return false;
+    }
+    
+    // NTP validation
+    if (!validatePortNumber(config.ntp_port)) {
+        LOG_ERR_F("CONFIG", "Validation failed: Invalid NTP port (%d)", config.ntp_port);
+        return false;
+    }
+    
+    if (!validateNtpStratum(config.ntp_stratum)) {
+        LOG_ERR_F("CONFIG", "Validation failed: Invalid NTP stratum (%d)", config.ntp_stratum);
+        return false;
+    }
+    
+    // Disaster alert priority validation
+    if (!validateDisasterAlertPriority(config.disaster_alert_priority)) {
+        LOG_ERR_F("CONFIG", "Validation failed: Invalid disaster alert priority (%d)", config.disaster_alert_priority);
+        return false;
+    }
+    
+    // Version validation
+    if (config.config_version == 0) {
+        LOG_ERR_MSG("CONFIG", "Validation failed: Invalid configuration version");
+        return false;
+    }
+    
+    return true;
+}
+
+void ConfigManager::updateLastSaveTime() {
+    lastSaveTime = millis();
+}
+
+bool ConfigManager::shouldAutoSave() const {
+    if (!autoSaveEnabled || !configChanged) {
+        return false;
+    }
+    
+    uint32_t currentTime = millis();
+    uint32_t saveInterval = ConfigDefaults::System::CONFIG_SAVE_INTERVAL * Constants::Timing::MILLIS_PER_SEC;
+    
+    return (currentTime - lastSaveTime) >= saveInterval;
+}
+
+// =============================================================================
+// Global utility function implementation
+// =============================================================================
+
+/**
+ * @brief SystemConfig構造体にデフォルト値を設定
+ * @return デフォルト値で初期化されたSystemConfig構造体
+ */
+SystemConfig createDefaultSystemConfig() {
+    SystemConfig config = {};
+    
+    // Network Configuration
+    strncpy(config.hostname, ConfigDefaults::Network::HOSTNAME, sizeof(config.hostname) - 1);
+    config.ip_address = ConfigDefaults::Network::IP_ADDRESS;
+    config.netmask = ConfigDefaults::Network::NETMASK;
+    config.gateway = ConfigDefaults::Network::GATEWAY;
+    config.dns_server = ConfigDefaults::Network::DNS_SERVER;
+    
+    // Logging Configuration  
+    strncpy(config.syslog_server, ConfigDefaults::Logging::SYSLOG_SERVER, sizeof(config.syslog_server) - 1);
+    config.syslog_port = ConfigDefaults::Logging::SYSLOG_PORT;
+    config.log_level = ConfigDefaults::Logging::LOG_LEVEL;
+    
+    // Monitoring
+    config.prometheus_enabled = ConfigDefaults::Monitoring::PROMETHEUS_ENABLED;
+    config.prometheus_port = ConfigDefaults::Monitoring::PROMETHEUS_PORT;
+    
+    // GNSS Configuration
+    config.gps_enabled = ConfigDefaults::GNSS::GPS_ENABLED;
+    config.glonass_enabled = ConfigDefaults::GNSS::GLONASS_ENABLED;
+    config.galileo_enabled = ConfigDefaults::GNSS::GALILEO_ENABLED;
+    config.beidou_enabled = ConfigDefaults::GNSS::BEIDOU_ENABLED;
+    config.qzss_enabled = ConfigDefaults::GNSS::QZSS_ENABLED;
+    config.qzss_l1s_enabled = ConfigDefaults::GNSS::QZSS_L1S_ENABLED;
+    config.gnss_update_rate = ConfigDefaults::GNSS::GNSS_UPDATE_RATE;
+    config.disaster_alert_priority = ConfigDefaults::GNSS::DISASTER_ALERT_PRIORITY;
+    
+    // NTP Server Configuration
+    config.ntp_enabled = ConfigDefaults::NTP::NTP_ENABLED;
+    config.ntp_port = ConfigDefaults::NTP::NTP_PORT;
+    config.ntp_stratum = ConfigDefaults::NTP::NTP_STRATUM;
+    
+    // System Configuration
+    config.auto_restart_enabled = ConfigDefaults::System::AUTO_RESTART_ENABLED;
+    config.restart_interval = ConfigDefaults::System::RESTART_INTERVAL_HOURS;
+    config.debug_enabled = ConfigDefaults::System::DEBUG_ENABLED;
+    
+    // Configuration metadata
+    config.config_version = ConfigDefaults::System::CONFIG_VERSION;
+    
+    return config;
 }
