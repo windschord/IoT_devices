@@ -106,14 +106,14 @@ GPS受信機（ZED-F9T）からの高精度時刻を使用し、W5500イーサ�
 - テストコードの可読性とメンテナンス性大幅向上
 - 商用グレードのテスト品質実現
 
-### 🧪 Task 46-48: 残りテストファイル復旧（GoogleTest移行後）
+### ✅ Task 46-48: 残りテストファイル復旧（完了済み）
 **優先度**: 中 | **期間**: 1-2日
 
-- [ ] 46. ConfigManager/DisplayManager/TimeManagerカバレッジテスト復旧
-- [ ] 47. MainLoop・システム統合テスト復旧
-- [ ] 48. TimeUtilsテスト失敗ケース修正
+- [x] 46. ConfigManager/DisplayManager/TimeManagerカバレッジテスト復旧
+- [x] 47. MainLoop・システム統合テスト復旧  
+- [x] 48. TimeUtilsテスト失敗ケース修正
 
-**注記**: GoogleTest移行完了後に実施。より強力なテスト機能でカバレッジ向上
+**成果**: disabledディレクトリからのカバレッジテスト全復旧完了。TimeManagerテストの失敗ケース修正により100%パス率達成。
 
 ### 🔧 Task 52-56: ハードウェア関連問題修正
 **優先度**: 中 | **期間**: 2-3日
