@@ -4,6 +4,9 @@
 #include <Arduino.h>
 #include "SystemTypes.h"
 
+// Forward declaration to avoid circular dependency
+template<typename T, typename E> class Result;
+
 // エラーの種類
 enum class ErrorType {
     HARDWARE_FAILURE,      // ハードウェア故障
@@ -149,6 +152,27 @@ public:
     void emergencyStop(const char* reason);
     void safeMode(const char* reason);
     void factoryReset();
+    
+    // Result型との統合（宣言のみ、実装はcppファイルへ）
+    template<typename T>
+    Result<T, ErrorType> wrapResult(T value, bool success, ErrorType errorType, const char* component, const char* message = nullptr);
+    
+    Result<void, ErrorType> wrapVoidResult(bool success, ErrorType errorType, const char* component, const char* message = nullptr);
+    
+    // エラーコンテキスト管理
+    struct ErrorContext {
+        const char* operation;
+        const char* component;
+        ErrorType fallbackType;
+        
+        ErrorContext(const char* op, const char* comp, ErrorType type = ErrorType::SYSTEM_ERROR) 
+            : operation(op), component(comp), fallbackType(type) {}
+    };
+    
+    template<typename T>
+    Result<T, ErrorType> tryOperation(const ErrorContext& context, T (*operation)());
+    
+    Result<void, ErrorType> tryVoidOperation(const ErrorContext& context, void (*operation)());
 };
 
 // グローバルエラーハンドラーへの参照
@@ -178,5 +202,52 @@ extern ErrorHandler* globalErrorHandler;
 
 #define RESOLVE_ERROR(component, type) \
     if (globalErrorHandler) globalErrorHandler->resolveError(component, type)
+
+// Result型統合マクロ（型推論を修正）
+#define WRAP_RESULT(value, success, errorType, component, message) \
+    (success ? Result<decltype(value), ErrorType>::ok(value) : \
+     (globalErrorHandler ? (globalErrorHandler->reportError(errorType, ErrorSeverity::ERROR, component, message), \
+                           Result<decltype(value), ErrorType>::error(errorType)) : \
+                          Result<decltype(value), ErrorType>::error(errorType)))
+
+#define WRAP_VOID_RESULT(success, errorType, component, message) \
+    (success ? Result<void, ErrorType>::ok() : \
+     (globalErrorHandler ? (globalErrorHandler->reportError(errorType, ErrorSeverity::ERROR, component, message), \
+                           Result<void, ErrorType>::error(errorType)) : \
+                          Result<void, ErrorType>::error(errorType)))
+
+#define TRY_WITH_ERROR_HANDLER(result, component) \
+    do { \
+        auto __temp_result = (result); \
+        if (__temp_result.isError() && globalErrorHandler) { \
+            globalErrorHandler->reportError(__temp_result.error(), ErrorSeverity::ERROR, component, #result); \
+        } \
+        if (__temp_result.isError()) { \
+            return typeof(__temp_result)::error(__temp_result.error()); \
+        } \
+    } while(0)
+
+#define TRY_VALUE_WITH_ERROR_HANDLER(result, component) \
+    ({ \
+        auto __temp_result = (result); \
+        if (__temp_result.isError() && globalErrorHandler) { \
+            globalErrorHandler->reportError(__temp_result.error(), ErrorSeverity::ERROR, component, #result); \
+        } \
+        if (__temp_result.isError()) { \
+            return typeof(__temp_result)::error(__temp_result.error()); \
+        } \
+        __temp_result.value(); \
+    })
+
+// 操作実行マクロ
+#define TRY_OPERATION(operation, component, errorType) \
+    (globalErrorHandler ? globalErrorHandler->tryOperation( \
+        ErrorHandler::ErrorContext(#operation, component, errorType), operation) : \
+     Result<typeof(operation()), ErrorType>::ok(operation()))
+
+#define TRY_VOID_OPERATION(operation, component, errorType) \
+    (globalErrorHandler ? globalErrorHandler->tryVoidOperation( \
+        ErrorHandler::ErrorContext(#operation, component, errorType), operation) : \
+     (operation(), Result<void, ErrorType>::ok()))
 
 #endif // ERROR_HANDLER_H

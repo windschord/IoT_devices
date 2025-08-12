@@ -1,5 +1,6 @@
 #include "ErrorHandler.h"
 #include "../config/LoggingService.h"
+#include "Result.h"
 
 // グローバルエラーハンドラーのインスタンス
 ErrorHandler* globalErrorHandler = nullptr;
@@ -542,3 +543,47 @@ void ErrorHandler::generateErrorReport(char* buffer, size_t bufferSize) const {
         statistics.resolutionRate,
         hasCriticalErrors() ? "YES" : "NO");
 }
+
+// Result型統合メソッドの実装
+template<typename T>
+Result<T, ErrorType> ErrorHandler::wrapResult(T value, bool success, ErrorType errorType, const char* component, const char* message) {
+    if (success) {
+        return Result<T, ErrorType>::ok(value);
+    } else {
+        if (message) {
+            reportError(errorType, ErrorSeverity::ERROR, component, message);
+        }
+        return Result<T, ErrorType>::error(errorType);
+    }
+}
+
+Result<void, ErrorType> ErrorHandler::wrapVoidResult(bool success, ErrorType errorType, const char* component, const char* message) {
+    if (success) {
+        return Result<void, ErrorType>::ok();
+    } else {
+        if (message) {
+            reportError(errorType, ErrorSeverity::ERROR, component, message);
+        }
+        return Result<void, ErrorType>::error(errorType);
+    }
+}
+
+template<typename T>
+Result<T, ErrorType> ErrorHandler::tryOperation(const ErrorContext& context, T (*operation)()) {
+    // Note: Exceptions are disabled in embedded environments
+    // This is a placeholder for future exception handling if enabled
+    T result = operation();
+    return Result<T, ErrorType>::ok(result);
+}
+
+Result<void, ErrorType> ErrorHandler::tryVoidOperation(const ErrorContext& context, void (*operation)()) {
+    // Note: Exceptions are disabled in embedded environments
+    // This is a placeholder for future exception handling if enabled
+    operation();
+    return Result<void, ErrorType>::ok();
+}
+
+// Explicit template instantiations for common types
+template Result<uint8_t, ErrorType> ErrorHandler::wrapResult<uint8_t>(uint8_t value, bool success, ErrorType errorType, const char* component, const char* message);
+template Result<int, ErrorType> ErrorHandler::wrapResult<int>(int value, bool success, ErrorType errorType, const char* component, const char* message);
+template Result<bool, ErrorType> ErrorHandler::wrapResult<bool>(bool value, bool success, ErrorType errorType, const char* component, const char* message);
