@@ -6,13 +6,13 @@
 #include <hardware/watchdog.h>
 
 PowerManager::PowerManager() : loggingService(nullptr), currentPowerState(POWER_NORMAL) {
-    // 電圧監視初期化
+    // 電圧監視初期化（Pico2の3.3V動作に合わせて調整）
     voltageMonitor = {
         .currentVoltage = 0.0f,
-        .minVoltage = 4.5f,      // 5V供給の90%
-        .maxVoltage = 5.5f,      // 5V供給の110%
-        .warningThreshold = 4.7f, // 94%
-        .criticalThreshold = 4.3f, // 86%
+        .minVoltage = 1.8f,      // Pico2最小動作電圧
+        .maxVoltage = 3.6f,      // 3.3V系の上限
+        .warningThreshold = 2.8f, // 低電圧警告（85%）
+        .criticalThreshold = 2.5f, // 重大な低電圧（75%）
         .lastCheck = 0,
         .checkInterval = 30,      // 30秒間隔
         .voltageStable = true
@@ -286,9 +286,16 @@ float PowerManager::getCpuTemperature() {
 }
 
 unsigned long PowerManager::getFreeHeapMemory() {
-    // Pico2のフリーヒープ取得（概算）
+    // Pico2のフリーヒープ取得（修正版）
     extern char __HeapLimit, __StackLimit;
-    return &__StackLimit - &__HeapLimit;
+    long diff = &__StackLimit - &__HeapLimit;
+    
+    // 負の値や異常値をチェック
+    if (diff <= 0 || diff > 262144) { // 256KB以上は異常
+        return 0; // エラーの場合は0を返す
+    }
+    
+    return (unsigned long)diff;
 }
 
 void PowerManager::performControlledReboot(const char* reason) {
